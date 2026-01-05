@@ -1,3 +1,8 @@
+data/runtime/
+test/.tmp/
+data/
+my_project/
+
 # Logs
 logs
 *.log

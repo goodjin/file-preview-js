@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "logsDir": "data/runtime/logs",
+  "defaultLevel": "info",
+  "levels": {
+    "runtime": "info",
+    "llm": "info",
+    "org": "info",
+    "artifacts": "info",
+    "bus": "info",
+    "prompts": "warn",
+    "society": "info"
+  }
+}
+

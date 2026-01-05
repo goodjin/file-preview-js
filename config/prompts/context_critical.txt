@@ -1,0 +1,3 @@
+⚠️ 警告：上下文接近硬性限制({{CRITICAL_THRESHOLD}}%)，建议立即：
+  1. 调用 compress_context 压缩历史
+  2. 考虑拆分岗位或请求上级拆分业务

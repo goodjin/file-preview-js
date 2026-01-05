@@ -1,0 +1,1 @@
+【上下文状态】已使用 {{USED_TOKENS}}/{{MAX_TOKENS}} tokens ({{USAGE_PERCENT}}%)
