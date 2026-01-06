@@ -275,6 +275,7 @@ function parseArgs() {
   -h, --help                 显示帮助信息
 
 示例:
+  bun demo/dev_team.js -w ./my_project/wuziqi "写一个html的五子棋游戏，双人对战的，具有输赢判断的逻辑，可以重启。注重暖色颜色的设计和游戏感的用户体验。"
   node demo/dev_team.js -w ./my_project/calculator -r "创建一个简单的计算器程序。静态网页，支持加减乘除运算，满足普通计算器要求。"
   node demo/dev_team.js --workspace ./my_project/todolist --requirement "实现一个待办事项管理系统"
 `);
