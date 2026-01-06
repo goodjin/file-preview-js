@@ -60,7 +60,6 @@
 5.3.1.4 send_message：异步消息发送（系统投递/排队）。
 5.3.1.5 put_artifact / get_artifact：工件写入与读取（artifactRef 引用传递）。
 5.3.1.6 console_print：输出到控制台（用于向用户展示）。
-5.3.1.7 wait_for_message：进入等待状态，结束当前消息处理，等待下一条消息到达后继续。
 5.3.2 面向用户的对外入口
 5.3.2.1 SubmitRequirement：提交自然语言需求给根智能体（系统生成 taskId）。
 5.3.2.2 SendTextToAgent：用户通过“用户端点智能体”向指定智能体发送文本消息（入参：agentId + text，可选 taskId）。

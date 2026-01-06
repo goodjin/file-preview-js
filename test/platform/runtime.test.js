@@ -264,13 +264,13 @@ describe("Runtime", () => {
     expect(childCalls).toBe(1);
   });
 
-  test("wait_for_message yields after tool result without extra LLM rounds", async () => {
-    const tmpDir = path.resolve(process.cwd(), "test/.tmp/runtime_wait_tool_test");
+  test("LLM without tool_calls ends message processing naturally", async () => {
+    const tmpDir = path.resolve(process.cwd(), "test/.tmp/runtime_no_tool_calls_test");
     await rm(tmpDir, { recursive: true, force: true });
     await mkdir(tmpDir, { recursive: true });
 
     const configPath = path.resolve(tmpDir, "app.json");
-    await writeFile(configPath, JSON.stringify({ promptsDir: "config/prompts", artifactsDir: "test/.tmp/artifacts_wait_tool_test", runtimeDir: tmpDir }, null, 2), "utf8");
+    await writeFile(configPath, JSON.stringify({ promptsDir: "config/prompts", artifactsDir: "test/.tmp/artifacts_no_tool_calls_test", runtimeDir: tmpDir }, null, 2), "utf8");
 
     const runtime = new Runtime({ configPath, maxToolRounds: 5 });
     await runtime.init();
@@ -279,20 +279,11 @@ describe("Runtime", () => {
     runtime.llm = {
       chat: async () => {
         llmCalled += 1;
-        if (llmCalled > 1) throw new Error("LLM should not be called again after wait_for_message");
+        if (llmCalled > 1) throw new Error("LLM should not be called again after no tool_calls response");
         return {
           role: "assistant",
-          content: "",
-          tool_calls: [
-            {
-              type: "function",
-              id: "call-1",
-              function: {
-                name: "wait_for_message",
-                arguments: "{}"
-              }
-            }
-          ]
+          content: "任务已完成，等待下一条消息。",
+          tool_calls: [] // 没有 tool_calls，应该自然结束
         };
       }
     };
@@ -306,7 +297,7 @@ describe("Runtime", () => {
     });
     runtime.registerAgentInstance(a);
 
-    runtime.bus.send({ to: "a1", from: "user", taskId: "t-wait", payload: { text: "x" } });
+    runtime.bus.send({ to: "a1", from: "user", taskId: "t-no-tools", payload: { text: "x" } });
     await runtime.run();
 
     expect(llmCalled).toBe(1);

@@ -524,17 +524,6 @@ export class Runtime {
       {
         type: "function",
         function: {
-          name: "wait_for_message",
-          description: "进入等待状态，结束当前消息的处理，等待下一条消息到达后再继续。",
-          parameters: {
-            type: "object",
-            properties: {}
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
           name: "put_artifact",
           description: "写入工件并返回 artifactRef。",
           parameters: {
@@ -1015,12 +1004,6 @@ export class Runtime {
           taskId: currentTaskId
         });
         
-        return result;
-      }
-      if (toolName === "wait_for_message") {
-        ctx.yieldRequested = true;
-        const result = { ok: true };
-        void this.log.debug("工具调用完成", { toolName, ok: true });
         return result;
       }
       if (toolName === "put_artifact") {

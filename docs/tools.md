@@ -232,27 +232,6 @@ send_message({
 });
 ```
 
-### wait_for_message
-
-进入等待状态，等待下一条消息。
-
-**参数：** 无
-
-**说明：**
-- 结束当前消息的处理
-- 等待下一条消息到达后继续
-
-**示例：**
-
-```javascript
-// 发送问题后等待回复
-send_message({
-  to: "user",
-  payload: { text: "请确认是否继续？" }
-});
-wait_for_message();
-```
-
 ## 工件管理工具
 
 ### put_artifact

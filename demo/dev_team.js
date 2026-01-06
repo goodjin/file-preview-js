@@ -67,11 +67,8 @@ spawn_agent(roleId="programmer-xxx", taskBrief={
 
 【与用户沟通 - 重要！】
 - 需要向用户反馈时：send_message(to="user", payload={text: "..."})
-- 发送消息给用户后，必须立即调用 wait_for_message 等待用户回复
-- 正确流程：
-  1. send_message(to="user", payload={text: "您的问题..."})
-  2. wait_for_message()  ← 必须调用！否则无法收到用户回复
-- 需要澄清需求时：发送问题后调用 wait_for_message 等待用户回答
+- 发送消息后停止调用工具，系统会自动让你等待用户回复
+- 需要澄清需求时：发送问题后停止调用工具，等待用户回答
 - 切勿在同一轮对话中重复发送相同的问题
 
 【层级化分解】
@@ -139,7 +136,7 @@ const PROGRAMMER_ROLE_PROMPT = `
 3. 使用 write_file 将代码写入文件（如：write_file(path="calculator.html", content="...")）
 4. 代码完成后，使用 run_command 测试
 5. 向架构师汇报完成情况
-6. 调用 wait_for_message 等待下一步指示
+6. 停止调用工具，等待下一步指示
 
 【质量要求】
 - 代码完成后进行自测
@@ -153,7 +150,7 @@ const PROGRAMMER_ROLE_PROMPT = `
   - 测试结果
   - 遇到的问题（如有）
 - 使用 put_artifact 将代码文件保存为工件
-- 汇报后调用 wait_for_message 等待下一步指示
+- 汇报后停止调用工具，等待下一步指示
 `.trim();
 
 
@@ -275,8 +272,8 @@ function parseArgs() {
   -h, --help                 显示帮助信息
 
 示例:
-  bun demo/dev_team.js -w ./my_project/wuziqi "写一个html的五子棋游戏，双人对战的，具有输赢判断的逻辑，可以重启。注重暖色颜色的设计和游戏感的用户体验。"
-  node demo/dev_team.js -w ./my_project/calculator -r "创建一个简单的计算器程序。静态网页，支持加减乘除运算，满足普通计算器要求。"
+  bun demo/dev_team.js -w ./data/dev_team/projects/wuziqi "写一个html的五子棋游戏，双人对战的，具有输赢判断的逻辑，可以重启。注重暖色颜色的设计和游戏感的用户体验。"
+  node demo/dev_team.js -w ./data/dev_team/projects/calculator -r "创建一个简单的计算器程序。静态网页，支持加减乘除运算，满足普通计算器要求。"
   node demo/dev_team.js --workspace ./my_project/todolist --requirement "实现一个待办事项管理系统"
 `);
       process.exit(0);

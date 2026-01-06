@@ -20,10 +20,10 @@ describe("PromptLoader", () => {
     expect(content).toContain("to=user");
   });
 
-  test("tool rules require waiting after delivery", async () => {
+  test("tool rules require stopping after delivery", async () => {
     const toolRulesPath = path.resolve(process.cwd(), "config/prompts/tool_rules.txt");
     const content = await readFile(toolRulesPath, "utf8");
     expect(content).toContain("【防重复执行（提示词规则）】");
-    expect(content).toContain("必须立即调用 wait_for_message");
+    expect(content).toContain("停止调用工具");
   });
 });
