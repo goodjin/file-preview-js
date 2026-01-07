@@ -275,6 +275,21 @@ const ChatPanel = {
   },
 
   /**
+   * 获取最后给当前智能体发消息的发送者 ID
+   * @returns {string|null} 发送者 ID，如果没有则返回 null
+   */
+  getLastSenderId() {
+    // 从消息列表中找到最后一条接收的消息（from 不是当前智能体的消息）
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i];
+      if (msg.from && msg.from !== this.currentAgentId) {
+        return msg.from;
+      }
+    }
+    return null;
+  },
+
+  /**
    * 发送消息
    */
   async sendMessage() {
@@ -283,17 +298,31 @@ const ChatPanel = {
     const text = this.chatInput.value.trim();
     if (!text) return;
 
+    // 确定消息发送目标
+    let targetAgentId = this.currentAgentId;
+    
+    // 如果当前是 user 界面，消息应该发送给最后给 user 发消息的智能体
+    if (this.currentAgentId === 'user') {
+      const lastSenderId = this.getLastSenderId();
+      if (!lastSenderId) {
+        Toast.show('没有可回复的智能体，请等待智能体先发送消息', 'warning');
+        return;
+      }
+      targetAgentId = lastSenderId;
+    }
+
     // 禁用发送按钮
     if (this.sendBtn) {
       this.sendBtn.disabled = true;
     }
 
     try {
-      await API.sendMessage(this.currentAgentId, text);
+      await API.sendMessage(targetAgentId, text);
       // 清空输入框
       this.chatInput.value = '';
       // 显示成功提示
-      Toast.show('消息已发送', 'success');
+      const targetName = this.currentAgentId === 'user' ? `给 ${targetAgentId} ` : '';
+      Toast.show(`消息${targetName}已发送`, 'success');
     } catch (error) {
       console.error('发送消息失败:', error);
       Toast.show('发送失败: ' + error.message, 'error');
