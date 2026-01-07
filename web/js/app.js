@@ -13,6 +13,10 @@ const App = {
   pollInterval: 2000,       // 轮询间隔（毫秒）
   pollTimer: null,          // 轮询定时器
   lastMessageCounts: new Map(), // 上次各智能体的消息数量
+  consecutiveErrors: 0,     // 连续错误计数
+  maxBackoffInterval: 30000, // 最大退避间隔（30秒）
+  isPollingPaused: false,   // 轮询是否暂停
+  _isSelecting: false,      // 是否正在选择智能体（防止递归）
 
   /**
    * 初始化应用
@@ -133,10 +137,16 @@ const App = {
    * @param {string} agentId - 智能体 ID
    */
   async selectAgent(agentId) {
+    // 防止重复选择同一个智能体
+    if (this.selectedAgentId === agentId && this._isSelecting) {
+      return;
+    }
+    
+    this._isSelecting = true;
     this.selectedAgentId = agentId;
     
-    // 更新智能体列表选中状态
-    AgentList.selectAgent(agentId);
+    // 更新智能体列表选中状态（不触发回调）
+    AgentList.updateSelection(agentId);
 
     // 获取智能体对象
     const agent = this.agentsById.get(agentId);
@@ -144,6 +154,7 @@ const App = {
 
     // 加载消息
     await this.loadMessages(agentId);
+    this._isSelecting = false;
   },
 
   /**
@@ -171,10 +182,17 @@ const App = {
       // 更新消息计数
       this.lastMessageCounts.set(agentId, messages.length);
       
+      // 重置错误计数（请求成功）
+      this.consecutiveErrors = 0;
+      
       ChatPanel.setMessages(messages);
     } catch (error) {
-      console.error(`加载智能体 ${agentId} 的消息失败:`, error);
-      Toast.error('加载消息失败');
+      console.warn(`加载智能体 ${agentId} 的消息失败:`, error.message || error);
+      // 只在首次失败时显示 Toast，避免刷屏
+      if (this.consecutiveErrors === 0) {
+        Toast.error('加载消息失败，将自动重试');
+      }
+      this.consecutiveErrors++;
     }
   },
 
@@ -191,20 +209,34 @@ const App = {
    */
   startPolling() {
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      clearTimeout(this.pollTimer);
     }
+    this.isPollingPaused = false;
+    this.scheduleNextPoll();
+  },
 
-    this.pollTimer = setInterval(() => {
+  /**
+   * 调度下一次轮询（支持退避）
+   */
+  scheduleNextPoll() {
+    if (this.isPollingPaused) return;
+    
+    // 根据连续错误次数计算退避间隔
+    const backoffMultiplier = Math.min(Math.pow(2, this.consecutiveErrors), 15);
+    const interval = Math.min(this.pollInterval * backoffMultiplier, this.maxBackoffInterval);
+    
+    this.pollTimer = setTimeout(() => {
       this.poll();
-    }, this.pollInterval);
+    }, interval);
   },
 
   /**
    * 停止轮询
    */
   stopPolling() {
+    this.isPollingPaused = true;
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      clearTimeout(this.pollTimer);
       this.pollTimer = null;
     }
   },
@@ -213,10 +245,15 @@ const App = {
    * 执行一次轮询
    */
   async poll() {
+    if (this.isPollingPaused) return;
+    
     try {
       // 更新智能体列表
       const agentsRes = await API.getAgents();
       const newAgents = agentsRes.agents || [];
+      
+      // 请求成功，重置错误计数
+      this.consecutiveErrors = 0;
       
       // 检查是否有新智能体
       if (newAgents.length !== this.agents.length) {
@@ -249,22 +286,33 @@ const App = {
         }
       }
 
-      // 检查其他智能体是否有新消息
+      // 检查其他智能体是否有新消息（限制并发）
       await this.checkNewMessages();
 
     } catch (error) {
-      console.error('轮询失败:', error);
+      this.consecutiveErrors++;
+      // 只在首次错误或错误次数变化时打印日志，避免刷屏
+      if (this.consecutiveErrors === 1 || this.consecutiveErrors % 5 === 0) {
+        console.warn(`轮询失败 (连续 ${this.consecutiveErrors} 次):`, error.message || error);
+      }
+    } finally {
+      // 调度下一次轮询
+      this.scheduleNextPoll();
     }
   },
 
   /**
    * 检查其他智能体是否有新消息
+   * 限制并发请求数量，避免请求风暴
    */
   async checkNewMessages() {
-    // 只检查非当前选中的智能体
-    for (const agent of this.agents) {
-      if (agent.id === this.selectedAgentId) continue;
+    // 只检查非当前选中的智能体，且限制最多检查 5 个
+    const agentsToCheck = this.agents
+      .filter(agent => agent.id !== this.selectedAgentId)
+      .slice(0, 5);
 
+    // 串行检查，避免并发请求过多
+    for (const agent of agentsToCheck) {
       try {
         const res = await API.getAgentMessages(agent.id);
         const messages = res.messages || [];
@@ -276,7 +324,8 @@ const App = {
           this.lastMessageCounts.set(agent.id, messages.length);
         }
       } catch (error) {
-        // 忽略单个智能体的错误
+        // 单个智能体请求失败，跳过继续
+        break; // 如果有错误，停止检查其他智能体
       }
     }
   },

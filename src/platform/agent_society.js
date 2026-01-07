@@ -246,6 +246,14 @@ export class AgentSociety {
       });
       this._httpServer.setSociety(this);
       
+      // 设置运行时目录，用于消息持久化
+      if (this.runtime.config?.runtimeDir) {
+        this._httpServer.setRuntimeDir(this.runtime.config.runtimeDir);
+        void this.log.info("HTTP服务器消息持久化目录已设置", { runtimeDir: this.runtime.config.runtimeDir });
+      } else {
+        void this.log.warn("HTTP服务器消息持久化目录未设置，消息将不会持久化");
+      }
+      
       const result = await this._httpServer.start();
       
       if (result.ok) {

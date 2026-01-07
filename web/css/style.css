@@ -456,6 +456,7 @@ body {
   position: relative;
   font-size: 14px;
   line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 /* 发送的消息：绿色背景 */

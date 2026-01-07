@@ -78,10 +78,13 @@ const AgentList = {
   },
 
   /**
-   * 选择智能体
+   * 选择智能体（由用户点击触发，会通知 App）
    * @param {string} agentId - 智能体 ID
    */
   selectAgent(agentId) {
+    if (this.selectedAgentId === agentId) {
+      return; // 已经选中，不重复处理
+    }
     this.selectedAgentId = agentId;
     // 清除该智能体的新消息标记
     this.newMessageAgents.delete(agentId);
@@ -91,6 +94,17 @@ const AgentList = {
     if (window.App && window.App.onAgentSelected) {
       window.App.onAgentSelected(agentId);
     }
+  },
+
+  /**
+   * 更新选中状态（由 App 调用，不触发回调）
+   * @param {string} agentId - 智能体 ID
+   */
+  updateSelection(agentId) {
+    this.selectedAgentId = agentId;
+    // 清除该智能体的新消息标记
+    this.newMessageAgents.delete(agentId);
+    this.render();
   },
 
   /**

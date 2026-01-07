@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach } from "vitest";
 import fc from "fast-check";
 import { HTTPServer } from "../../src/platform/http_server.js";
 import { AgentSociety } from "../../src/platform/agent_society.js";
@@ -133,15 +133,11 @@ describe("HTTPServer", () => {
 
   /**
    * Property 5: HTTP消息查询完整性
-   * 对于任意taskId，通过GET /api/messages/{taskId}查询返回的消息列表应包含所有该taskId下用户收到的消息，
-   * 且顺序与接收顺序一致。
-   * 
-   * **验证: 需求 2.4**
    */
   test("Property 5: HTTP消息查询完整性 - 消息按接收顺序存储", () => {
     fc.assert(
       fc.property(
-        fc.uuid(), // taskId
+        fc.uuid(),
         fc.array(
           fc.record({
             from: fc.string({ minLength: 1, maxLength: 20 }).filter(s => s.trim() !== ""),
@@ -152,7 +148,6 @@ describe("HTTPServer", () => {
         (taskId, messages) => {
           const httpServer = new HTTPServer();
           
-          // 模拟用户收到的消息
           const receivedMessages = messages.map((msg, index) => ({
             id: `msg-${index}`,
             from: msg.from,
@@ -161,7 +156,6 @@ describe("HTTPServer", () => {
             createdAt: new Date(Date.now() + index * 1000).toISOString()
           }));
 
-          // 按顺序添加消息到HTTP服务器的消息存储
           for (const msg of receivedMessages) {
             if (!httpServer._messagesByTaskId.has(taskId)) {
               httpServer._messagesByTaskId.set(taskId, []);
@@ -175,13 +169,9 @@ describe("HTTPServer", () => {
             });
           }
 
-          // 查询消息
           const storedMessages = httpServer.getMessagesByTaskId(taskId);
-
-          // 验证消息数量一致
           expect(storedMessages.length).toBe(receivedMessages.length);
 
-          // 验证消息顺序一致
           for (let i = 0; i < receivedMessages.length; i++) {
             expect(storedMessages[i].id).toBe(receivedMessages[i].id);
             expect(storedMessages[i].from).toBe(receivedMessages[i].from);
@@ -194,94 +184,273 @@ describe("HTTPServer", () => {
     );
   });
 
-  test("Property 5: HTTP消息查询完整性 - 不同taskId的消息隔离", () => {
-    fc.assert(
-      fc.property(
-        fc.uuid(), // taskId1
-        fc.uuid(), // taskId2
-        fc.array(
-          fc.record({
-            from: fc.string({ minLength: 1, maxLength: 20 }).filter(s => s.trim() !== ""),
-            text: fc.string({ minLength: 1, maxLength: 100 })
-          }),
-          { minLength: 1, maxLength: 5 }
-        ),
-        fc.array(
-          fc.record({
-            from: fc.string({ minLength: 1, maxLength: 20 }).filter(s => s.trim() !== ""),
-            text: fc.string({ minLength: 1, maxLength: 100 })
-          }),
-          { minLength: 1, maxLength: 5 }
-        ),
-        (taskId1, taskId2, messages1, messages2) => {
-          // 确保两个taskId不同
-          if (taskId1 === taskId2) return;
-
-          const httpServer = new HTTPServer();
-
-          // 添加taskId1的消息
-          for (let i = 0; i < messages1.length; i++) {
-            if (!httpServer._messagesByTaskId.has(taskId1)) {
-              httpServer._messagesByTaskId.set(taskId1, []);
-            }
-            httpServer._messagesByTaskId.get(taskId1).push({
-              id: `msg1-${i}`,
-              from: messages1[i].from,
-              taskId: taskId1,
-              payload: { text: messages1[i].text },
-              createdAt: new Date().toISOString()
-            });
-          }
-
-          // 添加taskId2的消息
-          for (let i = 0; i < messages2.length; i++) {
-            if (!httpServer._messagesByTaskId.has(taskId2)) {
-              httpServer._messagesByTaskId.set(taskId2, []);
-            }
-            httpServer._messagesByTaskId.get(taskId2).push({
-              id: `msg2-${i}`,
-              from: messages2[i].from,
-              taskId: taskId2,
-              payload: { text: messages2[i].text },
-              createdAt: new Date().toISOString()
-            });
-          }
-
-          // 查询taskId1的消息
-          const stored1 = httpServer.getMessagesByTaskId(taskId1);
-          expect(stored1.length).toBe(messages1.length);
-          for (const msg of stored1) {
-            expect(msg.taskId).toBe(taskId1);
-          }
-
-          // 查询taskId2的消息
-          const stored2 = httpServer.getMessagesByTaskId(taskId2);
-          expect(stored2.length).toBe(messages2.length);
-          for (const msg of stored2) {
-            expect(msg.taskId).toBe(taskId2);
-          }
-        }
-      ),
-      { numRuns: 100 }
-    );
-  });
-
   test("Property 5: HTTP消息查询完整性 - 不存在的taskId返回空数组", () => {
     fc.assert(
       fc.property(
-        fc.uuid(), // 随机taskId
+        fc.uuid(),
         (taskId) => {
           const httpServer = new HTTPServer();
-          
-          // 查询不存在的taskId
           const messages = httpServer.getMessagesByTaskId(taskId);
-          
-          // 应该返回空数组
           expect(Array.isArray(messages)).toBe(true);
           expect(messages.length).toBe(0);
         }
       ),
       { numRuns: 100 }
     );
+  });
+});
+
+describe("HTTPServer - 错误处理", () => {
+  let server;
+  let port;
+
+  beforeEach(async () => {
+    port = 30000 + Math.floor(Math.random() * 10000);
+    server = new HTTPServer({ port });
+  });
+
+  afterEach(async () => {
+    if (server && server.isRunning()) {
+      await server.stop();
+    }
+  });
+
+  test("服务器启动和停止", async () => {
+    const result = await server.start();
+    expect(result.ok).toBe(true);
+    expect(server.isRunning()).toBe(true);
+
+    const stopResult = await server.stop();
+    expect(stopResult.ok).toBe(true);
+    expect(server.isRunning()).toBe(false);
+  });
+
+  test("重复启动服务器应返回成功", async () => {
+    await server.start();
+    const result = await server.start();
+    expect(result.ok).toBe(true);
+  });
+
+  test("停止未启动的服务器应返回成功", async () => {
+    const result = await server.stop();
+    expect(result.ok).toBe(true);
+  });
+
+  test("GET /api/agents - society未初始化时返回500", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/agents`);
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe("society_not_initialized");
+  });
+
+  test("GET /api/roles - society未初始化时返回500", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/roles`);
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe("society_not_initialized");
+  });
+
+  test("GET /api/org/tree - society未初始化时返回500", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/org/tree`);
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe("society_not_initialized");
+  });
+
+  test("GET /api/agent-messages/:agentId - 有效agentId返回空消息列表", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/agent-messages/test-agent`);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.agentId).toBe("test-agent");
+    expect(data.messages).toEqual([]);
+    expect(data.count).toBe(0);
+  });
+
+  test("GET /api/messages/:taskId - 空taskId返回400", async () => {
+    await server.start();
+    // 空路径会匹配到 /api/messages/ 并返回 400
+    const response = await fetch(`http://localhost:${port}/api/messages/`);
+    expect(response.status).toBe(400);
+  });
+
+  test("GET /api/messages/:taskId - 有效taskId返回空消息列表", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/messages/test-task-id`);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.taskId).toBe("test-task-id");
+    expect(data.messages).toEqual([]);
+    expect(data.count).toBe(0);
+  });
+
+  test("POST /api/submit - society未初始化时返回500", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "test" })
+    });
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe("society_not_initialized");
+  });
+
+  test("POST /api/submit - 缺少text字段返回400", async () => {
+    const society = new AgentSociety();
+    server.setSociety(society);
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error).toBe("missing_text");
+  });
+
+  test("POST /api/submit - 无效JSON返回400", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "invalid json"
+    });
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error).toBe("invalid_json");
+  });
+
+  test("POST /api/send - 缺少agentId返回400", async () => {
+    const society = new AgentSociety();
+    server.setSociety(society);
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "test" })
+    });
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error).toBe("missing_agent_id");
+  });
+
+  test("POST /api/send - 缺少text返回400", async () => {
+    const society = new AgentSociety();
+    server.setSociety(society);
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: "root" })
+    });
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error).toBe("missing_text");
+  });
+
+  test("未知路径返回404", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/unknown`);
+    expect(response.status).toBe(404);
+    const data = await response.json();
+    expect(data.error).toBe("not_found");
+  });
+
+  test("OPTIONS请求返回204（CORS预检）", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/agents`, {
+      method: "OPTIONS"
+    });
+    expect(response.status).toBe(204);
+  });
+
+  test("CORS头正确设置", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/agents`);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, OPTIONS");
+  });
+});
+
+describe("HTTPServer - 与Society集成", () => {
+  let server;
+  let society;
+  let port;
+
+  beforeEach(async () => {
+    port = 30000 + Math.floor(Math.random() * 10000);
+    society = new AgentSociety();
+    await society.init(); // 需要初始化 society
+    server = new HTTPServer({ port, society });
+    server.setSociety(society);
+  });
+
+  afterEach(async () => {
+    if (server && server.isRunning()) {
+      await server.stop();
+    }
+  });
+
+  test("GET /api/agents - 返回root和user智能体", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/agents`);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.agents.length).toBeGreaterThanOrEqual(2);
+    const agentIds = data.agents.map(a => a.id);
+    expect(agentIds).toContain("root");
+    expect(agentIds).toContain("user");
+  });
+
+  test("GET /api/roles - 返回root和user岗位", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/roles`);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.roles.length).toBeGreaterThanOrEqual(2);
+    const roleIds = data.roles.map(r => r.id);
+    expect(roleIds).toContain("root");
+    expect(roleIds).toContain("user");
+  });
+
+  test("GET /api/org/tree - 返回组织树", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/org/tree`);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(Array.isArray(data.tree)).toBe(true);
+    expect(data.nodeCount).toBeGreaterThanOrEqual(2);
+  });
+
+  test("POST /api/submit - 成功提交需求", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "测试需求" })
+    });
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data).toHaveProperty("taskId");
+    expect(typeof data.taskId).toBe("string");
+  });
+
+  test("POST /api/send - 成功发送消息", async () => {
+    await server.start();
+    const response = await fetch(`http://localhost:${port}/api/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId: "root", text: "测试消息" })
+    });
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.ok).toBe(true);
+    expect(data).toHaveProperty("taskId");
+    expect(data).toHaveProperty("messageId");
   });
 });

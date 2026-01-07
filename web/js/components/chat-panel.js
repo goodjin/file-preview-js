@@ -143,18 +143,25 @@ const ChatPanel = {
     if (typeof message.payload === 'string') {
       return message.payload;
     }
-    if (message.payload.message) {
-      return message.payload.message;
+    
+    // 按优先级尝试提取文本字段
+    if (message.payload.text) {
+      return message.payload.text;
     }
     if (message.payload.content) {
       return message.payload.content;
     }
-    if (message.payload.text) {
-      return message.payload.text;
+    if (message.payload.message) {
+      return message.payload.message;
     }
     
-    // 如果是对象，显示简短摘要
-    return '[复杂消息 - 点击查看详情]';
+    // 如果是对象，格式化为 JSON 显示
+    try {
+      const json = JSON.stringify(message.payload, null, 2);
+      return json;
+    } catch (e) {
+      return '[无法解析的消息]';
+    }
   },
 
   /**
