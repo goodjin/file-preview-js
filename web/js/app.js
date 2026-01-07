@@ -107,11 +107,12 @@ const App = {
    */
   async loadInitialData() {
     try {
-      // 并行加载智能体、岗位和组织树
-      const [agentsRes, rolesRes, treeRes] = await Promise.all([
+      // 并行加载智能体、岗位、组织树和岗位树
+      const [agentsRes, rolesRes, treeRes, roleTreeRes] = await Promise.all([
         API.getAgents(),
         API.getRoles(),
         API.getOrgTree(),
+        API.getRoleTree(),
       ]);
 
       // 更新智能体数据
@@ -129,6 +130,7 @@ const App = {
       OverviewPanel.setAgents(this.agents);
       OverviewPanel.setRoles(this.roles);
       OverviewPanel.setTree(treeRes.tree);
+      OverviewPanel.setRoleTree(roleTreeRes.tree);
 
       // 默认选择第一个智能体
       if (this.agents.length > 0 && !this.selectedAgentId) {
@@ -276,9 +278,16 @@ const App = {
         AgentList.setAgents(this.agents);
         OverviewPanel.setAgents(this.agents);
         
-        // 更新组织树
-        const treeRes = await API.getOrgTree();
+        // 更新岗位和组织树
+        const [rolesRes, treeRes, roleTreeRes] = await Promise.all([
+          API.getRoles(),
+          API.getOrgTree(),
+          API.getRoleTree(),
+        ]);
+        this.roles = rolesRes.roles || [];
+        OverviewPanel.setRoles(this.roles);
         OverviewPanel.setTree(treeRes.tree);
+        OverviewPanel.setRoleTree(roleTreeRes.tree);
       }
 
       // 更新当前选中智能体的消息

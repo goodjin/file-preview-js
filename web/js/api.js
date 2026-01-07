@@ -84,6 +84,14 @@ const API = {
   },
 
   /**
+   * 获取岗位从属关系树结构
+   * @returns {Promise<{tree: object}>} 岗位树
+   */
+  async getRoleTree() {
+    return this.get('/org/role-tree');
+  },
+
+  /**
    * 发送消息给指定智能体
    * @param {string} toAgentId - 目标智能体 ID
    * @param {string} message - 消息内容

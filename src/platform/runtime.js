@@ -807,6 +807,19 @@ export class Runtime {
         const creatorId = ctx.agent?.id ?? null;
         if (!creatorId) return { error: "missing_creator_agent" };
 
+        // 检查调用者智能体是否已被终止（防止已终止的智能体继续创建子智能体）
+        if (creatorId !== "root") {
+          const creatorMeta = this.org.getAgent(creatorId);
+          if (creatorMeta && creatorMeta.status === "terminated") {
+            void this.log.warn("spawn_agent 调用者已终止（已拦截）", {
+              creatorId,
+              status: creatorMeta.status,
+              terminatedAt: creatorMeta.terminatedAt ?? null
+            });
+            return { error: "caller_terminated", message: "调用者智能体已被终止，无法创建子智能体" };
+          }
+        }
+
         // 验证 TaskBrief（Requirements 1.4）
         const taskBrief = args?.taskBrief;
         const taskBriefValidation = validateTaskBrief(taskBrief);
@@ -916,6 +929,20 @@ export class Runtime {
         // from 字段由系统自动填充，忽略调用者提供的 from 字段（Requirements 9.1, 9.5）
         const senderId = ctx.agent?.id ?? "unknown";
         const recipientId = String(args?.to ?? "");
+        
+        // 检查发送者智能体是否已被终止（防止已终止的智能体继续发送消息）
+        if (senderId !== "root" && senderId !== "user" && senderId !== "unknown") {
+          const senderMeta = this.org.getAgent(senderId);
+          if (senderMeta && senderMeta.status === "terminated") {
+            void this.log.warn("send_message 发送者已终止（已拦截）", {
+              senderId,
+              status: senderMeta.status,
+              terminatedAt: senderMeta.terminatedAt ?? null,
+              to: recipientId
+            });
+            return { error: "sender_terminated", message: "发送者智能体已被终止，无法发送消息" };
+          }
+        }
         
         // 验证收件人存在（对于 root 和 user 特殊处理）
         const isRecipientSpecial = recipientId === "root" || recipientId === "user";
@@ -1590,23 +1617,32 @@ export class Runtime {
 
     void this.log.info("开始终止智能体", { callerId, targetId, reason: args.reason ?? null });
 
+    // 收集所有需要终止的智能体（包括级联终止的子智能体）
+    const agentsToTerminate = this._collectDescendantAgents(targetId);
+    agentsToTerminate.unshift(targetId); // 将目标智能体放在最前面
+
     // 处理待处理消息（在终止前处理完队列中的消息）
-    await this._drainAgentQueue(targetId);
+    for (const agentId of agentsToTerminate) {
+      await this._drainAgentQueue(agentId);
+    }
 
-    // 清理智能体注册
-    this._agents.delete(targetId);
+    // 清理所有智能体的运行时状态（从子到父的顺序）
+    for (const agentId of agentsToTerminate.reverse()) {
+      // 清理智能体注册
+      this._agents.delete(agentId);
 
-    // 清理会话上下文
-    this._conversations.delete(targetId);
+      // 清理会话上下文
+      this._conversations.delete(agentId);
 
-    // 清理智能体元数据
-    this._agentMetaById.delete(targetId);
+      // 清理智能体元数据
+      this._agentMetaById.delete(agentId);
 
-    // 清理空闲跟踪数据
-    this._agentLastActivityTime.delete(targetId);
-    this._idleWarningEmitted.delete(targetId);
+      // 清理空闲跟踪数据
+      this._agentLastActivityTime.delete(agentId);
+      this._idleWarningEmitted.delete(agentId);
+    }
 
-    // 持久化终止事件到组织状态
+    // 持久化终止事件到组织状态（会自动处理级联终止）
     await this.org.recordTermination(targetId, callerId, args.reason);
 
     void this.log.info("智能体终止完成", { callerId, targetId });
@@ -1656,6 +1692,27 @@ export class Runtime {
     if (processedCount > 0) {
       void this.log.info("终止前消息处理完成", { agentId, processedCount });
     }
+  }
+
+  /**
+   * 收集指定智能体的所有后代智能体 ID（用于级联终止）。
+   * @param {string} parentId - 父智能体 ID
+   * @returns {string[]} 后代智能体 ID 数组
+   */
+  _collectDescendantAgents(parentId) {
+    const descendants = [];
+    
+    // 遍历所有智能体，找到直接子智能体
+    for (const [agentId, meta] of this._agentMetaById) {
+      if (meta.parentAgentId === parentId) {
+        descendants.push(agentId);
+        // 递归收集孙子智能体
+        const grandchildren = this._collectDescendantAgents(agentId);
+        descendants.push(...grandchildren);
+      }
+    }
+    
+    return descendants;
   }
 
   /**

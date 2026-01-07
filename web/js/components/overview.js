@@ -8,11 +8,13 @@ const OverviewPanel = {
   agents: [],      // 智能体列表
   roles: [],       // 岗位列表
   tree: null,      // 组织树
+  roleTree: null,  // 岗位从属关系树
 
   // DOM 元素引用
   panel: null,
   roleStatsContainer: null,
   orgTreeContainer: null,
+  roleTreeContainer: null,
 
   /**
    * 初始化组件
@@ -21,6 +23,7 @@ const OverviewPanel = {
     this.panel = document.getElementById('overview-panel');
     this.roleStatsContainer = document.getElementById('role-stats');
     this.orgTreeContainer = document.getElementById('org-tree');
+    this.roleTreeContainer = document.getElementById('role-tree');
   },
 
   /**
@@ -51,6 +54,15 @@ const OverviewPanel = {
   },
 
   /**
+   * 设置岗位树数据
+   * @param {object} roleTree - 岗位从属关系树
+   */
+  setRoleTree(roleTree) {
+    this.roleTree = roleTree;
+    this.render();
+  },
+
+  /**
    * 显示面板
    */
   show() {
@@ -62,6 +74,8 @@ const OverviewPanel = {
     if (agentList) {
       agentList.classList.add('hidden');
     }
+    // 显示时重新渲染，确保数据是最新的
+    this.render();
   },
 
   /**
@@ -83,6 +97,7 @@ const OverviewPanel = {
    */
   render() {
     this.renderRoleStats();
+    this.renderRoleTree();
     this.renderOrgTree();
   },
 
@@ -143,7 +158,7 @@ const OverviewPanel = {
 
     if (!this.tree) {
       this.orgTreeContainer.innerHTML = `
-        <h3>组织结构</h3>
+        <h3>智能体组织结构</h3>
         <div style="color: #888; padding: 12px;">暂无数据</div>
       `;
       return;
@@ -152,9 +167,97 @@ const OverviewPanel = {
     const treeHtml = this.renderTreeNode(this.tree);
 
     this.orgTreeContainer.innerHTML = `
-      <h3>组织结构</h3>
+      <h3>智能体组织结构</h3>
       ${treeHtml}
     `;
+  },
+
+  /**
+   * 渲染岗位从属关系树
+   */
+  renderRoleTree() {
+    if (!this.roleTreeContainer) return;
+
+    if (!this.roleTree) {
+      this.roleTreeContainer.innerHTML = `
+        <h3>岗位从属关系</h3>
+        <div style="color: #888; padding: 12px;">暂无数据</div>
+      `;
+      return;
+    }
+
+    const treeHtml = this.renderRoleTreeNode(this.roleTree);
+
+    this.roleTreeContainer.innerHTML = `
+      <h3>岗位从属关系</h3>
+      ${treeHtml}
+    `;
+  },
+
+  /**
+   * 递归渲染岗位树节点
+   * @param {object|Array} node - 岗位树节点或节点数组
+   * @returns {string} HTML 字符串
+   */
+  renderRoleTreeNode(node) {
+    if (!node) return '';
+
+    // 如果是数组，渲染所有节点
+    if (Array.isArray(node)) {
+      return node.map(n => this.renderRoleTreeNode(n)).join('');
+    }
+
+    const icon = this.getRoleNodeIcon(node);
+    const hasActiveAgents = node.activeAgentCount > 0;
+    const statusClass = hasActiveAgents ? '' : 'inactive-role';
+    
+    // 显示智能体数量（活跃/总数）
+    const countDisplay = node.agentCount > 0 
+      ? `<span class="role-tree-count">${node.activeAgentCount}/${node.agentCount}</span>`
+      : '<span class="role-tree-count empty">0</span>';
+
+    let childrenHtml = '';
+    if (node.children && node.children.length > 0) {
+      childrenHtml = `
+        <div class="tree-children">
+          ${node.children.map(child => this.renderRoleTreeNode(child)).join('')}
+        </div>
+      `;
+    }
+
+    return `
+      <div class="tree-node role-tree-node">
+        <div class="tree-node-content ${statusClass}" onclick="OverviewPanel.onRoleTreeNodeClick('${this.escapeHtml(node.name).replace(/'/g, "\\'")}')">
+          <span class="tree-node-icon">${icon}</span>
+          <span class="tree-node-name">${this.escapeHtml(node.name)}</span>
+          ${countDisplay}
+        </div>
+        ${childrenHtml}
+      </div>
+    `;
+  },
+
+  /**
+   * 获取岗位节点图标
+   * @param {object} node - 岗位树节点
+   * @returns {string} 图标字符
+   */
+  getRoleNodeIcon(node) {
+    if (node.id === 'root' || node.name === 'root') return '🌳';
+    if (node.children && node.children.length > 0) return '📂';
+    if (node.activeAgentCount > 0) return '📋';
+    return '📄';
+  },
+
+  /**
+   * 岗位树节点点击处理
+   * @param {string} roleName - 岗位名称
+   */
+  onRoleTreeNodeClick(roleName) {
+    // 切换到列表视图并按岗位筛选
+    if (window.App) {
+      window.App.switchToListViewWithFilter(roleName);
+    }
   },
 
   /**

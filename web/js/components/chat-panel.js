@@ -241,13 +241,19 @@ const ChatPanel = {
     
     // 按优先级尝试提取文本字段
     if (message.payload.text) {
-      return message.payload.text;
+      return typeof message.payload.text === 'object' 
+        ? JSON.stringify(message.payload.text, null, 2)
+        : message.payload.text;
     }
     if (message.payload.content) {
-      return message.payload.content;
+      return typeof message.payload.content === 'object'
+        ? JSON.stringify(message.payload.content, null, 2)
+        : message.payload.content;
     }
     if (message.payload.message) {
-      return message.payload.message;
+      return typeof message.payload.message === 'object'
+        ? JSON.stringify(message.payload.message, null, 2)
+        : message.payload.message;
     }
     
     // 如果是对象，格式化为 JSON 显示

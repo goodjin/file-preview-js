@@ -16,6 +16,7 @@ import { createNoopModuleLogger } from "./logger.js";
  * - GET /api/roles - 列出所有岗位及智能体数量
  * - GET /api/agent-messages/:agentId - 查询智能体消息（按agentId）
  * - GET /api/org/tree - 获取组织层级树结构
+ * - GET /api/org/role-tree - 获取岗位从属关系树结构
  * - POST /api/agent/:agentId/custom-name - 设置智能体自定义名称
  * - GET /api/agent-custom-names - 获取所有智能体自定义名称
  * - POST /api/role/:roleId/prompt - 更新岗位职责提示词
@@ -491,6 +492,8 @@ export class HTTPServer {
         });
       } else if (method === "GET" && pathname === "/api/org/tree") {
         this._handleGetOrgTree(res);
+      } else if (method === "GET" && pathname === "/api/org/role-tree") {
+        this._handleGetRoleTree(res);
       } else if (method === "POST" && pathname.startsWith("/api/agent/") && pathname.endsWith("/custom-name")) {
         // 提取 agentId: /api/agent/:agentId/custom-name
         const match = pathname.match(/^\/api\/agent\/(.+)\/custom-name$/);
@@ -884,6 +887,98 @@ export class HTTPServer {
       });
     } catch (err) {
       void this.log.error("查询组织树失败", { error: err.message, stack: err.stack });
+      this._sendJson(res, 500, { error: "internal_error", message: err.message });
+    }
+  }
+
+  /**
+   * 处理 GET /api/org/role-tree - 获取岗位从属关系树结构。
+   * @param {import("node:http").ServerResponse} res
+   */
+  _handleGetRoleTree(res) {
+    try {
+      if (!this.society || !this.society.runtime) {
+        this._sendJson(res, 500, { error: "society_not_initialized" });
+        return;
+      }
+
+      const org = this.society.runtime.org;
+      const roles = org ? org.listRoles() : [];
+      const agents = org ? org.listAgents() : [];
+
+      // 统计每个岗位的智能体数量（区分活跃和已终止）
+      const agentCountByRole = new Map();
+      const activeAgentCountByRole = new Map();
+      for (const agent of agents) {
+        const count = agentCountByRole.get(agent.roleId) ?? 0;
+        agentCountByRole.set(agent.roleId, count + 1);
+        
+        if (agent.status !== "terminated") {
+          const activeCount = activeAgentCountByRole.get(agent.roleId) ?? 0;
+          activeAgentCountByRole.set(agent.roleId, activeCount + 1);
+        }
+      }
+
+      // 构建岗位映射
+      const roleMap = new Map();
+      
+      // 添加系统岗位
+      roleMap.set("root", {
+        id: "root",
+        name: "root",
+        createdBy: null,
+        agentCount: 1,
+        activeAgentCount: 1,
+        children: []
+      });
+
+      // 添加用户定义的岗位
+      for (const role of roles) {
+        roleMap.set(role.id, {
+          id: role.id,
+          name: role.name,
+          createdBy: role.createdBy,
+          createdAt: role.createdAt,
+          agentCount: agentCountByRole.get(role.id) ?? 0,
+          activeAgentCount: activeAgentCountByRole.get(role.id) ?? 0,
+          children: []
+        });
+      }
+
+      // 构建树结构（基于 createdBy 关系）
+      // createdBy 是创建该岗位的智能体 ID，我们需要找到该智能体所属的岗位
+      const agentToRoleMap = new Map();
+      agentToRoleMap.set("root", "root");
+      for (const agent of agents) {
+        agentToRoleMap.set(agent.id, agent.roleId);
+      }
+
+      const roots = [];
+      for (const [id, node] of roleMap) {
+        if (id === "root") {
+          roots.push(node);
+          continue;
+        }
+
+        // 找到创建者智能体所属的岗位
+        const creatorAgentId = node.createdBy;
+        const parentRoleId = creatorAgentId ? agentToRoleMap.get(creatorAgentId) : null;
+        
+        if (parentRoleId && roleMap.has(parentRoleId)) {
+          roleMap.get(parentRoleId).children.push(node);
+        } else {
+          // 如果找不到父岗位，作为根节点
+          roots.push(node);
+        }
+      }
+
+      void this.log.debug("HTTP查询岗位树", { nodeCount: roleMap.size });
+      this._sendJson(res, 200, {
+        tree: roots,
+        nodeCount: roleMap.size
+      });
+    } catch (err) {
+      void this.log.error("查询岗位树失败", { error: err.message, stack: err.stack });
       this._sendJson(res, 500, { error: "internal_error", message: err.message });
     }
   }
