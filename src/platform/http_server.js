@@ -176,6 +176,7 @@ export class HTTPServer {
 
     const filePath = path.join(dir, `${agentId}.jsonl`);
     const messages = [];
+    const localMessageIds = new Set(); // 用于单个智能体内部去重
 
     try {
       if (!existsSync(filePath)) {
@@ -189,9 +190,11 @@ export class HTTPServer {
       for (const line of lines) {
         try {
           const msg = JSON.parse(line);
-          // 去重：检查是否已存在
-          if (!this._messagesById.has(msg.id)) {
+          // 去重：只在当前智能体的消息列表内去重，不跨智能体去重
+          if (!localMessageIds.has(msg.id)) {
             messages.push(msg);
+            localMessageIds.add(msg.id);
+            // 同时更新全局索引（用于快速查找）
             this._messagesById.set(msg.id, msg);
           }
         } catch (parseErr) {
