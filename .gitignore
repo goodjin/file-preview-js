@@ -120,3 +120,12 @@ dist
 .yarn/install-state.gz
 .pnp.*
 config/app.local.json
+agent-society-data/artifacts/091c507f-7f9e-4276-bb3f-62c194378267.json
+agent-society-data/state/org.json
+agent-society-data/state/conversations/1a5d3875-2215-40d8-9d67-62a1cbbc581e.json
+agent-society-data/state/conversations/root.json
+agent-society-data/state/web/messages/1a5d3875-2215-40d8-9d67-62a1cbbc581e.jsonl
+agent-society-data/state/web/messages/6f6180c7-1308-45fe-a045-4e541a3ab120.jsonl
+agent-society-data/state/web/messages/932491f7-1041-4f8e-b24b-bf7eef7ca3b5.jsonl
+agent-society-data/state/web/messages/root.jsonl
+agent-society-data/state/web/messages/user.jsonl

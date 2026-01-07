@@ -1,15 +1,22 @@
+import { mkdir, readFile, writeFile, readdir, unlink } from "node:fs/promises";
+import path from "node:path";
+
 /**
  * 会话上下文管理器
  * 负责管理智能体的会话上下文，包括压缩历史消息和检查上下文长度。
  * 支持基于 token 的上下文长度限制。
+ * 支持对话历史持久化到磁盘。
  */
 export class ConversationManager {
   /**
-   * @param {{maxContextMessages?:number, conversations?:Map, contextLimit?:{maxTokens:number, warningThreshold:number, criticalThreshold:number, hardLimitThreshold:number}, promptTemplates?:{contextStatus?:string, contextExceeded?:string, contextCritical?:string, contextWarning?:string}}} options
+   * @param {{maxContextMessages?:number, conversations?:Map, contextLimit?:{maxTokens:number, warningThreshold:number, criticalThreshold:number, hardLimitThreshold:number}, promptTemplates?:{contextStatus?:string, contextExceeded?:string, contextCritical?:string, contextWarning?:string}, conversationsDir?:string, logger?:object}} options
    */
   constructor(options = {}) {
     this.maxContextMessages = options.maxContextMessages ?? 50;
     this.conversations = options.conversations ?? new Map();
+    this._conversationsDir = options.conversationsDir ?? null;
+    this._logger = options.logger ?? null;
+    this._pendingSaves = new Map(); // 防抖保存
     
     // 上下文 token 限制配置
     this.contextLimit = options.contextLimit ?? {
@@ -29,6 +36,197 @@ export class ConversationManager {
     
     // 每个智能体的 token 使用统计（基于 LLM 返回的实际值）
     this._tokenUsage = new Map();
+  }
+
+  /**
+   * 设置持久化目录。
+   * @param {string} dir
+   */
+  setConversationsDir(dir) {
+    this._conversationsDir = dir;
+  }
+
+  /**
+   * 设置日志记录器。
+   * @param {object} logger
+   */
+  setLogger(logger) {
+    this._logger = logger;
+  }
+
+  /**
+   * 加载所有持久化的对话历史。
+   * @returns {Promise<{loaded: number, errors: string[]}>}
+   */
+  async loadAllConversations() {
+    if (!this._conversationsDir) {
+      return { loaded: 0, errors: ["conversationsDir not set"] };
+    }
+
+    const errors = [];
+    let loaded = 0;
+
+    try {
+      await mkdir(this._conversationsDir, { recursive: true });
+      const files = await readdir(this._conversationsDir);
+      
+      for (const file of files) {
+        if (!file.endsWith(".json")) continue;
+        
+        const agentId = file.slice(0, -5); // 移除 .json 后缀
+        const filePath = path.join(this._conversationsDir, file);
+        
+        try {
+          const raw = await readFile(filePath, "utf8");
+          const data = JSON.parse(raw);
+          
+          if (Array.isArray(data.messages)) {
+            this.conversations.set(agentId, data.messages);
+            
+            // 恢复 token 使用统计
+            if (data.tokenUsage) {
+              this._tokenUsage.set(agentId, data.tokenUsage);
+            }
+            
+            loaded++;
+          } else {
+            errors.push(`${agentId}: invalid format`);
+          }
+        } catch (err) {
+          errors.push(`${agentId}: ${err.message}`);
+        }
+      }
+    } catch (err) {
+      errors.push(`readdir: ${err.message}`);
+    }
+
+    if (this._logger) {
+      void this._logger.info?.("加载对话历史完成", { loaded, errors: errors.length });
+    }
+
+    return { loaded, errors };
+  }
+
+  /**
+   * 持久化单个智能体的对话历史（带防抖）。
+   * @param {string} agentId
+   * @returns {Promise<void>}
+   */
+  async persistConversation(agentId) {
+    if (!this._conversationsDir) return;
+
+    // 防抖：取消之前的保存计划
+    const pending = this._pendingSaves.get(agentId);
+    if (pending) {
+      clearTimeout(pending);
+    }
+
+    // 延迟 500ms 保存，合并频繁的写入
+    this._pendingSaves.set(agentId, setTimeout(async () => {
+      this._pendingSaves.delete(agentId);
+      await this._doSaveConversation(agentId);
+    }, 500));
+  }
+
+  /**
+   * 立即持久化单个智能体的对话历史（无防抖）。
+   * @param {string} agentId
+   * @returns {Promise<{ok: boolean, error?: string}>}
+   */
+  async persistConversationNow(agentId) {
+    if (!this._conversationsDir) {
+      return { ok: false, error: "conversationsDir not set" };
+    }
+
+    // 取消防抖计划
+    const pending = this._pendingSaves.get(agentId);
+    if (pending) {
+      clearTimeout(pending);
+      this._pendingSaves.delete(agentId);
+    }
+
+    return await this._doSaveConversation(agentId);
+  }
+
+  /**
+   * 实际执行保存操作。
+   * @param {string} agentId
+   * @returns {Promise<{ok: boolean, error?: string}>}
+   * @private
+   */
+  async _doSaveConversation(agentId) {
+    try {
+      await mkdir(this._conversationsDir, { recursive: true });
+      
+      const conv = this.conversations.get(agentId);
+      if (!conv) {
+        return { ok: true }; // 没有对话，无需保存
+      }
+
+      const filePath = path.join(this._conversationsDir, `${agentId}.json`);
+      const data = {
+        agentId,
+        messages: conv,
+        tokenUsage: this._tokenUsage.get(agentId) ?? null,
+        updatedAt: new Date().toISOString()
+      };
+
+      await writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
+      
+      if (this._logger) {
+        void this._logger.debug?.("持久化对话历史", { agentId, messageCount: conv.length });
+      }
+      
+      return { ok: true };
+    } catch (err) {
+      if (this._logger) {
+        void this._logger.error?.("持久化对话历史失败", { agentId, error: err.message });
+      }
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * 删除智能体的持久化对话历史文件。
+   * @param {string} agentId
+   * @returns {Promise<{ok: boolean, error?: string}>}
+   */
+  async deletePersistedConversation(agentId) {
+    if (!this._conversationsDir) {
+      return { ok: true };
+    }
+
+    // 取消防抖计划
+    const pending = this._pendingSaves.get(agentId);
+    if (pending) {
+      clearTimeout(pending);
+      this._pendingSaves.delete(agentId);
+    }
+
+    try {
+      const filePath = path.join(this._conversationsDir, `${agentId}.json`);
+      await unlink(filePath);
+      return { ok: true };
+    } catch (err) {
+      if (err.code === "ENOENT") {
+        return { ok: true }; // 文件不存在，视为成功
+      }
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * 等待所有待保存的对话完成。
+   * @returns {Promise<void>}
+   */
+  async flushAll() {
+    const promises = [];
+    for (const [agentId, timeout] of this._pendingSaves) {
+      clearTimeout(timeout);
+      promises.push(this._doSaveConversation(agentId));
+    }
+    this._pendingSaves.clear();
+    await Promise.all(promises);
   }
 
   /**

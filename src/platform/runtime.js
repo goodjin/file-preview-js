@@ -1,3 +1,4 @@
+import path from "node:path";
 import { loadConfig } from "./config.js";
 import { ArtifactStore } from "./artifact_store.js";
 import { MessageBus } from "./message_bus.js";
@@ -208,8 +209,22 @@ export class Runtime {
       });
     }
 
+    // 配置对话历史持久化目录
+    const conversationsDir = path.join(this.config.runtimeDir, "conversations");
+    this._conversationManager.setConversationsDir(conversationsDir);
+    this._conversationManager.setLogger(this.loggerRoot.forModule("conversation"));
+
     // 从持久化的组织状态恢复智能体实例
     await this._restoreAgentsFromOrg();
+
+    // 加载持久化的对话历史
+    const convResult = await this._conversationManager.loadAllConversations();
+    if (convResult.loaded > 0) {
+      void this.log.info("对话历史加载完成", { 
+        loaded: convResult.loaded, 
+        errors: convResult.errors.length 
+      });
+    }
 
     void this.log.info("运行时初始化完成", {
       agents: this._agents.size
@@ -1383,6 +1398,27 @@ export class Runtime {
     const systemPrompt = this._buildSystemPromptForAgent(ctx);
     const conv = this._ensureConversation(ctx.agent.id, systemPrompt);
     
+    // 使用 try-finally 确保对话历史被持久化
+    try {
+      await this._doLlmProcessing(ctx, message, conv, agentId);
+    } finally {
+      // 持久化对话历史
+      if (agentId) {
+        void this._conversationManager.persistConversation(agentId);
+      }
+    }
+  }
+
+  /**
+   * 执行 LLM 处理循环（内部方法）。
+   * @param {any} ctx
+   * @param {any} message
+   * @param {any[]} conv
+   * @param {string|null} agentId
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _doLlmProcessing(ctx, message, conv, agentId) {
     // 在用户消息中注入上下文状态提示
     const contextStatusPrompt = this._conversationManager.buildContextStatusPrompt(agentId);
     const userContent = this._formatMessageForLlm(ctx, message) + contextStatusPrompt;
@@ -1825,6 +1861,9 @@ export class Runtime {
 
       // 清理会话上下文
       this._conversations.delete(agentId);
+      
+      // 删除持久化的对话历史文件
+      void this._conversationManager.deletePersistedConversation(agentId);
 
       // 清理智能体元数据
       this._agentMetaById.delete(agentId);
@@ -2240,10 +2279,19 @@ export class Runtime {
       // 步骤3: 持久化状态
       try {
         await this.org.persist();
-        void this.log.info("状态持久化完成");
+        void this.log.info("组织状态持久化完成");
       } catch (err) {
         const message = err && typeof err.message === "string" ? err.message : String(err);
-        void this.log.error("状态持久化失败", { error: message });
+        void this.log.error("组织状态持久化失败", { error: message });
+      }
+
+      // 步骤3.5: 持久化所有对话历史
+      try {
+        await this._conversationManager.flushAll();
+        void this.log.info("对话历史持久化完成");
+      } catch (err) {
+        const message = err && typeof err.message === "string" ? err.message : String(err);
+        void this.log.error("对话历史持久化失败", { error: message });
       }
 
       // 步骤4: 关闭 HTTP 服务器
@@ -2346,10 +2394,19 @@ export class Runtime {
     // 步骤3: 持久化状态
     try {
       await this.org.persist();
-      void this.log.info("状态持久化完成");
+      void this.log.info("组织状态持久化完成");
     } catch (err) {
       const message = err && typeof err.message === "string" ? err.message : String(err);
-      void this.log.error("状态持久化失败", { error: message });
+      void this.log.error("组织状态持久化失败", { error: message });
+    }
+
+    // 步骤3.5: 持久化所有对话历史
+    try {
+      await this._conversationManager.flushAll();
+      void this.log.info("对话历史持久化完成");
+    } catch (err) {
+      const message = err && typeof err.message === "string" ? err.message : String(err);
+      void this.log.error("对话历史持久化失败", { error: message });
     }
 
     // 步骤4: 关闭 HTTP 服务器
