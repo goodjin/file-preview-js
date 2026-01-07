@@ -117,6 +117,7 @@ const RoleDetailModal = {
 
     const activeAgents = agents.filter(a => a.status !== 'terminated');
     const terminatedAgents = agents.filter(a => a.status === 'terminated');
+    const isSystemRole = role.id === 'root' || role.id === 'user';
 
     const html = `
       <!-- 基本信息 -->
@@ -161,8 +162,19 @@ const RoleDetailModal = {
 
       <!-- 岗位职责 -->
       <div class="detail-section">
-        <h4 class="section-title">岗位职责 (Prompt)</h4>
-        <div class="role-prompt-viewer">${this.escapeHtml(role.rolePrompt || '无')}</div>
+        <h4 class="section-title">
+          岗位职责 (Prompt)
+          ${!isSystemRole ? `<button class="edit-prompt-btn" onclick="RoleDetailModal.toggleEditMode()" title="编辑">✏️</button>` : ''}
+        </h4>
+        <div id="role-prompt-view" class="role-prompt-viewer">${this.escapeHtml(role.rolePrompt || '无')}</div>
+        <div id="role-prompt-edit" class="role-prompt-edit hidden">
+          <textarea id="role-prompt-textarea" class="role-prompt-textarea" placeholder="输入岗位职责描述...">${this.escapeHtml(role.rolePrompt || '')}</textarea>
+          <div class="edit-actions">
+            <button class="cancel-btn" onclick="RoleDetailModal.cancelEdit()">取消</button>
+            <button class="save-btn" onclick="RoleDetailModal.savePrompt()">保存</button>
+          </div>
+        </div>
+        ${isSystemRole ? `<div class="hint-text">系统岗位不可编辑</div>` : ''}
       </div>
 
       <!-- 智能体列表 -->
@@ -177,6 +189,85 @@ const RoleDetailModal = {
     `;
 
     this.body.innerHTML = html;
+  },
+
+  /**
+   * 切换编辑模式
+   */
+  toggleEditMode() {
+    const viewEl = document.getElementById('role-prompt-view');
+    const editEl = document.getElementById('role-prompt-edit');
+    
+    if (viewEl && editEl) {
+      viewEl.classList.add('hidden');
+      editEl.classList.remove('hidden');
+      
+      // 聚焦到文本框
+      const textarea = document.getElementById('role-prompt-textarea');
+      if (textarea) {
+        textarea.focus();
+      }
+    }
+  },
+
+  /**
+   * 取消编辑
+   */
+  cancelEdit() {
+    const viewEl = document.getElementById('role-prompt-view');
+    const editEl = document.getElementById('role-prompt-edit');
+    const textarea = document.getElementById('role-prompt-textarea');
+    
+    if (viewEl && editEl) {
+      viewEl.classList.remove('hidden');
+      editEl.classList.add('hidden');
+      
+      // 恢复原始内容
+      if (textarea && this.currentRole) {
+        textarea.value = this.currentRole.rolePrompt || '';
+      }
+    }
+  },
+
+  /**
+   * 保存职责提示词
+   */
+  async savePrompt() {
+    if (!this.currentRole) return;
+    
+    const textarea = document.getElementById('role-prompt-textarea');
+    const newPrompt = textarea?.value || '';
+    
+    try {
+      const result = await API.updateRolePrompt(this.currentRole.id, newPrompt);
+      
+      if (result.ok && result.role) {
+        // 更新本地数据
+        this.currentRole.rolePrompt = result.role.rolePrompt;
+        
+        // 更新 App 中的岗位数据
+        if (window.App?.roles) {
+          const roleIndex = window.App.roles.findIndex(r => r.id === this.currentRole.id);
+          if (roleIndex !== -1) {
+            window.App.roles[roleIndex].rolePrompt = result.role.rolePrompt;
+          }
+        }
+        
+        // 更新显示
+        const viewEl = document.getElementById('role-prompt-view');
+        if (viewEl) {
+          viewEl.textContent = result.role.rolePrompt || '无';
+        }
+        
+        // 退出编辑模式
+        this.cancelEdit();
+        
+        Toast.show('岗位职责已更新', 'success');
+      }
+    } catch (error) {
+      console.error('保存岗位职责失败:', error);
+      Toast.show('保存失败: ' + error.message, 'error');
+    }
   },
 
   /**

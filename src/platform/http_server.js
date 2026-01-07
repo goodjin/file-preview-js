@@ -18,6 +18,7 @@ import { createNoopModuleLogger } from "./logger.js";
  * - GET /api/org/tree - 获取组织层级树结构
  * - POST /api/agent/:agentId/custom-name - 设置智能体自定义名称
  * - GET /api/agent-custom-names - 获取所有智能体自定义名称
+ * - POST /api/role/:roleId/prompt - 更新岗位职责提示词
  * - GET /web/* - 静态文件服务
  */
 export class HTTPServer {
@@ -501,6 +502,15 @@ export class HTTPServer {
         }
       } else if (method === "GET" && pathname === "/api/agent-custom-names") {
         this._handleGetCustomNames(res);
+      } else if (method === "POST" && pathname.startsWith("/api/role/") && pathname.endsWith("/prompt")) {
+        // 提取 roleId: /api/role/:roleId/prompt
+        const match = pathname.match(/^\/api\/role\/(.+)\/prompt$/);
+        if (match) {
+          const roleId = decodeURIComponent(match[1]);
+          this._handleUpdateRolePrompt(req, roleId, res);
+        } else {
+          this._sendJson(res, 404, { error: "not_found", path: pathname });
+        }
       } else if (method === "GET" && pathname.startsWith("/web/")) {
         // 异步处理静态文件
         this._handleStaticFile(pathname, res).catch(err => {
@@ -925,6 +935,57 @@ export class HTTPServer {
       void this.log.error("查询自定义名称失败", { error: err.message });
       this._sendJson(res, 500, { error: "internal_error", message: err.message });
     }
+  }
+
+  /**
+   * 处理 POST /api/role/:roleId/prompt - 更新岗位职责提示词。
+   * @param {import("node:http").IncomingMessage} req
+   * @param {string} roleId - 岗位ID
+   * @param {import("node:http").ServerResponse} res
+   */
+  _handleUpdateRolePrompt(req, roleId, res) {
+    this._readJsonBody(req, async (err, body) => {
+      if (err) {
+        this._sendJson(res, 400, { error: "invalid_json", message: err.message });
+        return;
+      }
+
+      const rolePrompt = body?.rolePrompt;
+      if (rolePrompt === undefined || typeof rolePrompt !== "string") {
+        this._sendJson(res, 400, { error: "invalid_role_prompt", message: "rolePrompt 必须是字符串" });
+        return;
+      }
+
+      // 检查是否是系统岗位
+      if (roleId === "root" || roleId === "user") {
+        this._sendJson(res, 400, { error: "cannot_modify_system_role", message: "不能修改系统岗位" });
+        return;
+      }
+
+      try {
+        if (!this.society || !this.society.runtime || !this.society.runtime.org) {
+          this._sendJson(res, 500, { error: "society_not_initialized" });
+          return;
+        }
+
+        const org = this.society.runtime.org;
+        const updatedRole = await org.updateRole(roleId, { rolePrompt });
+        
+        if (!updatedRole) {
+          this._sendJson(res, 404, { error: "role_not_found", message: "岗位不存在" });
+          return;
+        }
+
+        void this.log.info("更新岗位职责提示词", { roleId, promptLength: rolePrompt.length });
+        this._sendJson(res, 200, { 
+          ok: true, 
+          role: updatedRole
+        });
+      } catch (saveErr) {
+        void this.log.error("更新岗位职责提示词失败", { roleId, error: saveErr.message });
+        this._sendJson(res, 500, { error: "update_failed", message: saveErr.message });
+      }
+    });
   }
 
   /**

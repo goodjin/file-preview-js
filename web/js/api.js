@@ -115,6 +115,18 @@ const API = {
   async getAgentCustomNames() {
     return this.get('/agent-custom-names');
   },
+
+  /**
+   * 更新岗位职责提示词
+   * @param {string} roleId - 岗位 ID
+   * @param {string} rolePrompt - 新的职责提示词
+   * @returns {Promise<object>} 更新结果
+   */
+  async updateRolePrompt(roleId, rolePrompt) {
+    return this.post(`/role/${encodeURIComponent(roleId)}/prompt`, {
+      rolePrompt: rolePrompt,
+    });
+  },
 };
 
 // 导出 API 对象供其他模块使用

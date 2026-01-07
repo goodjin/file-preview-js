@@ -1091,3 +1091,88 @@ body {
 .role-stat-name:hover {
   color: #07c160;
 }
+
+
+/* 岗位职责编辑 */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-prompt-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.edit-prompt-btn:hover {
+  opacity: 1;
+}
+
+.role-prompt-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.role-prompt-edit.hidden {
+  display: none;
+}
+
+.role-prompt-textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.role-prompt-textarea:focus {
+  outline: none;
+  border-color: #07c160;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cancel-btn {
+  background-color: #f5f5f5;
+  color: #666;
+  border: 1px solid #e0e0e0;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.cancel-btn:hover {
+  background-color: #e8e8e8;
+}
+
+.save-btn {
+  background-color: #07c160;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.save-btn:hover {
+  background-color: #06ad56;
+}

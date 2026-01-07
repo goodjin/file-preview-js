@@ -387,6 +387,31 @@ export class OrgPrimitives {
   }
 
   /**
+   * 更新岗位信息。
+   * @param {string} roleId - 岗位ID
+   * @param {{rolePrompt?: string}} updates - 要更新的字段
+   * @returns {Promise<{id:string, name:string, rolePrompt:string}|null>}
+   */
+  async updateRole(roleId, updates) {
+    const role = this._roles.get(roleId);
+    if (!role) {
+      void this.log.warn("更新岗位失败：岗位不存在", { roleId });
+      return null;
+    }
+    
+    // 更新允许修改的字段
+    if (updates.rolePrompt !== undefined && typeof updates.rolePrompt === "string") {
+      role.rolePrompt = updates.rolePrompt;
+    }
+    
+    role.updatedAt = formatLocalTimestamp();
+    
+    await this.persist();
+    void this.log.info("更新岗位", { id: roleId, name: role.name });
+    return role;
+  }
+
+  /**
    * 创建智能体实例（Agent Instance），必须绑定岗位 roleId。
    * @param {{roleId:string, parentAgentId?:string}} input
    * @returns {Promise<{id:string, roleId:string, parentAgentId:string|null, status:string}>}
