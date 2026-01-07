@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能体对话查看器</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 左侧面板：智能体列表 -->
+    <aside class="sidebar">
+      <!-- 顶部工具栏 -->
+      <div class="sidebar-header">
+        <h2>智能体列表</h2>
+        <div class="view-toggle">
+          <button id="view-list-btn" class="toggle-btn active" title="列表视图">📋</button>
+          <button id="view-overview-btn" class="toggle-btn" title="总览视图">🌳</button>
+        </div>
+      </div>
+      
+      <!-- 搜索和排序 -->
+      <div class="sidebar-toolbar">
+        <input type="text" id="search-input" class="search-input" placeholder="按岗位筛选...">
+        <button id="sort-btn" class="sort-btn" title="切换排序">↑ 时间</button>
+      </div>
+      
+      <!-- 智能体列表 -->
+      <div id="agent-list" class="agent-list">
+        <!-- 智能体列表项将通过 JavaScript 动态生成 -->
+        <div class="empty-state" style="color: #888; padding: 20px; text-align: center;">
+          加载中...
+        </div>
+      </div>
+      
+      <!-- 总览面板（默认隐藏） -->
+      <div id="overview-panel" class="overview-panel hidden">
+        <!-- 岗位统计 -->
+        <div id="role-stats" class="role-stats">
+          <!-- 岗位统计将通过 JavaScript 动态生成 -->
+        </div>
+        <!-- 组织树 -->
+        <div id="org-tree" class="org-tree">
+          <!-- 组织树将通过 JavaScript 动态生成 -->
+        </div>
+      </div>
+    </aside>
+    
+    <!-- 右侧面板：对话区域 -->
+    <main class="chat-area">
+      <!-- 对话头部 -->
+      <div class="chat-header">
+        <div class="chat-title">
+          <span class="agent-name">请选择一个智能体</span>
+          <span class="agent-role" style="display: none;"></span>
+        </div>
+        <div class="chat-status"></div>
+      </div>
+      
+      <!-- 消息列表 -->
+      <div id="message-list" class="message-list">
+        <div class="empty-state">
+          <p>👈 请从左侧选择一个智能体查看对话</p>
+        </div>
+      </div>
+      
+      <!-- 消息输入区域 -->
+      <div class="chat-input-area">
+        <textarea id="chat-input" class="chat-input" placeholder="输入消息（以 user 身份发送）..." rows="1"></textarea>
+        <button id="send-btn" class="send-btn">发送</button>
+      </div>
+    </main>
+  </div>
+  
+  <!-- 消息详情弹窗 -->
+  <div id="message-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>消息详情</h3>
+        <button class="modal-close-btn" title="关闭">&times;</button>
+      </div>
+      <div id="modal-body" class="modal-body">
+        <!-- 消息详情将通过 JavaScript 动态生成 -->
+      </div>
+    </div>
+  </div>
+  
+  <!-- Toast 通知容器 -->
+  <div id="toast-container" class="toast-container"></div>
+  
+  <!-- JavaScript 文件（按依赖顺序加载） -->
+  <!-- 工具函数 -->
+  <script src="js/utils/sort.js"></script>
+  <script src="js/utils/filter.js"></script>
+  <script src="js/utils/tree.js"></script>
+  <!-- API 模块 -->
+  <script src="js/api.js"></script>
+  <!-- 组件 -->
+  <script src="js/components/toast.js"></script>
+  <script src="js/components/agent-list.js"></script>
+  <script src="js/components/chat-panel.js"></script>
+  <script src="js/components/message-modal.js"></script>
+  <script src="js/components/overview.js"></script>
+  <!-- 主应用 -->
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -467,3 +467,219 @@ await ctx.tools.spawnAgent({
   }
 });
 ```
+
+## Web API 端点
+
+HTTP 服务器提供以下 API 端点，用于 Web 查看器和外部集成。
+
+### GET /api/agents
+
+获取所有智能体列表。
+
+**响应：**
+
+```json
+{
+  "agents": [
+    {
+      "id": "root",
+      "roleId": null,
+      "roleName": "根智能体",
+      "parentAgentId": null,
+      "createdAt": "2026-01-06T12:00:00.000Z",
+      "status": "active"
+    },
+    {
+      "id": "user",
+      "roleId": null,
+      "roleName": "用户端点",
+      "parentAgentId": null,
+      "createdAt": "2026-01-06T12:00:00.000Z",
+      "status": "active"
+    },
+    {
+      "id": "agent-xxx",
+      "roleId": "role-xxx",
+      "roleName": "助手",
+      "parentAgentId": "root",
+      "createdAt": "2026-01-06T12:01:00.000Z",
+      "status": "active"
+    }
+  ]
+}
+```
+
+### GET /api/roles
+
+获取所有岗位列表。
+
+**响应：**
+
+```json
+{
+  "roles": [
+    {
+      "id": "role-xxx",
+      "name": "助手",
+      "rolePrompt": "你是一个友好的助手...",
+      "createdBy": "root",
+      "createdAt": "2026-01-06T12:00:30.000Z",
+      "agentCount": 2
+    }
+  ]
+}
+```
+
+### GET /api/agent-messages/:agentId
+
+获取指定智能体的所有消息（发送和接收）。
+
+**参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `agentId` | `string` | 智能体 ID |
+
+**响应：**
+
+```json
+{
+  "messages": [
+    {
+      "id": "msg-xxx",
+      "from": "user",
+      "to": "agent-xxx",
+      "taskId": "task-xxx",
+      "payload": {
+        "text": "你好"
+      },
+      "createdAt": "2026-01-06T12:02:00.000Z"
+    },
+    {
+      "id": "msg-yyy",
+      "from": "agent-xxx",
+      "to": "user",
+      "taskId": "task-xxx",
+      "payload": {
+        "text": "你好！有什么可以帮助你的？"
+      },
+      "createdAt": "2026-01-06T12:02:05.000Z"
+    }
+  ]
+}
+```
+
+### GET /api/org/tree
+
+获取组织层级树结构。
+
+**响应：**
+
+```json
+{
+  "tree": {
+    "id": "root",
+    "roleName": "根智能体",
+    "status": "active",
+    "children": [
+      {
+        "id": "agent-xxx",
+        "roleName": "助手",
+        "status": "active",
+        "children": [
+          {
+            "id": "agent-yyy",
+            "roleName": "程序员",
+            "status": "active",
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### POST /api/send
+
+发送消息给指定智能体（以 user 身份）。
+
+**请求体：**
+
+```json
+{
+  "to": "agent-xxx",
+  "message": "你好"
+}
+```
+
+**响应：**
+
+```json
+{
+  "ok": true,
+  "taskId": "task-xxx"
+}
+```
+
+### POST /api/submit
+
+提交需求给根智能体。
+
+**请求体：**
+
+```json
+{
+  "requirement": "计算 1+1",
+  "workspacePath": "./my_project"
+}
+```
+
+**响应：**
+
+```json
+{
+  "ok": true,
+  "taskId": "task-xxx",
+  "workspacePath": "/absolute/path/to/my_project"
+}
+```
+
+### GET /api/messages/:taskId
+
+获取指定任务的用户消息。
+
+**参数：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `taskId` | `string` | 任务 ID |
+
+**响应：**
+
+```json
+{
+  "messages": [
+    {
+      "id": "msg-xxx",
+      "from": "agent-xxx",
+      "to": "user",
+      "taskId": "task-xxx",
+      "payload": {
+        "text": "任务完成"
+      },
+      "createdAt": "2026-01-06T12:05:00.000Z"
+    }
+  ]
+}
+```
+
+### GET /web/*
+
+静态文件服务，提供 Web 查看器界面。
+
+**示例：**
+
+- `GET /web/` → `web/index.html`
+- `GET /web/css/style.css` → `web/css/style.css`
+- `GET /web/js/app.js` → `web/js/app.js`

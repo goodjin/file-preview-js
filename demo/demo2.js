@@ -22,6 +22,10 @@ const helpText = [
 ].join("\n");
 
 function makeReadline() {
+  // 检查 stdin 是否是交互式终端
+  if (!process.stdin.isTTY) {
+    process.stdout.write("警告：stdin 不是交互式终端，readline 可能无法正常工作\n");
+  }
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
   const question = (q) => new Promise((resolve) => rl.question(q, (a) => resolve(String(a ?? ""))));
   return { rl, question };
@@ -49,7 +53,8 @@ async function waitForTaskEntryAgentId(system, taskId) {
 
 async function main() {
   // 使用自定义数据目录，避免与其他实例冲突
-  const system = new AgentSociety({ dataDir: "data/demo2" });
+  // 启用 HTTP 服务器，确保系统在等待用户输入时不会退出
+  const system = new AgentSociety({ dataDir: "data/demo2", enableHttp: true, httpPort: 3002 });
   await system.init();
 
   const { taskId } = await system.submitRequirement(buildRestaurantRequirement());

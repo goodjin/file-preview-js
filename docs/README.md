@@ -27,8 +27,11 @@
 | 我想要... | 去看... |
 |-----------|---------|
 | 快速上手 | [快速入门指南](./getting-started.md) |
+| 使用 Web 查看器 | [快速入门指南 - Web 查看器](./getting-started.md#web-查看器) |
 | 了解系统原理 | [架构设计](./architecture.md) |
+| 了解 Web 查看器架构 | [架构设计 - Web 查看器](./architecture.md#web-查看器架构) |
 | 查找 API | [API 参考](./api-reference.md) |
+| 查找 Web API | [API 参考 - Web API](./api-reference.md#web-api-端点) |
 | 配置系统 | [配置说明](./configuration.md) |
 | 了解可用工具 | [工具参考](./tools.md) |
 | 学习使用示例 | [示例教程](./examples.md) |

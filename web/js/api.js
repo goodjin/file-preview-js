@@ -1,0 +1,101 @@
+/**
+ * API 调用模块
+ * 封装所有与后端服务器的 HTTP 请求
+ */
+
+const API = {
+  // API 基础路径
+  baseUrl: '/api',
+
+  /**
+   * 发送 GET 请求
+   * @param {string} endpoint - API 端点
+   * @returns {Promise<any>} 响应数据
+   */
+  async get(endpoint) {
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`);
+      if (!response.ok) {
+        throw new Error(`HTTP 错误: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(`API GET 请求失败 [${endpoint}]:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * 发送 POST 请求
+   * @param {string} endpoint - API 端点
+   * @param {object} data - 请求数据
+   * @returns {Promise<any>} 响应数据
+   */
+  async post(endpoint, data) {
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP 错误: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(`API POST 请求失败 [${endpoint}]:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * 获取所有智能体列表
+   * @returns {Promise<{agents: Array}>} 智能体列表
+   */
+  async getAgents() {
+    return this.get('/agents');
+  },
+
+  /**
+   * 获取所有岗位列表
+   * @returns {Promise<{roles: Array}>} 岗位列表
+   */
+  async getRoles() {
+    return this.get('/roles');
+  },
+
+  /**
+   * 获取指定智能体的消息列表
+   * @param {string} agentId - 智能体 ID
+   * @returns {Promise<{messages: Array}>} 消息列表
+   */
+  async getAgentMessages(agentId) {
+    return this.get(`/agent-messages/${encodeURIComponent(agentId)}`);
+  },
+
+  /**
+   * 获取组织树结构
+   * @returns {Promise<{tree: object}>} 组织树
+   */
+  async getOrgTree() {
+    return this.get('/org/tree');
+  },
+
+  /**
+   * 发送消息给指定智能体
+   * @param {string} toAgentId - 目标智能体 ID
+   * @param {string} message - 消息内容
+   * @returns {Promise<object>} 发送结果
+   */
+  async sendMessage(toAgentId, message) {
+    return this.post('/send', {
+      to: toAgentId,
+      message: message,
+    });
+  },
+};
+
+// 导出 API 对象供其他模块使用
+window.API = API;

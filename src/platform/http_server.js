@@ -1,5 +1,8 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { mkdir, readFile, appendFile, readdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { createNoopModuleLogger } from "./logger.js";
 
 /**
@@ -8,12 +11,16 @@ import { createNoopModuleLogger } from "./logger.js";
  * 端点：
  * - POST /api/submit - 提交需求给根智能体
  * - POST /api/send - 发送消息到指定智能体
- * - GET /api/messages/:taskId - 查询任务消息
- * - GET /api/agents - 列出活跃智能体
+ * - GET /api/messages/:taskId - 查询任务消息（按taskId）
+ * - GET /api/agents - 列出所有智能体（含持久化数据）
+ * - GET /api/roles - 列出所有岗位及智能体数量
+ * - GET /api/agent-messages/:agentId - 查询智能体消息（按agentId）
+ * - GET /api/org/tree - 获取组织层级树结构
+ * - GET /web/* - 静态文件服务
  */
 export class HTTPServer {
   /**
-   * @param {{port?:number, society?:any, logger?:any}} options
+   * @param {{port?:number, society?:any, logger?:any, runtimeDir?:string}} options
    */
   constructor(options = {}) {
     this.port = options.port ?? 3000;
@@ -22,6 +29,147 @@ export class HTTPServer {
     this._server = null;
     this._messagesByTaskId = new Map(); // taskId -> messages[]
     this._isRunning = false;
+    
+    // 消息存储相关
+    this._runtimeDir = options.runtimeDir ?? null;
+    this._messagesByAgent = new Map(); // agentId -> messages[]
+    this._messagesById = new Map(); // messageId -> message（用于去重）
+  }
+
+  /**
+   * 设置运行时数据目录。
+   * @param {string} runtimeDir
+   */
+  setRuntimeDir(runtimeDir) {
+    this._runtimeDir = runtimeDir;
+  }
+
+  /**
+   * 获取消息存储目录路径。
+   * @returns {string|null}
+   */
+  _getMessagesDir() {
+    if (!this._runtimeDir) return null;
+    return path.join(this._runtimeDir, "web", "messages");
+  }
+
+  /**
+   * 确保消息存储目录存在。
+   * @returns {Promise<void>}
+   */
+  async _ensureMessagesDir() {
+    const dir = this._getMessagesDir();
+    if (dir) {
+      await mkdir(dir, { recursive: true });
+    }
+  }
+
+  /**
+   * 从文件加载指定智能体的消息。
+   * @param {string} agentId - 智能体ID
+   * @returns {Promise<any[]>} 消息列表
+   */
+  async _loadMessagesForAgent(agentId) {
+    // 如果内存中已有，直接返回
+    if (this._messagesByAgent.has(agentId)) {
+      return this._messagesByAgent.get(agentId);
+    }
+
+    const dir = this._getMessagesDir();
+    if (!dir) {
+      return [];
+    }
+
+    const filePath = path.join(dir, `${agentId}.jsonl`);
+    const messages = [];
+
+    try {
+      if (!existsSync(filePath)) {
+        this._messagesByAgent.set(agentId, messages);
+        return messages;
+      }
+
+      const content = await readFile(filePath, "utf8");
+      const lines = content.split("\n").filter(line => line.trim());
+
+      for (const line of lines) {
+        try {
+          const msg = JSON.parse(line);
+          // 去重：检查是否已存在
+          if (!this._messagesById.has(msg.id)) {
+            messages.push(msg);
+            this._messagesById.set(msg.id, msg);
+          }
+        } catch (parseErr) {
+          // 跳过解析失败的行，继续加载其他消息
+          void this.log.warn("消息解析失败，已跳过", { agentId, error: parseErr.message });
+        }
+      }
+
+      // 按时间排序
+      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      this._messagesByAgent.set(agentId, messages);
+      
+      void this.log.debug("加载智能体消息", { agentId, count: messages.length });
+    } catch (err) {
+      void this.log.warn("加载消息文件失败", { agentId, error: err.message });
+    }
+
+    return messages;
+  }
+
+  /**
+   * 追加消息到智能体的消息文件。
+   * @param {string} agentId - 智能体ID
+   * @param {object} message - 消息对象
+   * @returns {Promise<void>}
+   */
+  async _appendMessageToFile(agentId, message) {
+    const dir = this._getMessagesDir();
+    if (!dir) return;
+
+    await this._ensureMessagesDir();
+    const filePath = path.join(dir, `${agentId}.jsonl`);
+    const line = JSON.stringify(message) + "\n";
+
+    try {
+      await appendFile(filePath, line, "utf8");
+    } catch (err) {
+      void this.log.error("追加消息到文件失败", { agentId, error: err.message });
+    }
+  }
+
+  /**
+   * 存储消息到内存和文件。
+   * @param {object} message - 消息对象
+   * @returns {Promise<void>}
+   */
+  async _storeMessage(message) {
+    // 去重检查
+    if (this._messagesById.has(message.id)) {
+      return;
+    }
+    this._messagesById.set(message.id, message);
+
+    const { from, to } = message;
+
+    // 存储到发送者的消息列表
+    if (from) {
+      if (!this._messagesByAgent.has(from)) {
+        this._messagesByAgent.set(from, []);
+      }
+      this._messagesByAgent.get(from).push(message);
+      await this._appendMessageToFile(from, message);
+    }
+
+    // 存储到接收者的消息列表（如果不同于发送者）
+    if (to && to !== from) {
+      if (!this._messagesByAgent.has(to)) {
+        this._messagesByAgent.set(to, []);
+      }
+      this._messagesByAgent.get(to).push(message);
+      await this._appendMessageToFile(to, message);
+    }
   }
 
   /**
@@ -30,8 +178,9 @@ export class HTTPServer {
    */
   setSociety(society) {
     this.society = society;
-    // 注册消息监听器，收集用户收到的消息
+    // 注册消息监听器，收集所有消息
     if (society) {
+      // 监听用户收到的消息（保持原有功能）
       society.onUserMessage((message) => {
         const taskId = message?.taskId;
         if (taskId) {
@@ -41,12 +190,54 @@ export class HTTPServer {
           this._messagesByTaskId.get(taskId).push({
             id: message.id,
             from: message.from,
+            to: message.to ?? "user",
             taskId: message.taskId,
             payload: message.payload,
             createdAt: message.createdAt
           });
         }
+        // 同时存储到按智能体分组的存储中
+        void this._storeMessage({
+          id: message.id,
+          from: message.from,
+          to: message.to ?? "user",
+          taskId: message.taskId,
+          payload: message.payload,
+          createdAt: message.createdAt
+        });
       });
+
+      // 监听所有消息（如果 society 支持）
+      if (typeof society.onAllMessages === "function") {
+        society.onAllMessages((message) => {
+          void this._storeMessage({
+            id: message.id,
+            from: message.from,
+            to: message.to,
+            taskId: message.taskId,
+            payload: message.payload,
+            createdAt: message.createdAt
+          });
+        });
+      }
+
+      // 监听消息总线（如果可访问）
+      if (society.runtime && society.runtime.bus) {
+        const originalSend = society.runtime.bus.send.bind(society.runtime.bus);
+        society.runtime.bus.send = (msg) => {
+          const messageId = originalSend(msg);
+          // 存储消息
+          void this._storeMessage({
+            id: messageId,
+            from: msg.from,
+            to: msg.to,
+            taskId: msg.taskId,
+            payload: msg.payload,
+            createdAt: new Date().toISOString()
+          });
+          return messageId;
+        };
+      }
     }
   }
 
@@ -58,6 +249,9 @@ export class HTTPServer {
     if (this._isRunning) {
       return { ok: true, port: this.port };
     }
+
+    // 确保消息目录存在
+    await this._ensureMessagesDir();
 
     return new Promise((resolve) => {
       try {
@@ -83,7 +277,6 @@ export class HTTPServer {
       }
     });
   }
-
 
   /**
    * 停止HTTP服务器。
@@ -150,6 +343,18 @@ export class HTTPServer {
       this._handleGetMessages(taskId, res);
     } else if (method === "GET" && pathname === "/api/agents") {
       this._handleGetAgents(res);
+    } else if (method === "GET" && pathname === "/api/roles") {
+      this._handleGetRoles(res);
+    } else if (method === "GET" && pathname.startsWith("/api/agent-messages/")) {
+      const agentId = pathname.slice("/api/agent-messages/".length);
+      this._handleGetAgentMessages(agentId, res);
+    } else if (method === "GET" && pathname === "/api/org/tree") {
+      this._handleGetOrgTree(res);
+    } else if (method === "GET" && pathname.startsWith("/web/")) {
+      this._handleStaticFile(pathname, res);
+    } else if (method === "GET" && pathname === "/web" || pathname === "/") {
+      // 重定向到 /web/index.html
+      this._handleStaticFile("/web/index.html", res);
     } else {
       this._sendJson(res, 404, { error: "not_found", path: pathname });
     }
@@ -190,7 +395,6 @@ export class HTTPServer {
       this._sendJson(res, 200, { taskId: result.taskId });
     });
   }
-
 
   /**
    * 处理 POST /api/send - 发送消息到指定智能体。
@@ -263,7 +467,7 @@ export class HTTPServer {
   }
 
   /**
-   * 处理 GET /api/agents - 列出活跃智能体。
+   * 处理 GET /api/agents - 列出所有智能体（从OrgPrimitives读取持久化数据）。
    * @param {import("node:http").ServerResponse} res
    */
   _handleGetAgents(res) {
@@ -272,13 +476,253 @@ export class HTTPServer {
       return;
     }
 
-    const agents = this.society.runtime.listAgentInstances();
+    // 从 OrgPrimitives 获取持久化的智能体数据
+    const org = this.society.runtime.org;
+    const persistedAgents = org ? org.listAgents() : [];
+    const roles = org ? org.listRoles() : [];
+    
+    // 创建岗位ID到名称的映射
+    const roleMap = new Map(roles.map(r => [r.id, r.name]));
+
+    // 构建智能体列表，包含 root 和 user
+    const agents = [
+      {
+        id: "root",
+        roleId: "root",
+        roleName: "root",
+        parentAgentId: null,
+        createdAt: null,
+        status: "active"
+      },
+      {
+        id: "user",
+        roleId: "user",
+        roleName: "user",
+        parentAgentId: null,
+        createdAt: null,
+        status: "active"
+      },
+      ...persistedAgents.map(a => ({
+        id: a.id,
+        roleId: a.roleId,
+        roleName: roleMap.get(a.roleId) ?? a.roleId,
+        parentAgentId: a.parentAgentId,
+        createdAt: a.createdAt,
+        status: a.status ?? "active",
+        terminatedAt: a.terminatedAt
+      }))
+    ];
     
     void this.log.debug("HTTP查询智能体列表", { count: agents.length });
     this._sendJson(res, 200, { 
       agents,
       count: agents.length
     });
+  }
+
+  /**
+   * 处理 GET /api/roles - 列出所有岗位及智能体数量。
+   * @param {import("node:http").ServerResponse} res
+   */
+  _handleGetRoles(res) {
+    if (!this.society || !this.society.runtime) {
+      this._sendJson(res, 500, { error: "society_not_initialized" });
+      return;
+    }
+
+    const org = this.society.runtime.org;
+    const roles = org ? org.listRoles() : [];
+    const agents = org ? org.listAgents() : [];
+
+    // 统计每个岗位的智能体数量
+    const agentCountByRole = new Map();
+    for (const agent of agents) {
+      const count = agentCountByRole.get(agent.roleId) ?? 0;
+      agentCountByRole.set(agent.roleId, count + 1);
+    }
+
+    // 构建岗位列表，包含 root 和 user
+    const rolesWithCount = [
+      {
+        id: "root",
+        name: "root",
+        rolePrompt: "系统根智能体",
+        createdBy: null,
+        createdAt: null,
+        agentCount: 1
+      },
+      {
+        id: "user",
+        name: "user",
+        rolePrompt: "用户端点",
+        createdBy: null,
+        createdAt: null,
+        agentCount: 1
+      },
+      ...roles.map(r => ({
+        id: r.id,
+        name: r.name,
+        rolePrompt: r.rolePrompt,
+        createdBy: r.createdBy,
+        createdAt: r.createdAt,
+        agentCount: agentCountByRole.get(r.id) ?? 0
+      }))
+    ];
+
+    void this.log.debug("HTTP查询岗位列表", { count: rolesWithCount.length });
+    this._sendJson(res, 200, {
+      roles: rolesWithCount,
+      count: rolesWithCount.length
+    });
+  }
+
+  /**
+   * 处理 GET /api/agent-messages/:agentId - 查询智能体消息。
+   * @param {string} agentId
+   * @param {import("node:http").ServerResponse} res
+   */
+  async _handleGetAgentMessages(agentId, res) {
+    if (!agentId || agentId.trim() === "") {
+      this._sendJson(res, 400, { error: "missing_agent_id" });
+      return;
+    }
+
+    try {
+      const messages = await this._loadMessagesForAgent(agentId);
+      
+      void this.log.debug("HTTP查询智能体消息", { agentId, count: messages.length });
+      this._sendJson(res, 200, {
+        agentId,
+        messages,
+        count: messages.length
+      });
+    } catch (err) {
+      void this.log.error("查询智能体消息失败", { agentId, error: err.message });
+      this._sendJson(res, 500, { error: "load_messages_failed", message: err.message });
+    }
+  }
+
+  /**
+   * 处理 GET /api/org/tree - 获取组织层级树结构。
+   * @param {import("node:http").ServerResponse} res
+   */
+  _handleGetOrgTree(res) {
+    if (!this.society || !this.society.runtime) {
+      this._sendJson(res, 500, { error: "society_not_initialized" });
+      return;
+    }
+
+    const org = this.society.runtime.org;
+    const agents = org ? org.listAgents() : [];
+    const roles = org ? org.listRoles() : [];
+    
+    // 创建岗位ID到名称的映射
+    const roleMap = new Map(roles.map(r => [r.id, r.name]));
+
+    // 构建智能体映射
+    const agentMap = new Map();
+    agentMap.set("root", {
+      id: "root",
+      roleName: "root",
+      parentAgentId: null,
+      status: "active",
+      children: []
+    });
+    agentMap.set("user", {
+      id: "user",
+      roleName: "user",
+      parentAgentId: null,
+      status: "active",
+      children: []
+    });
+
+    for (const agent of agents) {
+      agentMap.set(agent.id, {
+        id: agent.id,
+        roleName: roleMap.get(agent.roleId) ?? agent.roleId,
+        parentAgentId: agent.parentAgentId,
+        status: agent.status ?? "active",
+        children: []
+      });
+    }
+
+    // 构建树结构
+    const roots = [];
+    for (const [id, node] of agentMap) {
+      if (node.parentAgentId && agentMap.has(node.parentAgentId)) {
+        agentMap.get(node.parentAgentId).children.push(node);
+      } else if (id === "root" || id === "user") {
+        roots.push(node);
+      } else if (!node.parentAgentId) {
+        roots.push(node);
+      }
+    }
+
+    void this.log.debug("HTTP查询组织树", { nodeCount: agentMap.size });
+    this._sendJson(res, 200, {
+      tree: roots,
+      nodeCount: agentMap.size
+    });
+  }
+
+  /**
+   * 处理静态文件请求。
+   * @param {string} pathname - 请求路径
+   * @param {import("node:http").ServerResponse} res
+   */
+  async _handleStaticFile(pathname, res) {
+    // 移除 /web/ 前缀，获取相对路径
+    let relativePath = pathname.replace(/^\/web\/?/, "");
+    if (!relativePath || relativePath === "") {
+      relativePath = "index.html";
+    }
+
+    // 构建文件路径（相对于项目根目录的 web 文件夹）
+    const filePath = path.join(process.cwd(), "web", relativePath);
+
+    // 安全检查：防止路径遍历攻击
+    const webDir = path.join(process.cwd(), "web");
+    const resolvedPath = path.resolve(filePath);
+    if (!resolvedPath.startsWith(webDir)) {
+      this._sendJson(res, 403, { error: "forbidden", message: "路径访问被拒绝" });
+      return;
+    }
+
+    try {
+      // 检查文件是否存在
+      if (!existsSync(resolvedPath)) {
+        this._sendJson(res, 404, { error: "not_found", path: pathname });
+        return;
+      }
+
+      // 读取文件内容
+      const content = await readFile(resolvedPath);
+
+      // 根据文件扩展名设置 Content-Type
+      const ext = path.extname(relativePath).toLowerCase();
+      const contentTypes = {
+        ".html": "text/html; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".js": "application/javascript; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+        ".ico": "image/x-icon"
+      };
+      const contentType = contentTypes[ext] ?? "application/octet-stream";
+
+      res.setHeader("Content-Type", contentType);
+      res.writeHead(200);
+      res.end(content);
+
+      void this.log.debug("HTTP静态文件", { path: relativePath });
+    } catch (err) {
+      void this.log.error("读取静态文件失败", { path: relativePath, error: err.message });
+      this._sendJson(res, 500, { error: "read_file_failed", message: err.message });
+    }
   }
 
   /**
@@ -326,9 +770,20 @@ export class HTTPServer {
   }
 
   /**
+   * 获取指定智能体的消息列表（用于测试）。
+   * @param {string} agentId
+   * @returns {any[]}
+   */
+  getMessagesByAgentId(agentId) {
+    return this._messagesByAgent.get(agentId) ?? [];
+  }
+
+  /**
    * 清除所有消息记录（用于测试）。
    */
   clearMessages() {
     this._messagesByTaskId.clear();
+    this._messagesByAgent.clear();
+    this._messagesById.clear();
   }
 }
