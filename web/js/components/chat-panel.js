@@ -217,6 +217,15 @@ const ChatPanel = {
   },
 
   /**
+   * 获取接收者显示名称
+   * @param {object} message - 消息对象
+   * @returns {string} 接收者名称，格式为 "岗位（ID）"，user 和 root 保持原样
+   */
+  getReceiverName(message) {
+    return this.getAgentDisplayName(message.to);
+  },
+
+  /**
    * 渲染消息列表
    */
   render() {
@@ -240,17 +249,33 @@ const ChatPanel = {
       const isSent = this.isSentMessage(message);
       const messageClass = isSent ? 'sent' : 'received';
       const senderName = this.getSenderName(message);
+      const receiverName = this.getReceiverName(message);
       const messageText = this.getMessageText(message);
       const time = this.formatMessageTime(message.createdAt);
+
+      // 构建发送者/接收者显示文本
+      let headerText = '';
+      if (isSent) {
+        // 当前智能体发出的消息，显示"发给 xxx"
+        headerText = `
+          <span class="message-sender">${this.escapeHtml(senderName)}</span>
+          <span class="message-receiver">→ <a href="#" onclick="ChatPanel.navigateToSender('${message.to}', '${message.id}'); return false;">${this.escapeHtml(receiverName)}</a></span>
+        `;
+      } else {
+        // 收到的消息，显示发送者（可点击跳转）
+        headerText = `
+          <a class="message-sender" href="#" onclick="ChatPanel.navigateToSender('${message.from}', '${message.id}'); return false;">
+            ${this.escapeHtml(senderName)}
+          </a>
+        `;
+      }
 
       return `
         <div class="message-item ${messageClass}" data-message-id="${message.id}">
           <div class="message-avatar">${senderName.charAt(0).toUpperCase()}</div>
           <div class="message-content">
             <div class="message-header">
-              <a class="message-sender" href="#" onclick="ChatPanel.navigateToSender('${message.from}', '${message.id}'); return false;">
-                ${this.escapeHtml(senderName)}
-              </a>
+              ${headerText}
               <span class="message-time">${time}</span>
             </div>
             <div class="message-bubble">${this.escapeHtml(messageText)}</div>

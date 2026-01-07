@@ -480,6 +480,20 @@ body {
   text-decoration: underline;
 }
 
+.message-receiver {
+  color: #888;
+  margin-left: 4px;
+}
+
+.message-receiver a {
+  color: #1890ff;
+  text-decoration: none;
+}
+
+.message-receiver a:hover {
+  text-decoration: underline;
+}
+
 .message-time {
   color: #999;
 }
