@@ -105,7 +105,7 @@ const OverviewPanel = {
     }
 
     const statsHtml = statsArray.map(stat => `
-      <div class="role-stat-item">
+      <div class="role-stat-item" onclick="OverviewPanel.onRoleClick('${this.escapeHtml(stat.name).replace(/'/g, "\\'")}')">
         <span class="role-stat-name">${this.escapeHtml(stat.name)}</span>
         <span class="role-stat-count">${stat.count}</span>
       </div>
@@ -193,6 +193,16 @@ const OverviewPanel = {
     if (window.App) {
       window.App.switchToListView();
       window.App.selectAgent(agentId);
+    }
+  },
+
+  /**
+   * 岗位统计项点击处理
+   * @param {string} roleName - 岗位名称
+   */
+  onRoleClick(roleName) {
+    if (window.App) {
+      window.App.switchToListViewWithFilter(roleName);
     }
   },
 

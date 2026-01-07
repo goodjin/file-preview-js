@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "bun run start.js",
     "demo": "bun run test/demo.js",
     "test": "bun test"
   },

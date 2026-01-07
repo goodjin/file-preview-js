@@ -124,6 +124,42 @@ npm install
 
 ## 第一个示例
 
+### 启动服务器（推荐）
+
+最简单的入门方式是启动空环境服务器：
+
+```bash
+# 使用默认配置启动
+bun start
+
+# 或使用平台脚本
+./start.sh          # Unix/macOS
+start.cmd           # Windows
+```
+
+服务器启动后会自动打开浏览器访问 Web 界面（`http://localhost:3000`）。
+
+**命令行选项：**
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `[数据目录]` | 持久化数据存储路径 | `./agent-society-data` |
+| `--port, -p <端口>` | HTTP 服务器端口 | `3000` |
+| `--no-browser` | 不自动打开浏览器 | - |
+
+**示例：**
+
+```bash
+# 自定义数据目录
+bun start ./my-project-data
+
+# 自定义端口
+bun start --port 3001
+
+# 组合使用
+bun start ./my-data -p 3001 --no-browser
+```
+
 ### 示例 1：简单计算
 
 创建一个文件 `my_first_demo.js`：
@@ -284,7 +320,22 @@ main().catch(console.error);
 
 Agent Society 提供了一个仿微信风格的 Web 界面，用于可视化查看智能体之间的对话和组织结构。
 
-### 启用 Web 查看器
+### 启动 Web 服务器
+
+**方式一：使用启动脚本（推荐）**
+
+```bash
+# 最简单的方式
+bun start
+
+# 或使用平台脚本
+./start.sh          # Unix/macOS
+start.cmd           # Windows
+```
+
+服务器启动后会自动打开浏览器访问 `http://localhost:3000`。
+
+**方式二：在代码中启用**
 
 在创建 `AgentSociety` 实例时启用 HTTP 服务器：
 

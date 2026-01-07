@@ -68,6 +68,15 @@ const App = {
   },
 
   /**
+   * 切换到列表视图并设置筛选关键词
+   * @param {string} filterKeyword - 筛选关键词（岗位名称）
+   */
+  switchToListViewWithFilter(filterKeyword) {
+    this.switchToListView();
+    AgentList.setFilterKeyword(filterKeyword);
+  },
+
+  /**
    * 切换到总览视图
    */
   switchToOverviewView() {

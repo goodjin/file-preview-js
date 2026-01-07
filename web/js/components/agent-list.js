@@ -149,6 +149,22 @@ const AgentList = {
   },
 
   /**
+   * 设置筛选关键词（供外部调用）
+   * @param {string} keyword - 筛选关键词
+   */
+  setFilterKeyword(keyword) {
+    this.filterKeyword = keyword || '';
+    
+    // 同步更新搜索框
+    if (this.searchInput) {
+      this.searchInput.value = this.filterKeyword;
+    }
+    
+    this.applyFilterAndSort();
+    this.render();
+  },
+
+  /**
    * 获取智能体图标类型
    * @param {object} agent - 智能体对象
    * @returns {string} 图标类型

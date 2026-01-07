@@ -74,6 +74,33 @@ cp config/app.json config/app.local.json
 }
 ```
 
+### 启动服务器
+
+最简单的方式是启动空环境服务器，然后通过 Web 界面交互：
+
+```bash
+# 使用默认配置启动（数据目录: ./agent-society-data，端口: 3000）
+bun start
+
+# 或使用平台脚本
+./start.sh          # Unix/macOS
+start.cmd           # Windows
+
+# 自定义数据目录
+bun start ./my-data
+
+# 自定义端口
+bun start --port 3001
+
+# 不自动打开浏览器
+bun start --no-browser
+
+# 组合使用
+bun start ./my-data --port 3001 --no-browser
+```
+
+服务器启动后会自动打开浏览器访问 Web 界面（`http://localhost:3000`）。
+
 ### 运行示例
 
 ```bash
