@@ -337,6 +337,53 @@ export class HTTPServer {
           return messageId;
         };
       }
+
+      // 监听工具调用事件（如果 runtime 支持）
+      if (society.runtime && typeof society.runtime.onToolCall === "function") {
+        society.runtime.onToolCall((event) => {
+          void this._storeToolCall(event);
+        });
+      }
+    }
+  }
+
+  /**
+   * 存储工具调用记录。
+   * @param {{agentId: string, toolName: string, args: object, result: any, taskId: string|null, callId: string, timestamp: string}} event
+   * @returns {Promise<void>}
+   */
+  async _storeToolCall(event) {
+    const { agentId, toolName, args, result, taskId, callId, timestamp } = event;
+    if (!agentId) return;
+
+    // send_message 已经作为消息显示，不需要重复显示为工具调用
+    if (toolName === "send_message") return;
+
+    // 创建工具调用消息
+    const toolCallMessage = {
+      id: `tool-${callId}`,
+      type: "tool_call",
+      from: agentId,
+      to: agentId,
+      taskId,
+      payload: {
+        toolName,
+        args,
+        result
+      },
+      createdAt: timestamp
+    };
+
+    // 存储到智能体的消息列表
+    if (!this._messagesByAgent.has(agentId)) {
+      this._messagesByAgent.set(agentId, []);
+    }
+    
+    // 避免重复添加
+    if (!this._messagesById.has(toolCallMessage.id)) {
+      this._messagesById.set(toolCallMessage.id, toolCallMessage);
+      this._messagesByAgent.get(agentId).push(toolCallMessage);
+      await this._appendMessageToFile(agentId, toolCallMessage);
     }
   }
 

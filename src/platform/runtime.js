@@ -54,6 +54,32 @@ export class Runtime {
     this.commandExecutor = new CommandExecutor();
     // 初始化 ContactManager（在 init() 中会重新初始化带 logger）
     this.contactManager = new ContactManager();
+    // 工具调用事件监听器
+    this._toolCallListeners = new Set();
+  }
+
+  /**
+   * 注册工具调用事件监听器。
+   * @param {(event: {agentId: string, toolName: string, args: object, result: any, taskId: string|null}) => void} listener
+   */
+  onToolCall(listener) {
+    if (typeof listener === "function") {
+      this._toolCallListeners.add(listener);
+    }
+  }
+
+  /**
+   * 触发工具调用事件。
+   * @param {{agentId: string, toolName: string, args: object, result: any, taskId: string|null}} event
+   */
+  _emitToolCall(event) {
+    for (const listener of this._toolCallListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        void this.log?.warn?.("工具调用事件监听器执行失败", { error: err?.message ?? String(err) });
+      }
+    }
   }
 
   /**
@@ -1326,8 +1352,21 @@ export class Runtime {
         } catch {
           args = {};
         }
-        void this.log.debug("解析工具调用参数", { name: call.function?.name ?? null });
-        const result = await this.executeToolCall(ctx, call.function?.name, args);
+        const toolName = call.function?.name ?? null;
+        void this.log.debug("解析工具调用参数", { name: toolName });
+        const result = await this.executeToolCall(ctx, toolName, args);
+        
+        // 触发工具调用事件
+        this._emitToolCall({
+          agentId: ctx.agent?.id ?? null,
+          toolName,
+          args,
+          result,
+          taskId: message?.taskId ?? null,
+          callId: call.id,
+          timestamp: new Date().toISOString()
+        });
+        
         conv.push({
           role: "tool",
           tool_call_id: call.id,

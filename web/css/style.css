@@ -1241,3 +1241,88 @@ body {
 .save-btn:hover {
   background-color: #06ad56;
 }
+
+/* ========== 工具调用消息样式 ========== */
+.message-item.tool-call {
+  flex-direction: row;
+}
+
+.message-item.tool-call .message-avatar {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.message-item.tool-call .message-content {
+  align-items: flex-start;
+}
+
+.message-item.tool-call .message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-call-label {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tool-name {
+  color: #1976d2;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tool-call-details {
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 8px;
+  max-width: 500px;
+  overflow: hidden;
+}
+
+.tool-call-section {
+  margin-bottom: 8px;
+}
+
+.tool-call-section:last-child {
+  margin-bottom: 0;
+}
+
+.tool-call-section-label {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.tool-call-args,
+.tool-call-result {
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 8px;
+  margin: 0;
+  font-size: 12px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.tool-call-result {
+  background-color: #f0fff4;
+  border-color: #c6f6d5;
+}

@@ -304,6 +304,11 @@ const ChatPanel = {
     }
 
     const html = this.messages.map(message => {
+      // 检查是否为工具调用消息
+      if (message.type === 'tool_call') {
+        return this.renderToolCallMessage(message);
+      }
+      
       const isSent = this.isSentMessage(message);
       const messageClass = isSent ? 'sent' : 'received';
       const senderName = this.getSenderName(message);
@@ -346,6 +351,66 @@ const ChatPanel = {
     }).join('');
 
     this.messageList.innerHTML = html;
+  },
+
+  /**
+   * 渲染工具调用消息
+   * @param {object} message - 工具调用消息对象
+   * @returns {string} HTML 字符串
+   */
+  renderToolCallMessage(message) {
+    const time = this.formatMessageTime(message.createdAt);
+    const toolName = message.payload?.toolName || '未知工具';
+    const args = message.payload?.args || {};
+    const result = message.payload?.result;
+    
+    // 格式化参数显示
+    let argsDisplay = '';
+    try {
+      argsDisplay = JSON.stringify(args, null, 2);
+    } catch {
+      argsDisplay = String(args);
+    }
+    
+    // 格式化结果显示（简化版）
+    let resultDisplay = '';
+    try {
+      if (result !== undefined && result !== null) {
+        const resultStr = JSON.stringify(result, null, 2);
+        // 如果结果太长，截断显示
+        resultDisplay = resultStr.length > 200 ? resultStr.substring(0, 200) + '...' : resultStr;
+      } else {
+        resultDisplay = '(无返回值)';
+      }
+    } catch {
+      resultDisplay = String(result);
+    }
+
+    return `
+      <div class="message-item tool-call" data-message-id="${message.id}">
+        <div class="message-avatar">🔧</div>
+        <div class="message-content">
+          <div class="message-header">
+            <span class="tool-call-label">工具调用</span>
+            <span class="tool-name">${this.escapeHtml(toolName)}</span>
+            <span class="message-time">${time}</span>
+          </div>
+          <div class="tool-call-details">
+            <div class="tool-call-section">
+              <span class="tool-call-section-label">参数:</span>
+              <pre class="tool-call-args">${this.escapeHtml(argsDisplay)}</pre>
+            </div>
+            <div class="tool-call-section">
+              <span class="tool-call-section-label">结果:</span>
+              <pre class="tool-call-result">${this.escapeHtml(resultDisplay)}</pre>
+            </div>
+          </div>
+          <button class="message-detail-btn" onclick="MessageModal.show('${message.id}')">
+            详情
+          </button>
+        </div>
+      </div>
+    `;
   },
 
   /**
