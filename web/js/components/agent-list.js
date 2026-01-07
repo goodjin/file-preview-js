@@ -8,7 +8,8 @@ const AgentList = {
   agents: [],           // 所有智能体
   filteredAgents: [],   // 筛选后的智能体
   selectedAgentId: null,// 当前选中的智能体 ID
-  sortOrder: 'asc',     // 排序方向（默认升序，最早的在前）
+  sortOrder: 'desc',    // 排序方向（默认降序，最新的在前）
+  sortType: 'active',   // 排序类型（默认按最后活跃时间）
   filterKeyword: '',    // 筛选关键词
   newMessageAgents: new Set(), // 有新消息的智能体 ID 集合
 
@@ -16,6 +17,7 @@ const AgentList = {
   listContainer: null,
   searchInput: null,
   sortBtn: null,
+  sortTypeBtn: null,
 
   /**
    * 初始化组件
@@ -24,6 +26,7 @@ const AgentList = {
     this.listContainer = document.getElementById('agent-list');
     this.searchInput = document.getElementById('search-input');
     this.sortBtn = document.getElementById('sort-btn');
+    this.sortTypeBtn = document.getElementById('sort-type-btn');
 
     // 绑定事件
     if (this.searchInput) {
@@ -43,7 +46,27 @@ const AgentList = {
       });
     }
 
+    if (this.sortTypeBtn) {
+      this.sortTypeBtn.addEventListener('click', () => {
+        this.toggleSortType();
+        this.updateSortButtonText();
+        this.applyFilterAndSort();
+        this.render();
+      });
+    }
+
     this.updateSortButtonText();
+  },
+
+  /**
+   * 切换排序类型
+   */
+  toggleSortType() {
+    if (this.sortType === 'active') {
+      this.sortType = 'created';
+    } else {
+      this.sortType = 'active';
+    }
   },
 
   /**
@@ -51,8 +74,14 @@ const AgentList = {
    */
   updateSortButtonText() {
     if (this.sortBtn) {
-      this.sortBtn.textContent = this.sortOrder === 'asc' ? '↑ 时间' : '↓ 时间';
+      const arrow = this.sortOrder === 'asc' ? '↑' : '↓';
+      this.sortBtn.textContent = arrow;
       this.sortBtn.title = this.sortOrder === 'asc' ? '当前：最早优先' : '当前：最新优先';
+    }
+    if (this.sortTypeBtn) {
+      const typeText = this.sortType === 'active' ? '活跃' : '创建';
+      this.sortTypeBtn.textContent = typeText;
+      this.sortTypeBtn.title = this.sortType === 'active' ? '按最后活跃时间排序' : '按创建时间排序';
     }
   },
 
@@ -73,7 +102,7 @@ const AgentList = {
     // 先筛选
     let result = FilterUtils.filterByKeyword(this.agents, this.filterKeyword);
     // 使用固定排序函数，确保 user 和 root 在顶部
-    result = SortUtils.sortWithPinnedAgents(result, this.sortOrder);
+    result = SortUtils.sortWithPinnedAgents(result, this.sortOrder, this.sortType);
     this.filteredAgents = result;
   },
 
@@ -164,6 +193,19 @@ const AgentList = {
   },
 
   /**
+   * 获取显示的时间（根据排序类型）
+   * @param {object} agent - 智能体对象
+   * @returns {string} 格式化后的时间
+   */
+  getDisplayTime(agent) {
+    if (this.sortType === 'active') {
+      // 优先显示最后活跃时间，没有则显示创建时间
+      return this.formatTime(agent.lastActiveAt || agent.createdAt);
+    }
+    return this.formatTime(agent.createdAt);
+  },
+
+  /**
    * 渲染智能体列表
    */
   render() {
@@ -193,7 +235,7 @@ const AgentList = {
             <div class="agent-name">${this.escapeHtml(agent.id)}</div>
             <div class="agent-role">${this.escapeHtml(agent.roleName || '未知岗位')}</div>
           </div>
-          <div class="agent-time">${this.formatTime(agent.createdAt)}</div>
+          <div class="agent-time">${this.getDisplayTime(agent)}</div>
           ${agent.status === 'terminated' ? '<span class="agent-status terminated">已终止</span>' : ''}
         </div>
       `;

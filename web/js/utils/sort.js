@@ -8,6 +8,10 @@ const SortUtils = {
   ASC: 'asc',   // 升序（最早的在前）
   DESC: 'desc', // 降序（最新的在前）
 
+  // 排序类型常量
+  SORT_BY_CREATED: 'created',      // 按创建时间排序
+  SORT_BY_ACTIVE: 'active',        // 按最后活跃时间排序
+
   /**
    * 按创建时间排序智能体列表
    * @param {Array} agents - 智能体数组
@@ -25,6 +29,34 @@ const SortUtils = {
     sorted.sort((a, b) => {
       const timeA = new Date(a.createdAt || 0).getTime();
       const timeB = new Date(b.createdAt || 0).getTime();
+      
+      if (order === this.ASC) {
+        return timeA - timeB; // 升序：早的在前
+      } else {
+        return timeB - timeA; // 降序：晚的在前
+      }
+    });
+    
+    return sorted;
+  },
+
+  /**
+   * 按最后活跃时间排序智能体列表
+   * @param {Array} agents - 智能体数组
+   * @param {string} order - 排序方向 ('asc' 或 'desc')
+   * @returns {Array} 排序后的新数组
+   */
+  sortByLastActiveAt(agents, order = this.DESC) {
+    if (!Array.isArray(agents)) {
+      return [];
+    }
+    
+    const sorted = [...agents];
+    
+    sorted.sort((a, b) => {
+      // 如果没有 lastActiveAt，使用 createdAt 作为后备
+      const timeA = new Date(a.lastActiveAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.lastActiveAt || b.createdAt || 0).getTime();
       
       if (order === this.ASC) {
         return timeA - timeB; // 升序：早的在前
@@ -64,12 +96,13 @@ const SortUtils = {
   },
 
   /**
-   * 按创建时间排序智能体列表，固定 user 和 root 在顶部
+   * 按指定类型排序智能体列表，固定 user 和 root 在顶部
    * @param {Array} agents - 智能体数组
    * @param {string} order - 排序方向 ('asc' 或 'desc')
+   * @param {string} sortType - 排序类型 ('created' 或 'active')
    * @returns {Array} 排序后的新数组，user 在第一位，root 在第二位
    */
-  sortWithPinnedAgents(agents, order = this.ASC) {
+  sortWithPinnedAgents(agents, order = this.ASC, sortType = this.SORT_BY_CREATED) {
     if (!Array.isArray(agents)) {
       return [];
     }
@@ -94,8 +127,13 @@ const SortUtils = {
     if (userAgent) pinned.push(userAgent);
     if (rootAgent) pinned.push(rootAgent);
     
-    // 对普通智能体排序
-    const sortedRegular = this.sortByCreatedAt(regular, order);
+    // 根据排序类型对普通智能体排序
+    let sortedRegular;
+    if (sortType === this.SORT_BY_ACTIVE) {
+      sortedRegular = this.sortByLastActiveAt(regular, order);
+    } else {
+      sortedRegular = this.sortByCreatedAt(regular, order);
+    }
     
     // 合并结果
     return [...pinned, ...sortedRegular];

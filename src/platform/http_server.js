@@ -533,6 +533,21 @@ export class HTTPServer {
   }
 
   /**
+   * 获取智能体的最后活跃时间（基于消息）。
+   * @param {string} agentId - 智能体ID
+   * @returns {string|null} 最后活跃时间的 ISO 字符串，如果没有消息则返回 null
+   */
+  _getLastActiveAt(agentId) {
+    const messages = this._messagesByAgent.get(agentId);
+    if (!messages || messages.length === 0) {
+      return null;
+    }
+    // 消息已按时间排序，取最后一条
+    const lastMessage = messages[messages.length - 1];
+    return lastMessage.createdAt || null;
+  }
+
+  /**
    * 处理 GET /api/agents - 列出所有智能体（从OrgPrimitives读取持久化数据）。
    * @param {import("node:http").ServerResponse} res
    */
@@ -559,6 +574,7 @@ export class HTTPServer {
           roleName: "root",
           parentAgentId: null,
           createdAt: null,
+          lastActiveAt: this._getLastActiveAt("root"),
           status: "active"
         },
         {
@@ -567,6 +583,7 @@ export class HTTPServer {
           roleName: "user",
           parentAgentId: null,
           createdAt: null,
+          lastActiveAt: this._getLastActiveAt("user"),
           status: "active"
         },
         ...persistedAgents.map(a => ({
@@ -575,6 +592,7 @@ export class HTTPServer {
           roleName: roleMap.get(a.roleId) ?? a.roleId,
           parentAgentId: a.parentAgentId,
           createdAt: a.createdAt,
+          lastActiveAt: this._getLastActiveAt(a.id),
           status: a.status ?? "active",
           terminatedAt: a.terminatedAt
         }))

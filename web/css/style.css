@@ -112,13 +112,30 @@ body {
   border: none;
   color: #888;
   cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s;
+  min-width: 32px;
+}
+
+.sort-btn:hover {
+  background-color: #444;
+  color: #fff;
+}
+
+.sort-type-btn {
+  background-color: #3a3a3a;
+  border: none;
+  color: #888;
+  cursor: pointer;
   padding: 8px 12px;
   border-radius: 4px;
   font-size: 14px;
   transition: all 0.2s;
 }
 
-.sort-btn:hover {
+.sort-type-btn:hover {
   background-color: #444;
   color: #fff;
 }

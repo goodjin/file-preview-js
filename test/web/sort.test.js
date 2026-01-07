@@ -10,6 +10,8 @@ import * as fc from 'fast-check';
 const SortUtils = {
   ASC: 'asc',
   DESC: 'desc',
+  SORT_BY_CREATED: 'created',
+  SORT_BY_ACTIVE: 'active',
 
   sortByCreatedAt(agents, order = this.ASC) {
     if (!Array.isArray(agents)) {
@@ -28,7 +30,24 @@ const SortUtils = {
     return sorted;
   },
 
-  sortWithPinnedAgents(agents, order = this.ASC) {
+  sortByLastActiveAt(agents, order = this.DESC) {
+    if (!Array.isArray(agents)) {
+      return [];
+    }
+    const sorted = [...agents];
+    sorted.sort((a, b) => {
+      const timeA = new Date(a.lastActiveAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.lastActiveAt || b.createdAt || 0).getTime();
+      if (order === this.ASC) {
+        return timeA - timeB;
+      } else {
+        return timeB - timeA;
+      }
+    });
+    return sorted;
+  },
+
+  sortWithPinnedAgents(agents, order = this.ASC, sortType = this.SORT_BY_CREATED) {
     if (!Array.isArray(agents)) {
       return [];
     }
@@ -51,7 +70,12 @@ const SortUtils = {
     if (userAgent) pinned.push(userAgent);
     if (rootAgent) pinned.push(rootAgent);
     
-    const sortedRegular = this.sortByCreatedAt(regular, order);
+    let sortedRegular;
+    if (sortType === this.SORT_BY_ACTIVE) {
+      sortedRegular = this.sortByLastActiveAt(regular, order);
+    } else {
+      sortedRegular = this.sortByCreatedAt(regular, order);
+    }
     
     return [...pinned, ...sortedRegular];
   },
@@ -579,6 +603,176 @@ describe('功能: agent-list-pinned-sorting, 属性 4: 筛选后固定智能体�
           
           if (userIndex !== -1 && rootIndex !== -1) {
             expect(userIndex).toBeLessThan(rootIndex);
+          }
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});
+
+
+/**
+ * 功能: agent-list-active-sorting
+ * 属性 5: 按最后活跃时间排序正确性
+ * Validates: 最后活跃时间排序功能
+ */
+describe('功能: agent-list-active-sorting, 属性 5: 最后活跃时间排序', () => {
+  // 带有 lastActiveAt 的智能体生成器
+  const agentWithActiveArb = fc.record({
+    id: fc.uuid(),
+    roleId: fc.uuid(),
+    roleName: fc.string({ minLength: 1, maxLength: 20 }),
+    parentAgentId: fc.option(fc.uuid(), { nil: undefined }),
+    createdAt: dateStringArb,
+    lastActiveAt: fc.option(dateStringArb, { nil: undefined }),
+    status: fc.oneof(fc.constant('active'), fc.constant('terminated')),
+  });
+
+  test('降序时，每个智能体的活跃时间应大于或等于其后一个智能体的活跃时间', () => {
+    fc.assert(
+      fc.property(
+        fc.array(agentWithActiveArb, { minLength: 0, maxLength: 100 }),
+        (agents) => {
+          const sorted = SortUtils.sortByLastActiveAt(agents, 'desc');
+          
+          for (let i = 0; i < sorted.length - 1; i++) {
+            const timeA = new Date(sorted[i].lastActiveAt || sorted[i].createdAt || 0).getTime();
+            const timeB = new Date(sorted[i + 1].lastActiveAt || sorted[i + 1].createdAt || 0).getTime();
+            expect(timeA).toBeGreaterThanOrEqual(timeB);
+          }
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  test('升序时，每个智能体的活跃时间应小于或等于其后一个智能体的活跃时间', () => {
+    fc.assert(
+      fc.property(
+        fc.array(agentWithActiveArb, { minLength: 0, maxLength: 100 }),
+        (agents) => {
+          const sorted = SortUtils.sortByLastActiveAt(agents, 'asc');
+          
+          for (let i = 0; i < sorted.length - 1; i++) {
+            const timeA = new Date(sorted[i].lastActiveAt || sorted[i].createdAt || 0).getTime();
+            const timeB = new Date(sorted[i + 1].lastActiveAt || sorted[i + 1].createdAt || 0).getTime();
+            expect(timeA).toBeLessThanOrEqual(timeB);
+          }
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  test('没有 lastActiveAt 时应使用 createdAt 作为后备', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({
+          id: fc.uuid(),
+          roleId: fc.uuid(),
+          roleName: fc.string({ minLength: 1, maxLength: 20 }),
+          createdAt: dateStringArb,
+          // 故意不包含 lastActiveAt
+        }), { minLength: 2, maxLength: 50 }),
+        (agents) => {
+          const sorted = SortUtils.sortByLastActiveAt(agents, 'desc');
+          
+          // 应该按 createdAt 排序
+          for (let i = 0; i < sorted.length - 1; i++) {
+            const timeA = new Date(sorted[i].createdAt).getTime();
+            const timeB = new Date(sorted[i + 1].createdAt).getTime();
+            expect(timeA).toBeGreaterThanOrEqual(timeB);
+          }
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  test('sortWithPinnedAgents 使用 active 排序类型时按活跃时间排序', () => {
+    fc.assert(
+      fc.property(
+        fc.option(fc.record({
+          id: fc.constant('user'),
+          roleId: fc.uuid(),
+          roleName: fc.constant('用户'),
+          createdAt: dateStringArb,
+          lastActiveAt: fc.option(dateStringArb, { nil: undefined }),
+        }), { nil: undefined }),
+        fc.option(fc.record({
+          id: fc.constant('root'),
+          roleId: fc.uuid(),
+          roleName: fc.constant('根节点'),
+          createdAt: dateStringArb,
+          lastActiveAt: fc.option(dateStringArb, { nil: undefined }),
+        }), { nil: undefined }),
+        fc.array(agentWithActiveArb, { minLength: 2, maxLength: 50 }),
+        (userAgent, rootAgent, regularAgents) => {
+          const agents = [...regularAgents];
+          if (userAgent) agents.push(userAgent);
+          if (rootAgent) agents.push(rootAgent);
+          
+          const sorted = SortUtils.sortWithPinnedAgents(agents, 'desc', 'active');
+          
+          const pinnedCount = (userAgent ? 1 : 0) + (rootAgent ? 1 : 0);
+          const regularPart = sorted.slice(pinnedCount);
+          
+          // 验证普通智能体按活跃时间降序排序
+          for (let i = 0; i < regularPart.length - 1; i++) {
+            const timeA = new Date(regularPart[i].lastActiveAt || regularPart[i].createdAt || 0).getTime();
+            const timeB = new Date(regularPart[i + 1].lastActiveAt || regularPart[i + 1].createdAt || 0).getTime();
+            expect(timeA).toBeGreaterThanOrEqual(timeB);
+          }
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  test('sortWithPinnedAgents 使用 created 排序类型时按创建时间排序', () => {
+    fc.assert(
+      fc.property(
+        fc.option(fc.record({
+          id: fc.constant('user'),
+          roleId: fc.uuid(),
+          roleName: fc.constant('用户'),
+          createdAt: dateStringArb,
+          lastActiveAt: fc.option(dateStringArb, { nil: undefined }),
+        }), { nil: undefined }),
+        fc.option(fc.record({
+          id: fc.constant('root'),
+          roleId: fc.uuid(),
+          roleName: fc.constant('根节点'),
+          createdAt: dateStringArb,
+          lastActiveAt: fc.option(dateStringArb, { nil: undefined }),
+        }), { nil: undefined }),
+        fc.array(agentWithActiveArb, { minLength: 2, maxLength: 50 }),
+        (userAgent, rootAgent, regularAgents) => {
+          const agents = [...regularAgents];
+          if (userAgent) agents.push(userAgent);
+          if (rootAgent) agents.push(rootAgent);
+          
+          const sorted = SortUtils.sortWithPinnedAgents(agents, 'desc', 'created');
+          
+          const pinnedCount = (userAgent ? 1 : 0) + (rootAgent ? 1 : 0);
+          const regularPart = sorted.slice(pinnedCount);
+          
+          // 验证普通智能体按创建时间降序排序
+          for (let i = 0; i < regularPart.length - 1; i++) {
+            const timeA = new Date(regularPart[i].createdAt).getTime();
+            const timeB = new Date(regularPart[i + 1].createdAt).getTime();
+            expect(timeA).toBeGreaterThanOrEqual(timeB);
           }
           
           return true;
