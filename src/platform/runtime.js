@@ -34,6 +34,7 @@ export class Runtime {
     this._stopRequested = false;
     this._processingLoopPromise = null;
     this._agents = new Map();
+    this._activeProcessingAgents = new Set(); // 正在处理消息的智能体集合（用于并发控制）
     this._behaviorRegistry = new Map();
     this._conversations = new Map();
     this._conversationManager = new ConversationManager({ 
@@ -515,112 +516,193 @@ export class Runtime {
   }
 
   async _processingLoop() {
-    void this.log.info("运行时常驻消息循环开始");
+    void this.log.info("运行时常驻消息循环开始（生产者-消费者模式）");
+    
+    // 获取最大并发数（从LLM客户端配置）
+    const maxConcurrent = this.llm?.concurrencyController?.maxConcurrentRequests ?? 3;
+    
     while (!this._stopRequested) {
-      if (!this.bus.hasPending()) {
-        await this.bus.waitForMessage({ timeoutMs: 1000 });
-        continue;
+      // 尝试调度新的消息处理
+      const scheduled = await this._scheduleMessageProcessing(maxConcurrent);
+      
+      if (!scheduled && !this.bus.hasPending()) {
+        // 没有调度成功且没有待处理消息，等待新消息
+        await this.bus.waitForMessage({ timeoutMs: 100 });
+      } else if (!scheduled) {
+        // 有待处理消息但无法调度（可能是并发已满或智能体正在处理）
+        // 短暂等待后重试
+        await new Promise((r) => setTimeout(r, 10));
       }
-
-      let steps = 0;
-      while (!this._stopRequested && steps < this.maxSteps && this.bus.hasPending()) {
-        steps += 1;
-        
-        try {
-          const delivered = await this._deliverOneRound();
-          if (!delivered) break;
-          
-          if (steps % 5 === 0) {
-            await new Promise((r) => setImmediate(r));
-          }
-        } catch (err) {
-          // 捕获消息投递过程中的异常，记录日志但不停止循环
-          void this.log.error("消息投递轮次异常（已恢复）", {
-            step: steps,
-            error: err?.message ?? String(err),
-            stack: err?.stack ?? null,
-            pendingMessages: this.bus.getPendingCount(),
-            willContinue: true
-          });
-          
-          // 短暂延迟后继续
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-      }
+      
+      // 让出事件循环
       await new Promise((r) => setImmediate(r));
+    }
+    
+    // 等待所有正在处理的消息完成
+    while (this._activeProcessingAgents.size > 0) {
+      void this.log.info("等待活跃消息处理完成", { 
+        activeCount: this._activeProcessingAgents.size,
+        activeAgents: [...this._activeProcessingAgents]
+      });
+      await new Promise((r) => setTimeout(r, 100));
     }
     
     void this.log.info("运行时常驻消息循环结束", { stopRequested: this._stopRequested });
   }
 
-  async _deliverOneRound() {
-    let delivered = false;
+  /**
+   * 调度消息处理（生产者-消费者模式的调度器）
+   * @param {number} maxConcurrent 最大并发数
+   * @returns {Promise<boolean>} 是否成功调度了新的消息处理
+   */
+  async _scheduleMessageProcessing(maxConcurrent) {
+    // 检查是否还有并发槽位
+    if (this._activeProcessingAgents.size >= maxConcurrent) {
+      return false;
+    }
+    
+    // 遍历所有智能体，找到有待处理消息且当前未在处理中的智能体
     for (const agentId of this._agents.keys()) {
       if (this._stopRequested) break;
+      
+      // 跳过正在处理消息的智能体（单智能体串行约束）
+      if (this._activeProcessingAgents.has(agentId)) {
+        continue;
+      }
+      
+      // 检查是否有待处理消息
       const msg = this.bus.receiveNext(agentId);
       if (!msg) continue;
-      delivered = true;
-      const agent = this._agents.get(agentId);
       
-      // 更新智能体最后活动时间
-      this._updateAgentActivity(agentId);
+      // 标记智能体为处理中
+      this._activeProcessingAgents.add(agentId);
       
-      void this.log.debug("投递消息", {
-        to: agentId,
-        from: msg.from,
-        taskId: msg.taskId ?? null,
-        messageId: msg.id ?? null
+      // 异步处理消息（不等待完成）
+      this._processAgentMessage(agentId, msg).finally(() => {
+        this._activeProcessingAgents.delete(agentId);
       });
       
-      // 记录智能体收到消息的生命周期事件
-      void this.loggerRoot.logAgentLifecycleEvent("agent_message_received", {
+      void this.log.debug("调度消息处理", {
+        agentId,
+        messageId: msg.id,
+        activeCount: this._activeProcessingAgents.size,
+        maxConcurrent
+      });
+      
+      return true; // 成功调度了一个
+    }
+    
+    return false;
+  }
+
+  /**
+   * 处理单个智能体的消息
+   * @param {string} agentId 智能体ID
+   * @param {object} msg 消息对象
+   */
+  async _processAgentMessage(agentId, msg) {
+    const agent = this._agents.get(agentId);
+    if (!agent) {
+      void this.log.warn("智能体不存在，跳过消息处理", { agentId, messageId: msg.id });
+      return;
+    }
+    
+    // 更新智能体最后活动时间
+    this._updateAgentActivity(agentId);
+    
+    void this.log.debug("开始处理消息", {
+      agentId,
+      from: msg.from,
+      taskId: msg.taskId ?? null,
+      messageId: msg.id ?? null
+    });
+    
+    // 记录智能体收到消息的生命周期事件
+    void this.loggerRoot.logAgentLifecycleEvent("agent_message_received", {
+      agentId,
+      messageId: msg.id ?? null,
+      from: msg.from,
+      taskId: msg.taskId ?? null
+    });
+    
+    try {
+      await agent.onMessage(this._buildAgentContext(agent), msg);
+    } catch (err) {
+      const errorMessage = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
+      const errorType = err?.name ?? "UnknownError";
+      
+      void this.log.error("智能体消息处理异常（已隔离）", {
         agentId,
         messageId: msg.id ?? null,
         from: msg.from,
-        taskId: msg.taskId ?? null
+        taskId: msg.taskId ?? null,
+        errorType,
+        error: errorMessage,
+        stack: err?.stack ?? null,
+        willContinueProcessing: true
       });
       
-      // 改进的错误隔离：捕获单个智能体的异常，记录详细日志后继续处理其他智能体
+      // 确保智能体状态重置为空闲
+      this.setAgentComputeStatus(agentId, 'idle');
+      
+      // 向父智能体发送错误通知
       try {
-        await agent.onMessage(this._buildAgentContext(agent), msg);
-      } catch (err) {
-        const errorMessage = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
-        const errorType = err?.name ?? "UnknownError";
-        
-        // 详细记录异常信息
-        void this.log.error("智能体消息处理异常（已隔离）", {
-          agentId,
-          messageId: msg.id ?? null,
-          from: msg.from,
-          taskId: msg.taskId ?? null,
-          errorType,
-          error: errorMessage,
-          stack: err?.stack ?? null,
-          willContinueProcessing: true
+        await this._sendErrorNotificationToParent(agentId, msg, {
+          errorType: "agent_message_processing_failed",
+          message: `智能体 ${agentId} 消息处理异常: ${errorMessage}`,
+          originalError: errorMessage,
+          errorName: errorType
         });
-        
-        // 确保智能体状态重置为空闲
-        this.setAgentComputeStatus(agentId, 'idle');
-        
-        // 向父智能体发送错误通知
-        try {
-          await this._sendErrorNotificationToParent(agentId, msg, {
-            errorType: "agent_message_processing_failed",
-            message: `智能体 ${agentId} 消息处理异常: ${errorMessage}`,
-            originalError: errorMessage,
-            errorName: errorType
-          });
-        } catch (notifyErr) {
-          void this.log.error("发送异常通知失败", {
-            agentId,
-            notifyError: notifyErr?.message ?? String(notifyErr)
-          });
-        }
-        
-        // 继续处理其他智能体，不中断循环
+      } catch (notifyErr) {
+        void this.log.error("发送异常通知失败", {
+          agentId,
+          notifyError: notifyErr?.message ?? String(notifyErr)
+        });
       }
     }
-    return delivered;
+  }
+
+  async _deliverOneRound() {
+    if (this._stopRequested) return false;
+    
+    // 获取最大并发数
+    const maxConcurrent = this.llm?.concurrencyController?.maxConcurrentRequests ?? 3;
+    
+    // 收集可以处理的消息（不超过并发限制）
+    const pendingDeliveries = [];
+    for (const agentId of this._agents.keys()) {
+      if (pendingDeliveries.length >= maxConcurrent) break;
+      if (this._activeProcessingAgents.has(agentId)) continue;
+      
+      const msg = this.bus.receiveNext(agentId);
+      if (!msg) continue;
+      
+      const agent = this._agents.get(agentId);
+      pendingDeliveries.push({ agentId, agent, msg });
+      this._activeProcessingAgents.add(agentId);
+    }
+    
+    if (pendingDeliveries.length === 0) {
+      return false;
+    }
+    
+    void this.log.debug("并发投递消息", {
+      count: pendingDeliveries.length,
+      agents: pendingDeliveries.map(d => d.agentId)
+    });
+    
+    // 并发处理所有消息
+    const deliveryPromises = pendingDeliveries.map(async ({ agentId, msg }) => {
+      try {
+        await this._processAgentMessage(agentId, msg);
+      } finally {
+        this._activeProcessingAgents.delete(agentId);
+      }
+    });
+    
+    await Promise.all(deliveryPromises);
+    
+    return true;
   }
 
   /**
