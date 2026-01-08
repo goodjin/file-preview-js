@@ -9,14 +9,10 @@ export function getToolDefinitions() {
       type: "function",
       function: {
         name: "chrome_launch",
-        description: "启动一个新的 Chrome 无头浏览器实例",
+        description: "启动一个新的 Chrome 浏览器实例",
         parameters: {
           type: "object",
           properties: {
-            headless: {
-              type: "boolean",
-              description: "是否使用无头模式，默认 true"
-            },
             args: {
               type: "array",
               items: { type: "string" },
