@@ -538,13 +538,18 @@ export class Runtime {
       await new Promise((r) => setImmediate(r));
     }
     
-    // 等待所有正在处理的消息完成
-    while (this._activeProcessingAgents.size > 0) {
+    // 等待所有正在处理的消息完成（除非强制退出）
+    while (this._activeProcessingAgents.size > 0 && !this._forceExit) {
       void this.log.info("等待活跃消息处理完成", { 
         activeCount: this._activeProcessingAgents.size,
         activeAgents: [...this._activeProcessingAgents]
       });
       await new Promise((r) => setTimeout(r, 100));
+    }
+    
+    if (this._forceExit) {
+      void this.log.info("强制退出，跳过等待活跃消息");
+      process.exit(1);
     }
     
     void this.log.info("运行时常驻消息循环结束", { stopRequested: this._stopRequested });
@@ -2553,6 +2558,9 @@ export class Runtime {
    * @returns {void}
    */
   setupGracefulShutdown(options = {}) {
+    if(this._forceExit){
+      process.exit(1);
+    }
     const httpServer = options.httpServer ?? null;
     const shutdownTimeoutMs = options.shutdownTimeoutMs ?? 30000;
 
@@ -2565,11 +2573,13 @@ export class Runtime {
     this._httpServerRef = httpServer;
     this._shutdownTimeoutMs = shutdownTimeoutMs;
     this._isShuttingDown = false;
+    this._forceExit = false;
     this._shutdownStartTime = null;
 
     const shutdown = async (signal) => {
       // 如果已经在关闭中，第二次信号强制退出
       if (this._isShuttingDown) {
+        this._forceExit = true;
         void this.log.warn("收到第二次关闭信号，强制退出", { signal });
         process.stdout.write("\n强制退出...\n");
         process.exit(1);

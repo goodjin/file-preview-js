@@ -95,7 +95,7 @@ async function _loadOptionalJson(absPath) {
  * @returns {number} 有效的最大并发请求数
  */
 function _validateMaxConcurrentRequests(value) {
-  const defaultValue = 3;
+  const defaultValue = 2;
   
   // 如果未配置，使用默认值
   if (value === undefined || value === null) {
