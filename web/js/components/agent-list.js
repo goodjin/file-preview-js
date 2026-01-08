@@ -256,7 +256,7 @@ const AgentList = {
       const iconText = this.getAgentIconText(agent);
       const displayName = this.getAgentDisplayName(agent);
       const showIdSeparately = agent.customName && agent.customName !== agent.id;
-      const computeStatusHtml = this.renderComputeStatus(agent.computeStatus);
+      const computeStatusHtml = this.renderComputeStatus(agent);
 
       return `
         <div class="agent-item ${isSelected ? 'selected' : ''} ${hasNewMessage ? 'has-new-message' : ''}"
@@ -282,16 +282,22 @@ const AgentList = {
 
   /**
    * 渲染运算状态指示器
-   * @param {string} computeStatus - 运算状态: 'idle' | 'waiting_llm' | 'processing'
+   * @param {object} agent - 智能体对象
    * @returns {string} HTML 字符串
    */
-  renderComputeStatus(computeStatus) {
+  renderComputeStatus(agent) {
+    const computeStatus = agent.computeStatus;
     if (!computeStatus || computeStatus === 'idle') {
       return '';
     }
     
     if (computeStatus === 'waiting_llm') {
-      return '<span class="compute-status waiting" title="等待大模型响应">⏳</span>';
+      return `
+        <span class="compute-status waiting" title="等待大模型响应">⏳</span>
+        <button class="abort-btn" 
+                onclick="event.stopPropagation(); AgentList.abortLlmCall('${agent.id}')" 
+                title="停止调用">⏹</button>
+      `;
     }
     
     if (computeStatus === 'processing') {
@@ -299,6 +305,24 @@ const AgentList = {
     }
     
     return '';
+  },
+
+  /**
+   * 中断智能体的 LLM 调用
+   * @param {string} agentId - 智能体 ID
+   */
+  async abortLlmCall(agentId) {
+    try {
+      const result = await API.abortAgentLlmCall(agentId);
+      if (result.aborted) {
+        Toast.show('已停止 LLM 调用', 'success');
+      } else {
+        Toast.show('当前没有进行中的 LLM 调用', 'info');
+      }
+    } catch (error) {
+      console.error('中断 LLM 调用失败:', error);
+      Toast.show('停止调用失败: ' + error.message, 'error');
+    }
   },
 
   /**

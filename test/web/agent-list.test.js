@@ -186,3 +186,139 @@ describe('功能: overview-role-click-filter, 属性 3: 筛选正确过滤智能
     );
   });
 });
+
+/**
+ * Property 1: 停止按钮可见性
+ * 对于任意智能体对象，停止按钮在渲染的 HTML 中可见当且仅当智能体的 computeStatus 为 'waiting_llm'。
+ * 
+ * **验证: Requirements 1.1, 1.2**
+ */
+
+// 模拟 renderComputeStatus 方法
+const renderComputeStatus = (agent) => {
+  const computeStatus = agent.computeStatus;
+  if (!computeStatus || computeStatus === 'idle') {
+    return '';
+  }
+  
+  if (computeStatus === 'waiting_llm') {
+    return `
+      <span class="compute-status waiting" title="等待大模型响应">⏳</span>
+      <button class="abort-btn" 
+              onclick="event.stopPropagation(); AgentList.abortLlmCall('${agent.id}')" 
+              title="停止调用">⏹</button>
+    `;
+  }
+  
+  if (computeStatus === 'processing') {
+    return '<span class="compute-status processing" title="处理中">⚙️</span>';
+  }
+  
+  return '';
+};
+
+describe('功能: llm-call-abort, 属性 1: 停止按钮可见性', () => {
+  test('当 computeStatus 为 waiting_llm 时，应渲染停止按钮', () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          id: fc.uuid(),
+          computeStatus: fc.constant('waiting_llm')
+        }),
+        (agent) => {
+          const html = renderComputeStatus(agent);
+          
+          // 验证包含停止按钮
+          expect(html).toContain('abort-btn');
+          expect(html).toContain('停止调用');
+          expect(html).toContain('⏹');
+          expect(html).toContain(agent.id);
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  test('当 computeStatus 为 idle 时，不应渲染停止按钮', () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          id: fc.uuid(),
+          computeStatus: fc.constant('idle')
+        }),
+        (agent) => {
+          const html = renderComputeStatus(agent);
+          
+          // 验证不包含停止按钮
+          expect(html).not.toContain('abort-btn');
+          expect(html).toBe('');
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  test('当 computeStatus 为 processing 时，不应渲染停止按钮', () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          id: fc.uuid(),
+          computeStatus: fc.constant('processing')
+        }),
+        (agent) => {
+          const html = renderComputeStatus(agent);
+          
+          // 验证不包含停止按钮，但包含处理中状态
+          expect(html).not.toContain('abort-btn');
+          expect(html).toContain('processing');
+          expect(html).toContain('⚙️');
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  test('当 computeStatus 为 undefined 或 null 时，不应渲染任何内容', () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          id: fc.uuid(),
+          computeStatus: fc.oneof(fc.constant(undefined), fc.constant(null))
+        }),
+        (agent) => {
+          const html = renderComputeStatus(agent);
+          
+          // 验证返回空字符串
+          expect(html).toBe('');
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  test('停止按钮应包含正确的 agentId', () => {
+    fc.assert(
+      fc.property(
+        fc.uuid(),
+        (agentId) => {
+          const agent = { id: agentId, computeStatus: 'waiting_llm' };
+          const html = renderComputeStatus(agent);
+          
+          // 验证 onclick 处理器包含正确的 agentId
+          expect(html).toContain(`AgentList.abortLlmCall('${agentId}')`);
+          
+          return true;
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+});

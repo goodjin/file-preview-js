@@ -146,6 +146,15 @@ const API = {
   },
 
   /**
+   * 中断指定智能体的 LLM 调用
+   * @param {string} agentId - 智能体 ID
+   * @returns {Promise<{ok: boolean, agentId: string, aborted: boolean}>} 中断结果
+   */
+  async abortAgentLlmCall(agentId) {
+    return this.post(`/agent/${encodeURIComponent(agentId)}/abort`, {});
+  },
+
+  /**
    * 获取所有已加载模块列表
    * @returns {Promise<{modules: Array}>} 模块列表
    */

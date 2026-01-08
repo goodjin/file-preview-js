@@ -117,6 +117,37 @@ export class Runtime {
   }
 
   /**
+   * 中断指定智能体的 LLM 调用。
+   * @param {string} agentId - 智能体ID
+   * @returns {{ok: boolean, aborted: boolean, reason?: string}}
+   */
+  abortAgentLlmCall(agentId) {
+    if (!agentId) {
+      return { ok: false, aborted: false, reason: 'missing_agent_id' };
+    }
+
+    const agent = this._agents.get(agentId);
+    if (!agent) {
+      return { ok: false, aborted: false, reason: 'agent_not_found' };
+    }
+
+    const currentStatus = this.getAgentComputeStatus(agentId);
+    if (currentStatus !== 'waiting_llm') {
+      return { ok: true, aborted: false, reason: 'not_waiting_llm' };
+    }
+
+    // 调用 LLM 客户端的 abort 方法
+    const aborted = this.llm?.abort(agentId) ?? false;
+    
+    if (aborted) {
+      this.setAgentComputeStatus(agentId, 'idle');
+      void this.log.info("LLM 调用已中断", { agentId });
+    }
+
+    return { ok: true, aborted };
+  }
+
+  /**
    * 触发运算状态变更事件。
    * @param {string} agentId - 智能体ID
    * @param {'idle'|'waiting_llm'|'processing'} status - 新状态

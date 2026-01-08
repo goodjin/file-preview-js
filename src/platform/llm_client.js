@@ -18,24 +18,43 @@ export class LlmClient {
       apiKey: this.apiKey,
       baseURL: this.baseURL
     });
+    // 存储活跃的 LLM 请求，用于支持中断功能
+    // Map<agentId, AbortController>
+    this._activeRequests = new Map();
   }
 
   /**
-   * 调用聊天补全（支持工具调用）。
+   * 调用聊天补全（支持工具调用和中断）。
    * @param {{messages:any[], tools?:any[], temperature?:number, meta?:any}} input
    * @returns {Promise<any>} message
    */
   async chat(input) {
-    return await this._chatWithRetry(input, this.maxRetries);
+    const agentId = input?.meta?.agentId ?? null;
+    const abortController = new AbortController();
+    
+    // 如果有 agentId，将 AbortController 存入活跃请求映射
+    if (agentId) {
+      this._activeRequests.set(agentId, abortController);
+    }
+    
+    try {
+      return await this._chatWithRetry(input, this.maxRetries, abortController.signal);
+    } finally {
+      // 无论成功、失败还是中断，都要清理活跃请求映射
+      if (agentId) {
+        this._activeRequests.delete(agentId);
+      }
+    }
   }
 
   /**
    * 带重试的聊天补全调用（指数退避策略）。
    * @param {{messages:any[], tools?:any[], temperature?:number, meta?:any}} input
    * @param {number} maxRetries 最大重试次数
+   * @param {AbortSignal} [signal] 中断信号
    * @returns {Promise<any>} message
    */
-  async _chatWithRetry(input, maxRetries) {
+  async _chatWithRetry(input, maxRetries, signal) {
     const meta = input?.meta ?? null;
     const currentMessage = Array.isArray(input?.messages) && input.messages.length > 0 ? input.messages[input.messages.length - 1] : null;
     const payload = {
@@ -58,9 +77,17 @@ export class LlmClient {
 
     let lastError = null;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // 检查是否已被中断
+      if (signal?.aborted) {
+        const abortError = new Error("LLM 请求已被中断");
+        abortError.name = "AbortError";
+        throw abortError;
+      }
+
       const startTime = Date.now();
       try {
-        const resp = await this._client.chat.completions.create(payload);
+        // 将 signal 传递给 OpenAI SDK
+        const resp = await this._client.chat.completions.create(payload, { signal });
         const latencyMs = Date.now() - startTime;
         const msg = resp.choices?.[0]?.message ?? null;
         
@@ -96,6 +123,14 @@ export class LlmClient {
         const latencyMs = Date.now() - startTime;
         lastError = err;
         const text = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
+        
+        // 如果是中断错误，直接抛出，不重试
+        if (err.name === "AbortError" || signal?.aborted) {
+          void this.log.info("LLM 请求已被中断", { meta });
+          const abortError = new Error("LLM 请求已被中断");
+          abortError.name = "AbortError";
+          throw abortError;
+        }
         
         // 记录失败的LLM调用指标
         await this.log.logLlmMetrics({
@@ -140,5 +175,29 @@ export class LlmClient {
    */
   async _sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * 中断指定智能体的 LLM 调用。
+   * @param {string} agentId - 智能体 ID
+   * @returns {boolean} 是否成功中断（true 表示有活跃请求被中断，false 表示没有活跃请求）
+   */
+  abort(agentId) {
+    const controller = this._activeRequests.get(agentId);
+    if (controller) {
+      controller.abort();
+      this._activeRequests.delete(agentId);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * 检查指定智能体是否有活跃的 LLM 调用。
+   * @param {string} agentId - 智能体 ID
+   * @returns {boolean} 是否有活跃请求
+   */
+  hasActiveRequest(agentId) {
+    return this._activeRequests.has(agentId);
   }
 }

@@ -567,6 +567,15 @@ export class HTTPServer {
         } else {
           this._sendJson(res, 404, { error: "not_found", path: pathname });
         }
+      } else if (method === "POST" && pathname.startsWith("/api/agent/") && pathname.endsWith("/abort")) {
+        // 提取 agentId: /api/agent/:agentId/abort
+        const match = pathname.match(/^\/api\/agent\/(.+)\/abort$/);
+        if (match) {
+          const agentId = decodeURIComponent(match[1]);
+          this._handleAbortLlmCall(agentId, res);
+        } else {
+          this._sendJson(res, 404, { error: "not_found", path: pathname });
+        }
       } else if (method === "GET" && pathname === "/api/agent-custom-names") {
         this._handleGetCustomNames(res);
       } else if (method === "POST" && pathname.startsWith("/api/role/") && pathname.endsWith("/prompt")) {
@@ -1177,6 +1186,29 @@ export class HTTPServer {
         this._sendJson(res, 500, { error: "save_failed", message: saveErr.message });
       }
     });
+  }
+
+  /**
+   * 处理 POST /api/agent/:agentId/abort - 中断智能体的 LLM 调用。
+   * @param {string} agentId - 智能体ID
+   * @param {import("node:http").ServerResponse} res
+   */
+  _handleAbortLlmCall(agentId, res) {
+    if (!this.society || !this.society.runtime) {
+      this._sendJson(res, 500, { error: "society_not_initialized" });
+      return;
+    }
+
+    const result = this.society.runtime.abortAgentLlmCall(agentId);
+
+    if (!result.ok) {
+      const statusCode = result.reason === "agent_not_found" ? 404 : 400;
+      this._sendJson(res, statusCode, { error: result.reason });
+      return;
+    }
+
+    void this.log.info("处理 LLM 中断请求", { agentId, aborted: result.aborted });
+    this._sendJson(res, 200, { ok: true, agentId, aborted: result.aborted });
   }
 
   /**

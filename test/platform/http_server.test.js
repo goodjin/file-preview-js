@@ -454,3 +454,127 @@ describe("HTTPServer - 与Society集成", () => {
     expect(data).toHaveProperty("messageId");
   });
 });
+
+describe("HTTPServer - LLM 中断 API", () => {
+  let server;
+  let port;
+  let society;
+
+  beforeEach(async () => {
+    port = 30000 + Math.floor(Math.random() * 10000);
+    society = new AgentSociety();
+    await society.init(); // Initialize society to register root agent
+    server = new HTTPServer({ port, society });
+    server.setSociety(society);
+  });
+
+  afterEach(async () => {
+    if (server && server.isRunning()) {
+      await server.stop();
+    }
+  });
+
+  test("POST /api/agent/:agentId/abort - society未初始化时返回500", async () => {
+    const serverNoSociety = new HTTPServer({ port: port + 1 });
+    await serverNoSociety.start();
+    
+    try {
+      const response = await fetch(`http://localhost:${port + 1}/api/agent/test-agent/abort`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      expect(response.status).toBe(500);
+      const data = await response.json();
+      expect(data.error).toBe("society_not_initialized");
+    } finally {
+      await serverNoSociety.stop();
+    }
+  });
+
+  test("POST /api/agent/:agentId/abort - 智能体不存在时返回404", async () => {
+    await server.start();
+    
+    const response = await fetch(`http://localhost:${port}/api/agent/non-existent-agent/abort`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    expect(response.status).toBe(404);
+    const data = await response.json();
+    expect(data.error).toBe("agent_not_found");
+  });
+
+  test("POST /api/agent/:agentId/abort - 智能体不在 waiting_llm 状态时返回 aborted=false", async () => {
+    await server.start();
+    
+    // root 智能体默认存在，状态为 idle
+    const response = await fetch(`http://localhost:${port}/api/agent/root/abort`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.ok).toBe(true);
+    expect(data.aborted).toBe(false);
+    expect(data.agentId).toBe("root");
+  });
+
+  test("POST /api/agent/:agentId/abort - 成功中断 waiting_llm 状态的智能体", async () => {
+    await server.start();
+    
+    // 设置 root 智能体为 waiting_llm 状态
+    society.runtime.setAgentComputeStatus("root", "waiting_llm");
+    
+    // 模拟 LLM 客户端有活跃请求
+    if (society.runtime.llm) {
+      society.runtime.llm._activeRequests.set("root", {
+        abort: () => {},
+        signal: { aborted: false }
+      });
+    }
+    
+    const response = await fetch(`http://localhost:${port}/api/agent/root/abort`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.ok).toBe(true);
+    expect(data.aborted).toBe(true);
+    expect(data.agentId).toBe("root");
+    
+    // 验证状态已重置为 idle
+    expect(society.runtime.getAgentComputeStatus("root")).toBe("idle");
+  });
+
+  /**
+   * Property 6: API 端点验证
+   * 对于任意中断 API 请求，如果指定的 agentId 不对应已存在的智能体，
+   * HTTP_Server 应返回 404 状态码。
+   * 
+   * **验证: Requirements 3.2, 3.3**
+   */
+  test("Property 6: API 端点验证 - 不存在的 agentId 返回 404", async () => {
+    await server.start();
+    
+    await fc.assert(
+      fc.asyncProperty(
+        fc.uuid(),
+        async (randomAgentId) => {
+          const response = await fetch(`http://localhost:${port}/api/agent/${randomAgentId}/abort`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({})
+          });
+          expect(response.status).toBe(404);
+          const data = await response.json();
+          expect(data.error).toBe("agent_not_found");
+        }
+      ),
+      { numRuns: 20 }
+    );
+  });
+});

@@ -237,6 +237,31 @@ export class PageActions {
   }
 
   /**
+   * 在页面指定坐标位置点击
+   * @param {string} tabId
+   * @param {number} x - X 坐标（像素）
+   * @param {number} y - Y 坐标（像素）
+   * @param {{button?: 'left' | 'right' | 'middle', clickCount?: number}} options
+   */
+  async clickAt(tabId, x, y, options = {}) {
+    const result = this._getPage(tabId);
+    if ("error" in result) return result;
+    
+    const { page } = result;
+    const { button = "left", clickCount = 1 } = options;
+
+    this.log.info?.("按坐标点击", { tabId, x, y, button, clickCount });
+
+    try {
+      await page.mouse.click(x, y, { button, clickCount });
+      return { ok: true, x, y, button, clickCount };
+    } catch (err) {
+      const message = err?.message ?? String(err);
+      return { error: "click_at_failed", x, y, message };
+    }
+  }
+
+  /**
    * 在元素中输入文本（追加模式）
    * @param {string} tabId
    * @param {string} selector

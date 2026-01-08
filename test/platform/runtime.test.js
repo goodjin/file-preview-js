@@ -1933,3 +1933,395 @@ describe("Runtime - Cross Task Communication Isolation", () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 });
+
+
+describe("Runtime.abortAgentLlmCall", () => {
+  test("应返回错误当 agentId 为空", async () => {
+    const tmpDir = path.resolve(process.cwd(), "test/.tmp/runtime_abort_test_1");
+    await rm(tmpDir, { recursive: true, force: true });
+    await mkdir(tmpDir, { recursive: true });
+
+    const configPath = path.resolve(tmpDir, "app.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        promptsDir: "config/prompts",
+        artifactsDir: path.resolve(tmpDir, "artifacts"),
+        runtimeDir: tmpDir,
+        maxSteps: 50
+      }),
+      "utf8"
+    );
+
+    const runtime = new Runtime({ configPath });
+    await runtime.init();
+
+    const result = runtime.abortAgentLlmCall(null);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("missing_agent_id");
+
+    const result2 = runtime.abortAgentLlmCall("");
+    expect(result2.ok).toBe(false);
+    expect(result2.reason).toBe("missing_agent_id");
+  });
+
+  test("应返回错误当智能体不存在", async () => {
+    const tmpDir = path.resolve(process.cwd(), "test/.tmp/runtime_abort_test_2");
+    await rm(tmpDir, { recursive: true, force: true });
+    await mkdir(tmpDir, { recursive: true });
+
+    const configPath = path.resolve(tmpDir, "app.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        promptsDir: "config/prompts",
+        artifactsDir: path.resolve(tmpDir, "artifacts"),
+        runtimeDir: tmpDir,
+        maxSteps: 50
+      }),
+      "utf8"
+    );
+
+    const runtime = new Runtime({ configPath });
+    await runtime.init();
+
+    const result = runtime.abortAgentLlmCall("non-existent-agent");
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("agent_not_found");
+  });
+
+  test("应返回 aborted=false 当智能体不在 waiting_llm 状态", async () => {
+    const tmpDir = path.resolve(process.cwd(), "test/.tmp/runtime_abort_test_3");
+    await rm(tmpDir, { recursive: true, force: true });
+    await mkdir(tmpDir, { recursive: true });
+
+    const configPath = path.resolve(tmpDir, "app.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        promptsDir: "config/prompts",
+        artifactsDir: path.resolve(tmpDir, "artifacts"),
+        runtimeDir: tmpDir,
+        maxSteps: 50
+      }),
+      "utf8"
+    );
+
+    const runtime = new Runtime({ configPath });
+    await runtime.init();
+
+    // 创建一个测试智能体
+    const testAgent = new Agent({
+      id: "test-agent",
+      roleId: "test",
+      roleName: "test",
+      rolePrompt: "",
+      behavior: async () => {}
+    });
+    runtime.registerAgentInstance(testAgent);
+
+    // 智能体默认状态是 idle
+    const result = runtime.abortAgentLlmCall("test-agent");
+    expect(result.ok).toBe(true);
+    expect(result.aborted).toBe(false);
+    expect(result.reason).toBe("not_waiting_llm");
+
+    // 设置为 processing 状态
+    runtime.setAgentComputeStatus("test-agent", "processing");
+    const result2 = runtime.abortAgentLlmCall("test-agent");
+    expect(result2.ok).toBe(true);
+    expect(result2.aborted).toBe(false);
+    expect(result2.reason).toBe("not_waiting_llm");
+  });
+
+  test("应成功中断 waiting_llm 状态的智能体", async () => {
+    const tmpDir = path.resolve(process.cwd(), "test/.tmp/runtime_abort_test_4");
+    await rm(tmpDir, { recursive: true, force: true });
+    await mkdir(tmpDir, { recursive: true });
+
+    const configPath = path.resolve(tmpDir, "app.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        promptsDir: "config/prompts",
+        artifactsDir: path.resolve(tmpDir, "artifacts"),
+        runtimeDir: tmpDir,
+        maxSteps: 50,
+        llm: {
+          baseURL: "http://localhost:1234/v1",
+          model: "test-model",
+          apiKey: "test-key"
+        }
+      }),
+      "utf8"
+    );
+
+    const runtime = new Runtime({ configPath });
+    await runtime.init();
+
+    // 创建一个测试智能体
+    const testAgent = new Agent({
+      id: "test-agent",
+      roleId: "test",
+      roleName: "test",
+      rolePrompt: "",
+      behavior: async () => {}
+    });
+    runtime.registerAgentInstance(testAgent);
+
+    // 模拟 LLM 客户端有活跃请求
+    runtime.llm._activeRequests.set("test-agent", {
+      abort: () => {},
+      signal: { aborted: false }
+    });
+
+    // 设置为 waiting_llm 状态
+    runtime.setAgentComputeStatus("test-agent", "waiting_llm");
+
+    const result = runtime.abortAgentLlmCall("test-agent");
+    expect(result.ok).toBe(true);
+    expect(result.aborted).toBe(true);
+
+    // 验证状态已重置为 idle
+    expect(runtime.getAgentComputeStatus("test-agent")).toBe("idle");
+  });
+
+  test("中断后智能体应能继续接收新消息", async () => {
+    const tmpDir = path.resolve(process.cwd(), "test/.tmp/runtime_abort_test_5");
+    await rm(tmpDir, { recursive: true, force: true });
+    await mkdir(tmpDir, { recursive: true });
+
+    const configPath = path.resolve(tmpDir, "app.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        promptsDir: "config/prompts",
+        artifactsDir: path.resolve(tmpDir, "artifacts"),
+        runtimeDir: tmpDir,
+        maxSteps: 50,
+        llm: {
+          baseURL: "http://localhost:1234/v1",
+          model: "test-model",
+          apiKey: "test-key"
+        }
+      }),
+      "utf8"
+    );
+
+    const runtime = new Runtime({ configPath });
+    await runtime.init();
+
+    // 创建一个测试智能体，记录收到的消息
+    let receivedMessages = [];
+    const testAgent = new Agent({
+      id: "test-agent",
+      roleId: "test",
+      roleName: "test",
+      rolePrompt: "",
+      behavior: async (ctx, msg) => {
+        receivedMessages.push(msg);
+      }
+    });
+    runtime.registerAgentInstance(testAgent);
+
+    // 模拟 LLM 客户端有活跃请求
+    runtime.llm._activeRequests.set("test-agent", {
+      abort: () => {},
+      signal: { aborted: false }
+    });
+
+    // 设置为 waiting_llm 状态并中断
+    runtime.setAgentComputeStatus("test-agent", "waiting_llm");
+    runtime.abortAgentLlmCall("test-agent");
+
+    // 发送新消息
+    runtime.bus.send({
+      to: "test-agent",
+      from: "user",
+      taskId: "t1",
+      payload: { text: "new message after abort" }
+    });
+
+    // 运行消息循环
+    await runtime.run();
+
+    // 验证智能体收到了新消息
+    expect(receivedMessages.length).toBe(1);
+    expect(receivedMessages[0].payload.text).toBe("new message after abort");
+  });
+});
+
+
+/**
+ * Property 3: 中断后状态正确性
+ * 对于任意成功的中断操作，中断后智能体的 computeStatus 应为 'idle'，
+ * 且智能体应能继续接收新消息。
+ * 
+ * **验证: Requirements 4.3, 5.1**
+ */
+describe("Runtime.abortAgentLlmCall - Property Tests", () => {
+  test("Property 3: 中断后状态正确性 - 中断后 computeStatus 为 idle 且能接收新消息", async () => {
+    const tmpDir = path.resolve(process.cwd(), "test/.tmp/runtime_abort_prop3");
+    await rm(tmpDir, { recursive: true, force: true });
+    await mkdir(tmpDir, { recursive: true });
+
+    const configPath = path.resolve(tmpDir, "app.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        promptsDir: "config/prompts",
+        artifactsDir: path.resolve(tmpDir, "artifacts"),
+        runtimeDir: tmpDir,
+        maxSteps: 50,
+        llm: {
+          baseURL: "http://localhost:1234/v1",
+          model: "test-model",
+          apiKey: "test-key"
+        }
+      }),
+      "utf8"
+    );
+
+    const runtime = new Runtime({ configPath });
+    await runtime.init();
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.string({ minLength: 1, maxLength: 20 }).filter(s => /^[a-zA-Z0-9_-]+$/.test(s)),
+        async (agentIdSuffix) => {
+          const agentId = `agent_${agentIdSuffix}_${Date.now()}`;
+          
+          // 创建测试智能体
+          let receivedMessage = null;
+          const testAgent = new Agent({
+            id: agentId,
+            roleId: "test",
+            roleName: "test",
+            rolePrompt: "",
+            behavior: async (ctx, msg) => {
+              receivedMessage = msg;
+            }
+          });
+          runtime.registerAgentInstance(testAgent);
+
+          // 模拟 LLM 客户端有活跃请求
+          runtime.llm._activeRequests.set(agentId, {
+            abort: () => {},
+            signal: { aborted: false }
+          });
+
+          // 设置为 waiting_llm 状态
+          runtime.setAgentComputeStatus(agentId, "waiting_llm");
+          expect(runtime.getAgentComputeStatus(agentId)).toBe("waiting_llm");
+
+          // 执行中断
+          const result = runtime.abortAgentLlmCall(agentId);
+
+          // 验证中断成功
+          expect(result.ok).toBe(true);
+          expect(result.aborted).toBe(true);
+
+          // 验证 (1): computeStatus 为 idle
+          expect(runtime.getAgentComputeStatus(agentId)).toBe("idle");
+
+          // 验证 (2): 智能体能接收新消息
+          runtime.bus.send({
+            to: agentId,
+            from: "user",
+            taskId: `task_${Date.now()}`,
+            payload: { text: "test message" }
+          });
+          await runtime.run();
+          expect(receivedMessage).not.toBeNull();
+          expect(receivedMessage.payload.text).toBe("test message");
+
+          // 清理
+          runtime._agents.delete(agentId);
+        }
+      ),
+      { numRuns: 20 }
+    );
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  /**
+   * Property 4: 无活跃调用时的幂等性
+   * 对于任意中断请求，当没有进行中的 LLM 调用时，操作应返回 success 且 aborted=false，
+   * 且不应修改任何智能体状态。
+   * 
+   * **验证: Requirements 4.5**
+   */
+  test("Property 4: 无活跃调用时的幂等性 - 返回 success 且 aborted=false，不修改状态", async () => {
+    const tmpDir = path.resolve(process.cwd(), "test/.tmp/runtime_abort_prop4");
+    await rm(tmpDir, { recursive: true, force: true });
+    await mkdir(tmpDir, { recursive: true });
+
+    const configPath = path.resolve(tmpDir, "app.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        promptsDir: "config/prompts",
+        artifactsDir: path.resolve(tmpDir, "artifacts"),
+        runtimeDir: tmpDir,
+        maxSteps: 50,
+        llm: {
+          baseURL: "http://localhost:1234/v1",
+          model: "test-model",
+          apiKey: "test-key"
+        }
+      }),
+      "utf8"
+    );
+
+    const runtime = new Runtime({ configPath });
+    await runtime.init();
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.string({ minLength: 1, maxLength: 20 }).filter(s => /^[a-zA-Z0-9_-]+$/.test(s)),
+        fc.constantFrom("idle", "processing"),
+        async (agentIdSuffix, initialStatus) => {
+          const agentId = `agent_idempotent_${agentIdSuffix}_${Date.now()}`;
+          
+          // 创建测试智能体
+          const testAgent = new Agent({
+            id: agentId,
+            roleId: "test",
+            roleName: "test",
+            rolePrompt: "",
+            behavior: async () => {}
+          });
+          runtime.registerAgentInstance(testAgent);
+
+          // 设置初始状态（非 waiting_llm）
+          runtime.setAgentComputeStatus(agentId, initialStatus);
+          const statusBefore = runtime.getAgentComputeStatus(agentId);
+
+          // 执行中断（没有活跃的 LLM 调用）
+          const result1 = runtime.abortAgentLlmCall(agentId);
+
+          // 验证返回 success 且 aborted=false
+          expect(result1.ok).toBe(true);
+          expect(result1.aborted).toBe(false);
+          expect(result1.reason).toBe("not_waiting_llm");
+
+          // 验证状态未改变
+          expect(runtime.getAgentComputeStatus(agentId)).toBe(statusBefore);
+
+          // 多次调用应该是幂等的
+          const result2 = runtime.abortAgentLlmCall(agentId);
+          expect(result2.ok).toBe(true);
+          expect(result2.aborted).toBe(false);
+          expect(runtime.getAgentComputeStatus(agentId)).toBe(statusBefore);
+
+          // 清理
+          runtime._agents.delete(agentId);
+        }
+      ),
+      { numRuns: 30 }
+    );
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+});

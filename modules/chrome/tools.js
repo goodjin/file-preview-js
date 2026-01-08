@@ -177,6 +177,28 @@ export function getToolDefinitions() {
     {
       type: "function",
       function: {
+        name: "chrome_click_at",
+        description: "在页面指定坐标位置点击",
+        parameters: {
+          type: "object",
+          properties: {
+            tabId: { type: "string", description: "标签页 ID" },
+            x: { type: "number", description: "点击位置的 X 坐标（像素）" },
+            y: { type: "number", description: "点击位置的 Y 坐标（像素）" },
+            button: { 
+              type: "string", 
+              enum: ["left", "right", "middle"],
+              description: "鼠标按键，默认 left" 
+            },
+            clickCount: { type: "number", description: "点击次数，默认 1（双击设为 2）" }
+          },
+          required: ["tabId", "x", "y"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
         name: "chrome_type",
         description: "在元素中输入文本（追加模式）",
         parameters: {

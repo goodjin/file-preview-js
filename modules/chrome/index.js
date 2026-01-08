@@ -92,6 +92,8 @@ export default {
         // 页面交互
         case "chrome_click":
           return await pageActions.click(args.tabId, args.selector, args);
+        case "chrome_click_at":
+          return await pageActions.clickAt(args.tabId, args.x, args.y, args);
         case "chrome_type":
           return await pageActions.type(args.tabId, args.selector, args.text, args);
         case "chrome_fill":
