@@ -126,9 +126,8 @@ const App = {
         api: API,
         logger: console
       });
-    } else {
-      this.artifactManager.show();
     }
+    this.artifactManager.show();
   },
 
   /**
