@@ -1836,6 +1836,37 @@ export class Runtime {
           continue; // 继续下一轮，让 LLM 重新生成带 tool_calls 的响应
         }
         
+        // 没有工具调用但有文本内容，自动发送给最后一个消息发送者
+        if (content.trim()) {
+          const lastFrom = ctx.currentMessage?.from;
+          const currentAgentId = ctx.agent?.id ?? "unknown";
+          // 确定发送目标：最后一个发来消息的目标，如果没有或是自己，则发给 user
+          const targetId = (lastFrom && lastFrom !== currentAgentId) ? lastFrom : "user";
+          const currentTaskId = ctx.currentMessage?.taskId ?? null;
+          
+          void this.log.info("LLM 返回纯文本无 tool_calls，自动发送消息", {
+            agentId: currentAgentId,
+            targetId,
+            contentPreview: content.substring(0, 100)
+          });
+          
+          const messageId = ctx.tools.sendMessage({
+            to: targetId,
+            from: currentAgentId,
+            taskId: currentTaskId,
+            payload: { text: content.trim() }
+          });
+          
+          // 记录智能体发送消息的生命周期事件
+          void this.loggerRoot.logAgentLifecycleEvent("agent_message_sent", {
+            agentId: currentAgentId,
+            messageId,
+            to: targetId,
+            taskId: currentTaskId,
+            autoSent: true
+          });
+        }
+        
         // 没有工具调用，处理完成，重置为空闲状态
         this.setAgentComputeStatus(agentId, 'idle');
         return;

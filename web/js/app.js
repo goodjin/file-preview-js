@@ -26,6 +26,7 @@ const App = {
 
     // 初始化所有组件
     Toast.init();
+    ErrorModal.init();
     AgentList.init();
     ChatPanel.init();
     OverviewPanel.init();

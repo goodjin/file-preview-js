@@ -184,6 +184,19 @@ const ChatPanel = {
     this.scrollToBottom();
     this.updateInputPlaceholder();
     
+    // 检查最近的错误消息并显示弹窗（只显示最近5分钟内的错误）
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i];
+      if (msg.payload && msg.payload.kind === 'error') {
+        const msgTime = new Date(msg.createdAt).getTime();
+        if (msgTime > fiveMinutesAgo && window.ErrorModal) {
+          window.ErrorModal.checkAndShowError(msg);
+          break; // 只显示最近的一个错误
+        }
+      }
+    }
+    
     // 异步加载思考过程
     this.loadThinkingContent();
   },
@@ -221,6 +234,12 @@ const ChatPanel = {
     }
     this.messages.push(message);
     this.messagesById.set(message.id, message);
+    
+    // 检查是否是错误消息，如果是则显示错误弹窗
+    if (window.ErrorModal && message.payload && message.payload.kind === 'error') {
+      window.ErrorModal.checkAndShowError(message);
+    }
+    
     this.render();
     this.scrollToBottom();
     this.updateInputPlaceholder();
@@ -333,6 +352,11 @@ const ChatPanel = {
       // 检查是否为工具调用消息
       if (message.type === 'tool_call') {
         return this.renderToolCallMessage(message);
+      }
+      
+      // 检查是否为错误消息
+      if (message.payload && message.payload.kind === 'error') {
+        return this.renderErrorMessage(message);
       }
       
       const isSent = this.isSentMessage(message);
@@ -532,6 +556,79 @@ const ChatPanel = {
         </div>
       </div>
     `;
+  },
+
+  /**
+   * 渲染错误消息
+   * @param {object} message - 错误消息对象
+   * @returns {string} HTML 字符串
+   */
+  renderErrorMessage(message) {
+    const time = this.formatMessageTime(message.createdAt);
+    const senderName = this.getSenderName(message);
+    const payload = message.payload || {};
+    const errorType = payload.errorType || 'unknown_error';
+    const errorMessage = payload.message || '发生未知错误';
+    
+    // 获取错误类型的友好名称
+    const errorTypeNames = {
+      'llm_call_failed': 'LLM 调用失败',
+      'llm_call_aborted': 'LLM 调用已中断',
+      'context_limit_exceeded': '上下文超出限制',
+      'max_tool_rounds_exceeded': '工具调用次数超限',
+      'agent_message_processing_failed': '智能体处理异常',
+      'network_error': '网络错误',
+      'api_error': 'API 错误'
+    };
+    const errorTypeName = errorTypeNames[errorType] || errorType;
+    
+    // 构建详细信息
+    const details = [];
+    if (payload.agentId) details.push(`智能体: ${payload.agentId}`);
+    if (payload.originalError) details.push(`原始错误: ${payload.originalError}`);
+    if (payload.errorName) details.push(`错误名称: ${payload.errorName}`);
+    const detailsText = details.join('\n');
+
+    return `
+      <div class="message-item error-message" data-message-id="${message.id}">
+        <div class="message-avatar">⚠️</div>
+        <div class="message-content">
+          <div class="message-header">
+            <a class="message-sender" href="#" onclick="ChatPanel.navigateToSender('${message.from}', '${message.id}'); return false;">
+              ${this.escapeHtml(senderName)}
+            </a>
+            <span class="error-message-indicator">${this.escapeHtml(errorTypeName)}</span>
+            <span class="message-time">${time}</span>
+          </div>
+          <div class="message-bubble error-bubble">
+            <div class="error-message-content">${this.escapeHtml(errorMessage)}</div>
+            ${detailsText ? `<pre class="error-message-details">${this.escapeHtml(detailsText)}</pre>` : ''}
+          </div>
+          <div class="error-message-actions">
+            <button class="error-view-btn" onclick="ChatPanel.showErrorDetail('${message.id}')">
+              查看详情
+            </button>
+            <button class="message-detail-btn" onclick="MessageModal.show('${message.id}')">
+              原始数据
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  /**
+   * 显示错误详情弹窗
+   * @param {string} messageId - 消息 ID
+   */
+  showErrorDetail(messageId) {
+    const message = this.messagesById.get(messageId);
+    if (message && message.payload && window.ErrorModal) {
+      window.ErrorModal.show({
+        ...message.payload,
+        timestamp: message.payload.timestamp || message.createdAt
+      });
+    }
   },
 
   /**
