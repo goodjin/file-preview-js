@@ -754,10 +754,12 @@ class ArtifactManager {
 
   /**
    * 导航到源消息
+   * @param {string} messageId - 消息 ID
+   * @param {string} [agentId] - 智能体 ID（可选，如果提供则直接跳转到该智能体）
    */
-  navigateToSourceMessage(messageId) {
+  navigateToSourceMessage(messageId, agentId = null) {
     this.hide();
-    const event = new CustomEvent("navigateToMessage", { detail: { messageId } });
+    const event = new CustomEvent("navigateToMessage", { detail: { messageId, agentId } });
     window.dispatchEvent(event);
   }
 
@@ -769,7 +771,11 @@ class ArtifactManager {
       this.logger.log("正在获取工件元数据", { artifactId });
       const metadata = await this.api.get(`/artifacts/${artifactId}/metadata`);
       this.logger.log("获取到工件元数据", { artifactId, metadata });
-      if (metadata?.messageId) {
+      if (metadata?.agentId) {
+        // 优先使用 agentId 直接跳转到智能体
+        this.navigateToSourceMessage(metadata.messageId, metadata.agentId);
+      } else if (metadata?.messageId) {
+        // 兼容旧数据：只有 messageId 时通过搜索查找智能体
         this.navigateToSourceMessage(metadata.messageId);
       } else {
         this.logger.warn("该工件没有关联的来源消息", { artifactId });

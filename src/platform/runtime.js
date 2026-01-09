@@ -1493,8 +1493,9 @@ export class Runtime {
       }
       if (toolName === "run_javascript") {
         const messageId = ctx.currentMessage?.id ?? null;
-        const result = await this._runJavaScriptTool(args, messageId);
-        void this.log.debug("工具调用完成", { toolName, ok: true, messageId });
+        const agentId = ctx.agent?.id ?? null;
+        const result = await this._runJavaScriptTool(args, messageId, agentId);
+        void this.log.debug("工具调用完成", { toolName, ok: true, messageId, agentId });
         return result;
       }
       if (toolName === "compress_context") {
@@ -2535,7 +2536,7 @@ export class Runtime {
     };
   }
 
-  async _runJavaScriptTool(args, messageId = null) {
+  async _runJavaScriptTool(args, messageId = null, agentId = null) {
     const code = args?.code;
     const input = args?.input;
     if (typeof code !== "string") return { error: "invalid_args", message: "code must be a string" };
@@ -2605,6 +2606,7 @@ export class Runtime {
             type: "image",
             createdAt,
             messageId: messageId,
+            agentId: agentId,
             width: canvasInstance.width,
             height: canvasInstance.height,
             source: "canvas"

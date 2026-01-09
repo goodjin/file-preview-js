@@ -159,10 +159,12 @@ export class PageActions {
         const pageUrl = page.url();
         const pageTitle = await page.title();
         const messageId = ctx.currentMessage?.id ?? null;
+        const agentId = ctx.agent?.id ?? null;
         
         const filePath = await ctx.tools.saveImage(screenshotBuffer, {
           format: "jpg",
           messageId,
+          agentId,
           tabId,
           url: pageUrl,
           title: pageTitle,

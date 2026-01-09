@@ -133,13 +133,13 @@ export class ArtifactStore {
   /**
    * 保存图片文件。
    * @param {Buffer} buffer - 图片二进制数据
-   * @param {{format?: "png"|"jpg"|"jpeg"|"gif"|"webp", messageId?: string, [key: string]: any}} meta - 元数据，format 默认为 "png"
+   * @param {{format?: "png"|"jpg"|"jpeg"|"gif"|"webp", messageId?: string, agentId?: string, [key: string]: any}} meta - 元数据，format 默认为 "png"
    * @returns {Promise<string>} 图片文件名（相对于 artifacts 目录）
    */
   async saveImage(buffer, meta = {}) {
     await this.ensureReady();
     
-    const { format = "png", messageId, ...otherMeta } = meta;
+    const { format = "png", messageId, agentId, ...otherMeta } = meta;
     const id = randomUUID();
     const extension = `.${format}`;
     const fileName = `${id}${extension}`;
@@ -156,11 +156,12 @@ export class ArtifactStore {
       type: "image",
       createdAt,
       messageId: messageId || null,
+      agentId: agentId || null,
       ...otherMeta
     };
     await this._writeMetadata(id, metadata);
     
-    void this.log.info("保存图片", { fileName, format });
+    void this.log.info("保存图片", { fileName, format, agentId });
     
     return fileName;
   }

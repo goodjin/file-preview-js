@@ -72,7 +72,7 @@ const App = {
 
     // 监听导航到消息事件（从工件管理器触发）
     window.addEventListener('navigateToMessage', (e) => {
-      this.handleNavigateToMessage(e.detail.messageId);
+      this.handleNavigateToMessage(e.detail.messageId, e.detail.agentId);
     });
   },
 
@@ -162,10 +162,18 @@ const App = {
   /**
    * 处理导航到消息事件
    * @param {string} messageId - 消息 ID
+   * @param {string} [agentId] - 智能体 ID（可选）
    */
-  async handleNavigateToMessage(messageId) {
+  async handleNavigateToMessage(messageId, agentId = null) {
     try {
-      // 查找包含该消息的智能体
+      // 如果提供了 agentId，直接跳转到该智能体
+      if (agentId) {
+        this.switchToListView();
+        await this.selectAgentAndScrollToMessage(agentId, messageId);
+        return;
+      }
+      
+      // 兼容旧逻辑：查找包含该消息的智能体
       for (const agent of this.agents) {
         const res = await API.getAgentMessages(agent.id);
         const messages = res.messages || [];
