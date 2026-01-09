@@ -122,10 +122,13 @@ export class ConcurrencyController {
     // 检查活跃请求
     const activeRequest = this.activeRequests.get(agentId);
     if (activeRequest) {
-      activeRequest.abortController.abort();
+      // 先从 activeRequests 中删除，防止 _executeRequestImmediately 的 catch 块重复处理
       this.activeRequests.delete(agentId);
       this.stats.activeCount--;
       this.stats.rejectedRequests++; // 增加拒绝计数
+      
+      // 然后触发中止
+      activeRequest.abortController.abort();
       
       const error = new Error("Request cancelled");
       error.name = "AbortError";
@@ -183,9 +186,11 @@ export class ConcurrencyController {
     try {
       const result = await requestInfo.requestFn();
       
-      // 请求成功完成
-      this.activeRequests.delete(requestInfo.agentId);
-      this.stats.activeCount--;
+      // 请求成功完成 - 检查是否还在 activeRequests 中（可能已被 cancelRequest 处理）
+      if (this.activeRequests.has(requestInfo.agentId)) {
+        this.activeRequests.delete(requestInfo.agentId);
+        this.stats.activeCount--;
+      }
       this.stats.completedRequests++;
       
       await this.log.info("LLM请求完成", {
@@ -199,9 +204,11 @@ export class ConcurrencyController {
       this._processQueue();
       
     } catch (error) {
-      // 请求失败
-      this.activeRequests.delete(requestInfo.agentId);
-      this.stats.activeCount--;
+      // 请求失败 - 检查是否还在 activeRequests 中（可能已被 cancelRequest 处理）
+      if (this.activeRequests.has(requestInfo.agentId)) {
+        this.activeRequests.delete(requestInfo.agentId);
+        this.stats.activeCount--;
+      }
       
       await this.log.error("LLM请求失败", {
         agentId: requestInfo.agentId,
