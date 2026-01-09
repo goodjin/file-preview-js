@@ -96,6 +96,8 @@ class ArtifactManager {
                 <button class="text-mode-btn active" data-mode="text">纯文本</button>
                 <button class="text-mode-btn" data-mode="markdown">Markdown</button>
               </div>
+              <button class="copy-artifact-btn" title="复制内容">📋</button>
+              <button class="download-artifact-btn" title="下载">⬇️</button>
               <button class="viewer-maximize-btn" title="最大化/还原">⬜</button>
               <button class="close-viewer-btn" title="关闭">✕</button>
             </div>
@@ -122,6 +124,8 @@ class ArtifactManager {
     this.closeWindowBtn = this.container.querySelector(".close-btn");
     this.textModeToggle = this.container.querySelector(".text-mode-toggle");
     this.textModeButtons = this.container.querySelectorAll(".text-mode-btn");
+    this.copyArtifactBtn = this.container.querySelector(".copy-artifact-btn");
+    this.downloadArtifactBtn = this.container.querySelector(".download-artifact-btn");
     this.viewerMaximizeBtn = this.container.querySelector(".viewer-maximize-btn");
     this.viewerDialog = this.container.querySelector(".artifact-viewer-dialog");
     
@@ -208,6 +212,16 @@ class ArtifactManager {
     // 查看器最大化/还原
     this.viewerMaximizeBtn?.addEventListener("click", () => {
       this.toggleViewerMaximize();
+    });
+
+    // 复制工件内容
+    this.copyArtifactBtn?.addEventListener("click", () => {
+      this.copyArtifactContent();
+    });
+
+    // 下载工件
+    this.downloadArtifactBtn?.addEventListener("click", () => {
+      this.downloadArtifact();
     });
 
     // 最大化/还原
@@ -307,6 +321,129 @@ class ArtifactManager {
     this.viewerDialog?.classList.toggle("maximized", this.isViewerMaximized);
     this.viewerMaximizeBtn.textContent = this.isViewerMaximized ? "❐" : "⬜";
     this.viewerMaximizeBtn.title = this.isViewerMaximized ? "还原" : "最大化";
+  }
+
+  /**
+   * 复制工件内容到剪贴板
+   */
+  async copyArtifactContent() {
+    if (!this.selectedArtifact) {
+      if (window.Toast) window.Toast.warning("没有选中的工件");
+      return;
+    }
+
+    try {
+      let content;
+      const type = (this.selectedArtifact.type || "").toLowerCase();
+      
+      // 图片类型：复制图片 URL 或提示
+      if (this._isImageType(type)) {
+        const imageUrl = this._getImageUrl(this.selectedArtifact.content);
+        if (imageUrl.startsWith("data:")) {
+          // base64 图片，复制 data URL
+          content = imageUrl;
+        } else {
+          // 文件路径，构建完整 URL
+          content = window.location.origin + imageUrl;
+        }
+      } else if (this.currentTextContent !== null) {
+        // 文本内容
+        content = this.currentTextContent;
+      } else {
+        // JSON 或其他对象内容
+        const fullArtifact = await this.api.get(`/artifacts/${this.selectedArtifact.id}`);
+        content = typeof fullArtifact.content === "string" 
+          ? fullArtifact.content 
+          : JSON.stringify(fullArtifact.content, null, 2);
+      }
+
+      await navigator.clipboard.writeText(content);
+      if (window.Toast) {
+        window.Toast.success("已复制到剪贴板");
+      }
+      this.logger.log("工件内容已复制", { id: this.selectedArtifact.id });
+    } catch (err) {
+      this.logger.error("复制工件内容失败", err);
+      if (window.Toast) {
+        window.Toast.error("复制失败");
+      }
+    }
+  }
+
+  /**
+   * 下载工件
+   */
+  async downloadArtifact() {
+    if (!this.selectedArtifact) {
+      if (window.Toast) window.Toast.warning("没有选中的工件");
+      return;
+    }
+
+    try {
+      const artifact = this.selectedArtifact;
+      const displayName = artifact.actualFilename || artifact.filename;
+      const type = (artifact.type || "").toLowerCase();
+      
+      let blob;
+      let filename = displayName;
+
+      // 图片类型
+      if (this._isImageType(type)) {
+        const imageUrl = this._getImageUrl(artifact.content);
+        if (imageUrl.startsWith("data:")) {
+          // base64 图片
+          const response = await fetch(imageUrl);
+          blob = await response.blob();
+        } else {
+          // 文件路径
+          const response = await fetch(imageUrl);
+          blob = await response.blob();
+        }
+        // 确保文件名有扩展名
+        if (!filename.includes(".")) {
+          filename += "." + (type === "image" ? "png" : type);
+        }
+      } else {
+        // 文本或 JSON 内容
+        let content;
+        if (this.currentTextContent !== null) {
+          content = this.currentTextContent;
+        } else {
+          const fullArtifact = await this.api.get(`/artifacts/${artifact.id}`);
+          content = typeof fullArtifact.content === "string" 
+            ? fullArtifact.content 
+            : JSON.stringify(fullArtifact.content, null, 2);
+        }
+        
+        const mimeType = artifact.extension === ".json" ? "application/json" : "text/plain";
+        blob = new Blob([content], { type: mimeType + ";charset=utf-8" });
+        
+        // 确保文件名有扩展名
+        if (!filename.includes(".")) {
+          filename += artifact.extension || ".txt";
+        }
+      }
+
+      // 创建下载链接
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      if (window.Toast) {
+        window.Toast.success("下载已开始");
+      }
+      this.logger.log("工件下载已开始", { id: artifact.id, filename });
+    } catch (err) {
+      this.logger.error("下载工件失败", err);
+      if (window.Toast) {
+        window.Toast.error("下载失败");
+      }
+    }
   }
 
   /**

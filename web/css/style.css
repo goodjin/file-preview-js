@@ -2949,6 +2949,22 @@ body {
   transition: color 0.2s;
 }
 
+.copy-artifact-btn,
+.download-artifact-btn {
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: #858585;
+  cursor: pointer;
+  font-size: 16px;
+  transition: color 0.2s;
+}
+
+.copy-artifact-btn:hover,
+.download-artifact-btn:hover {
+  color: #07c160;
+}
+
 .close-viewer-btn:hover {
   color: #d4d4d4;
 }
