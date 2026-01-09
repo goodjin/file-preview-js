@@ -190,7 +190,7 @@ const OverviewPanel = {
   renderOrgTree() {
     if (!this.orgTreeContainer) return;
 
-    if (!this.tree) {
+    if (!this.tree || (Array.isArray(this.tree) && this.tree.length === 0)) {
       this.orgTreeContainer.innerHTML = `
         <h3>智能体组织结构</h3>
         <div style="color: #888; padding: 12px;">暂无数据</div>
@@ -198,7 +198,9 @@ const OverviewPanel = {
       return;
     }
 
-    const treeHtml = this.renderTreeNode(this.tree);
+    // tree 可能是数组（多个根节点）或单个对象
+    const nodes = Array.isArray(this.tree) ? this.tree : [this.tree];
+    const treeHtml = nodes.map(node => this.renderTreeNode(node)).join('');
 
     this.orgTreeContainer.innerHTML = `
       <h3>智能体组织结构</h3>
