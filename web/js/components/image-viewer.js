@@ -130,125 +130,179 @@ class ImageViewer {
   _openLightbox(imageSrc) {
     const lightbox = document.createElement("div");
     lightbox.className = "image-lightbox";
-    lightbox.style.position = "fixed";
-    lightbox.style.top = "0";
-    lightbox.style.left = "0";
-    lightbox.style.width = "100%";
-    lightbox.style.height = "100%";
-    lightbox.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
-    lightbox.style.display = "flex";
-    lightbox.style.alignItems = "center";
-    lightbox.style.justifyContent = "center";
-    lightbox.style.zIndex = "10000";
-
-    // 图片容器
-    const imgContainer = document.createElement("div");
-    imgContainer.style.position = "relative";
-    imgContainer.style.maxWidth = "90%";
-    imgContainer.style.maxHeight = "90%";
-    imgContainer.style.overflow = "auto";
+    lightbox.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0, 0, 0, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      overflow: hidden;
+      cursor: grab;
+    `;
 
     const img = document.createElement("img");
     img.src = imageSrc;
-    img.style.maxWidth = "100%";
-    img.style.maxHeight = "100%";
-    img.style.display = "block";
+    img.style.cssText = `
+      position: absolute;
+      transform-origin: center center;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-drag: none;
+    `;
 
-    imgContainer.appendChild(img);
+    // 缩放和拖拽状态
+    let scale = 1;
+    let translateX = 0;
+    let translateY = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let lastTranslateX = 0;
+    let lastTranslateY = 0;
 
-    // 控制栏
-    const controls = document.createElement("div");
-    controls.style.position = "absolute";
-    controls.style.bottom = "20px";
-    controls.style.left = "50%";
-    controls.style.transform = "translateX(-50%)";
-    controls.style.display = "flex";
-    controls.style.gap = "10px";
-    controls.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-    controls.style.padding = "10px";
-    controls.style.borderRadius = "4px";
+    const updateTransform = () => {
+      img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    };
 
-    // 缩放按钮
-    const zoomInBtn = this._createButton("放大", () => {
-      this.currentZoom += 0.2;
-      img.style.transform = `scale(${this.currentZoom})`;
-    });
+    // 图片加载后居中
+    img.onload = () => {
+      updateTransform();
+    };
 
-    const zoomOutBtn = this._createButton("缩小", () => {
-      if (this.currentZoom > 0.2) {
-        this.currentZoom -= 0.2;
-        img.style.transform = `scale(${this.currentZoom})`;
+    // 鼠标滚轮缩放
+    const handleWheel = (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const newScale = Math.max(0.1, Math.min(scale * delta, 20));
+      
+      // 以鼠标位置为中心缩放
+      const rect = img.getBoundingClientRect();
+      const imgCenterX = rect.left + rect.width / 2;
+      const imgCenterY = rect.top + rect.height / 2;
+      const mouseOffsetX = e.clientX - imgCenterX;
+      const mouseOffsetY = e.clientY - imgCenterY;
+      
+      const scaleRatio = newScale / scale;
+      translateX -= mouseOffsetX * (scaleRatio - 1);
+      translateY -= mouseOffsetY * (scaleRatio - 1);
+      
+      scale = newScale;
+      updateTransform();
+    };
+
+    // 拖拽开始
+    const handleMouseDown = (e) => {
+      if (e.button !== 0) return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      lastTranslateX = translateX;
+      lastTranslateY = translateY;
+      lightbox.style.cursor = "grabbing";
+      img.style.cursor = "grabbing";
+    };
+
+    // 拖拽移动
+    const handleMouseMove = (e) => {
+      if (!isDragging) return;
+      translateX = lastTranslateX + (e.clientX - startX);
+      translateY = lastTranslateY + (e.clientY - startY);
+      updateTransform();
+    };
+
+    // 拖拽结束
+    const handleMouseUp = () => {
+      isDragging = false;
+      lightbox.style.cursor = "grab";
+      img.style.cursor = "grab";
+    };
+
+    // 双击重置
+    const handleDblClick = (e) => {
+      if (e.target === img) {
+        scale = 1;
+        translateX = 0;
+        translateY = 0;
+        updateTransform();
       }
-    });
-
-    const fitBtn = this._createButton("适应", () => {
-      this.currentZoom = 1;
-      img.style.transform = "scale(1)";
-    });
-
-    controls.appendChild(zoomInBtn);
-    controls.appendChild(zoomOutBtn);
-    controls.appendChild(fitBtn);
-
-    imgContainer.appendChild(controls);
+    };
 
     // 关闭按钮
     const closeBtn = document.createElement("button");
     closeBtn.textContent = "✕";
-    closeBtn.style.position = "absolute";
-    closeBtn.style.top = "20px";
-    closeBtn.style.right = "20px";
-    closeBtn.style.width = "40px";
-    closeBtn.style.height = "40px";
-    closeBtn.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-    closeBtn.style.color = "white";
-    closeBtn.style.border = "none";
-    closeBtn.style.borderRadius = "4px";
-    closeBtn.style.cursor = "pointer";
-    closeBtn.style.fontSize = "20px";
-    closeBtn.addEventListener("click", () => {
-      document.body.removeChild(lightbox);
-    });
+    closeBtn.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 40px;
+      height: 40px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 20px;
+      z-index: 10001;
+    `;
 
-    imgContainer.appendChild(closeBtn);
-    lightbox.appendChild(imgContainer);
+    // 提示信息
+    const hint = document.createElement("div");
+    hint.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.7);
+      color: #999;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 12px;
+      z-index: 10001;
+    `;
+    hint.textContent = "滚轮缩放 · 拖拽移动 · 双击重置 · ESC关闭";
 
-    // 点击外部关闭
-    lightbox.addEventListener("click", (e) => {
-      if (e.target === lightbox) {
+    const closeLightbox = () => {
+      lightbox.removeEventListener("wheel", handleWheel);
+      lightbox.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("keydown", handleKeyDown);
+      if (document.body.contains(lightbox)) {
         document.body.removeChild(lightbox);
       }
-    });
+    };
 
-    // Escape键关闭
-    const closeOnEscape = (e) => {
+    const handleKeyDown = (e) => {
       if (e.key === "Escape") {
-        if (document.body.contains(lightbox)) {
-          document.body.removeChild(lightbox);
-        }
-        document.removeEventListener("keydown", closeOnEscape);
+        closeLightbox();
       }
     };
-    document.addEventListener("keydown", closeOnEscape);
 
+    closeBtn.addEventListener("click", closeLightbox);
+    
+    // 点击背景关闭（但不是点击图片）
+    lightbox.addEventListener("click", (e) => {
+      if (e.target === lightbox) {
+        closeLightbox();
+      }
+    });
+
+    lightbox.addEventListener("wheel", handleWheel, { passive: false });
+    lightbox.addEventListener("mousedown", handleMouseDown);
+    lightbox.addEventListener("dblclick", handleDblClick);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("keydown", handleKeyDown);
+
+    lightbox.appendChild(img);
+    lightbox.appendChild(closeBtn);
+    lightbox.appendChild(hint);
     document.body.appendChild(lightbox);
-  }
-
-  /**
-   * 创建按钮
-   */
-  _createButton(text, onClick) {
-    const btn = document.createElement("button");
-    btn.textContent = text;
-    btn.style.padding = "8px 16px";
-    btn.style.backgroundColor = "#07c160";
-    btn.style.color = "white";
-    btn.style.border = "none";
-    btn.style.borderRadius = "4px";
-    btn.style.cursor = "pointer";
-    btn.style.fontSize = "12px";
-    btn.addEventListener("click", onClick);
-    return btn;
   }
 
   /**
