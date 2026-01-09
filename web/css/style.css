@@ -29,9 +29,9 @@ body {
 
 /* ========== 左侧边栏 ========== */
 .sidebar {
-  width: 300px;
-  min-width: 250px;
-  max-width: 400px;
+  width: 360px;
+  min-width: 300px;
+  max-width: 500px;
   background-color: #2e2e2e;
   color: #fff;
   display: flex;
@@ -86,6 +86,29 @@ body {
   gap: 8px;
   background-color: #2e2e2e;
   border-bottom: 1px solid #1a1a1a;
+}
+
+/* 显示/隐藏已终止智能体开关 */
+.toggle-terminated-btn {
+  background-color: #3a3a3a;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s;
+  min-width: 32px;
+}
+
+.toggle-terminated-btn:hover {
+  background-color: #444;
+  color: #fff;
+}
+
+.toggle-terminated-btn.active {
+  background-color: #07c160;
+  color: #fff;
 }
 
 .search-input {
@@ -259,14 +282,12 @@ body {
 }
 
 .agent-status {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 10px;
+  font-size: 14px;
+  cursor: help;
 }
 
 .agent-status.terminated {
-  background-color: #f44336;
-  color: #fff;
+  color: #f44336;
 }
 
 /* 删除按钮样式 */

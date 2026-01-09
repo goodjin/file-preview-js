@@ -12,12 +12,14 @@ const AgentList = {
   sortType: 'active',   // 排序类型（默认按最后活跃时间）
   filterKeyword: '',    // 筛选关键词
   newMessageAgents: new Set(), // 有新消息的智能体 ID 集合
+  showTerminated: false, // 是否显示已终止的智能体（默认隐藏）
 
   // DOM 元素引用
   listContainer: null,
   searchInput: null,
   sortBtn: null,
   sortTypeBtn: null,
+  toggleTerminatedBtn: null,
 
   /**
    * 初始化组件
@@ -27,6 +29,7 @@ const AgentList = {
     this.searchInput = document.getElementById('search-input');
     this.sortBtn = document.getElementById('sort-btn');
     this.sortTypeBtn = document.getElementById('sort-type-btn');
+    this.toggleTerminatedBtn = document.getElementById('toggle-terminated-btn');
 
     // 绑定事件
     if (this.searchInput) {
@@ -55,7 +58,41 @@ const AgentList = {
       });
     }
 
+    if (this.toggleTerminatedBtn) {
+      this.toggleTerminatedBtn.addEventListener('click', () => {
+        this.toggleShowTerminated();
+      });
+    }
+
     this.updateSortButtonText();
+    this.updateToggleTerminatedButton();
+  },
+
+  /**
+   * 切换显示/隐藏已终止智能体
+   */
+  toggleShowTerminated() {
+    this.showTerminated = !this.showTerminated;
+    this.updateToggleTerminatedButton();
+    this.applyFilterAndSort();
+    this.render();
+  },
+
+  /**
+   * 更新显示/隐藏已终止智能体按钮状态
+   */
+  updateToggleTerminatedButton() {
+    if (this.toggleTerminatedBtn) {
+      if (this.showTerminated) {
+        this.toggleTerminatedBtn.classList.add('active');
+        this.toggleTerminatedBtn.title = '隐藏已终止的智能体';
+        this.toggleTerminatedBtn.textContent = '👁️';
+      } else {
+        this.toggleTerminatedBtn.classList.remove('active');
+        this.toggleTerminatedBtn.title = '显示已终止的智能体';
+        this.toggleTerminatedBtn.textContent = '🙈';
+      }
+    }
   },
 
   /**
@@ -101,6 +138,10 @@ const AgentList = {
   applyFilterAndSort() {
     // 先筛选
     let result = FilterUtils.filterByKeyword(this.agents, this.filterKeyword);
+    // 根据设置过滤已终止的智能体
+    if (!this.showTerminated) {
+      result = result.filter(agent => agent.status !== 'terminated');
+    }
     // 使用固定排序函数，确保 user 和 root 在顶部
     result = SortUtils.sortWithPinnedAgents(result, this.sortOrder, this.sortType);
     this.filteredAgents = result;
@@ -273,7 +314,7 @@ const AgentList = {
           </div>
           <div class="agent-actions">
             <div class="agent-time">${this.getDisplayTime(agent)}</div>
-            ${agent.status === 'terminated' ? '<span class="agent-status terminated">已终止</span>' : ''}
+            ${agent.status === 'terminated' ? '<span class="agent-status terminated" title="已终止">⛔</span>' : ''}
             ${this.renderDeleteButton(agent)}
           </div>
         </div>
