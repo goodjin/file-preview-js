@@ -18,6 +18,7 @@
           <button id="view-overview-btn" class="toggle-btn" title="总览视图">🌳</button>
           <button id="view-modules-btn" class="toggle-btn" title="模块管理">🔌</button>
         </div>
+        <button id="open-artifacts-btn" class="artifacts-btn" title="工件管理器">📦</button>
       </div>
       
       <!-- 搜索和排序 -->
@@ -60,6 +61,7 @@
           <!-- 模块详情将通过 JavaScript 动态生成 -->
         </div>
       </div>
+      
     </aside>
     
     <!-- 右侧面板：对话区域 -->
@@ -130,6 +132,13 @@
   <!-- Toast 通知容器 -->
   <div id="toast-container" class="toast-container"></div>
   
+  <!-- 工件管理器浮动窗口 -->
+  <div id="artifact-manager-window" class="artifact-window hidden">
+    <div id="artifact-manager">
+      <!-- 工件管理器将通过 JavaScript 动态生成 -->
+    </div>
+  </div>
+  
   <!-- JavaScript 文件（按依赖顺序加载） -->
   <!-- 工具函数 -->
   <script src="js/utils/sort.js"></script>
@@ -148,6 +157,9 @@
   <script src="js/components/overview.js"></script>
   <script src="js/components/modules-panel.js"></script>
   <script src="js/components/image-viewer.js"></script>
+  <script src="js/components/json-viewer.js"></script>
+  <script src="js/components/text-viewer.js"></script>
+  <script src="js/components/artifact-manager.js"></script>
   <!-- 主应用 -->
   <script src="js/app.js"></script>
 </body>

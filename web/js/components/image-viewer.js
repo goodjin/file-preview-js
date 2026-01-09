@@ -1,188 +1,245 @@
 /**
  * 图片查看器组件
- * 支持图片放大显示、多图导航
+ * 显示图片缩略图和灯箱预览，支持缩放和导航
  */
-
-const ImageViewer = {
-  // 组件状态
-  isOpen: false,
-  images: [],
-  currentIndex: 0,
-
-  // DOM 元素引用
-  modal: null,
-  imageEl: null,
-  prevBtn: null,
-  nextBtn: null,
-  closeBtn: null,
-  counter: null,
-
-  /**
-   * 初始化组件
-   */
-  init() {
-    this.createModal();
-    this.bindEvents();
-  },
-
-  /**
-   * 创建模态框 DOM
-   */
-  createModal() {
-    // 检查是否已存在
-    if (document.getElementById('image-viewer-modal')) {
-      this.modal = document.getElementById('image-viewer-modal');
-      this.imageEl = this.modal.querySelector('.image-viewer-image');
-      this.prevBtn = this.modal.querySelector('.image-viewer-prev');
-      this.nextBtn = this.modal.querySelector('.image-viewer-next');
-      this.closeBtn = this.modal.querySelector('.image-viewer-close');
-      this.counter = this.modal.querySelector('.image-viewer-counter');
-      return;
-    }
-
-    const modal = document.createElement('div');
-    modal.id = 'image-viewer-modal';
-    modal.className = 'image-viewer-modal hidden';
-    modal.innerHTML = `
-      <div class="image-viewer-overlay"></div>
-      <div class="image-viewer-container">
-        <button class="image-viewer-close" title="关闭 (Esc)">×</button>
-        <button class="image-viewer-prev" title="上一张 (←)">‹</button>
-        <img class="image-viewer-image" src="" alt="图片预览">
-        <button class="image-viewer-next" title="下一张 (→)">›</button>
-        <div class="image-viewer-counter"></div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    this.modal = modal;
-    this.imageEl = modal.querySelector('.image-viewer-image');
-    this.prevBtn = modal.querySelector('.image-viewer-prev');
-    this.nextBtn = modal.querySelector('.image-viewer-next');
-    this.closeBtn = modal.querySelector('.image-viewer-close');
-    this.counter = modal.querySelector('.image-viewer-counter');
-  },
-
-  /**
-   * 绑定事件
-   */
-  bindEvents() {
-    // 关闭按钮
-    this.closeBtn?.addEventListener('click', () => this.close());
-
-    // 点击遮罩层关闭
-    this.modal?.querySelector('.image-viewer-overlay')?.addEventListener('click', () => this.close());
-
-    // 导航按钮
-    this.prevBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.prev();
-    });
-    this.nextBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.next();
-    });
-
-    // 键盘事件
-    document.addEventListener('keydown', (e) => {
-      if (!this.isOpen) return;
-
-      switch (e.key) {
-        case 'Escape':
-          this.close();
-          break;
-        case 'ArrowLeft':
-          this.prev();
-          break;
-        case 'ArrowRight':
-          this.next();
-          break;
-      }
-    });
-  },
-
-  /**
-   * 显示图片查看器
-   * @param {string[]} images - 图片路径数组
-   * @param {number} startIndex - 起始索引
-   */
-  show(images, startIndex = 0) {
-    if (!images || images.length === 0) return;
-
-    this.images = images;
-    this.currentIndex = Math.max(0, Math.min(startIndex, images.length - 1));
-    this.isOpen = true;
-
-    this.render();
-    this.modal?.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-  },
-
-  /**
-   * 关闭图片查看器
-   */
-  close() {
-    this.isOpen = false;
-    this.modal?.classList.add('hidden');
-    document.body.style.overflow = '';
-  },
-
-  /**
-   * 导航到上一张图片
-   */
-  prev() {
-    if (this.images.length <= 1) return;
-    this.currentIndex = (this.currentIndex - 1 + this.images.length) % this.images.length;
-    this.render();
-  },
-
-  /**
-   * 导航到下一张图片
-   */
-  next() {
-    if (this.images.length <= 1) return;
-    this.currentIndex = (this.currentIndex + 1) % this.images.length;
-    this.render();
-  },
-
-  /**
-   * 渲染当前图片
-   */
-  render() {
-    if (!this.imageEl) return;
-
-    const imagePath = this.images[this.currentIndex];
-    // 构建完整的图片 URL
-    this.imageEl.src = `/artifacts/${imagePath}`;
-    this.imageEl.alt = `图片 ${this.currentIndex + 1}`;
-
-    // 更新计数器
-    if (this.counter) {
-      if (this.images.length > 1) {
-        this.counter.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
-        this.counter.style.display = 'block';
-      } else {
-        this.counter.style.display = 'none';
-      }
-    }
-
-    // 更新导航按钮显示
-    if (this.prevBtn) {
-      this.prevBtn.style.display = this.images.length > 1 ? 'flex' : 'none';
-    }
-    if (this.nextBtn) {
-      this.nextBtn.style.display = this.images.length > 1 ? 'flex' : 'none';
-    }
+class ImageViewer {
+  constructor(options = {}) {
+    this.container = options.container;
+    this.imagePath = null;
+    this.imageData = null;
+    this.currentZoom = 1;
   }
-};
 
-// 页面加载完成后初始化
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => ImageViewer.init());
-} else {
-  ImageViewer.init();
+  /**
+   * 渲染图片
+   */
+  render(imageData) {
+    this.imageData = imageData;
+    this.container.innerHTML = "";
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "image-viewer";
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.height = "100%";
+    wrapper.style.overflow = "auto";
+    wrapper.style.padding = "20px";
+    wrapper.style.backgroundColor = "#1e1e1e";
+
+    // 图片信息
+    const infoDiv = document.createElement("div");
+    infoDiv.className = "image-info";
+    infoDiv.style.marginBottom = "20px";
+    infoDiv.style.color = "#d4d4d4";
+    infoDiv.style.fontSize = "13px";
+
+    // 尝试从imageData中提取信息
+    let width = "未知";
+    let height = "未知";
+    let size = "未知";
+
+    if (typeof imageData === "string" && imageData.startsWith("data:")) {
+      // Base64编码的图片
+      infoDiv.innerHTML = `
+        <div>格式: Base64编码图片</div>
+        <div>大小: ${this._formatSize(imageData.length)}</div>
+      `;
+    } else if (typeof imageData === "object" && imageData.width && imageData.height) {
+      width = imageData.width;
+      height = imageData.height;
+      size = imageData.size ? this._formatSize(imageData.size) : "未知";
+      infoDiv.innerHTML = `
+        <div>尺寸: ${width} × ${height} px</div>
+        <div>大小: ${size}</div>
+      `;
+    }
+
+    wrapper.appendChild(infoDiv);
+
+    // 缩略图容器
+    const thumbnailDiv = document.createElement("div");
+    thumbnailDiv.className = "image-thumbnail";
+    thumbnailDiv.style.textAlign = "center";
+    thumbnailDiv.style.marginBottom = "20px";
+
+    const img = document.createElement("img");
+    img.style.maxWidth = "100%";
+    img.style.maxHeight = "300px";
+    img.style.cursor = "pointer";
+    img.style.border = "1px solid #3e3e42";
+    img.style.borderRadius = "4px";
+
+    // 设置图片源
+    if (typeof imageData === "string" && imageData.startsWith("data:")) {
+      img.src = imageData;
+    } else if (typeof imageData === "object" && imageData.data) {
+      img.src = imageData.data;
+    } else if (typeof imageData === "string") {
+      img.src = imageData;
+    }
+
+    // 点击打开灯箱
+    img.addEventListener("click", () => {
+      this._openLightbox(img.src);
+    });
+
+    img.addEventListener("error", () => {
+      thumbnailDiv.innerHTML = '<div style="color: #d4d4d4;">图片加载失败</div>';
+    });
+
+    thumbnailDiv.appendChild(img);
+    wrapper.appendChild(thumbnailDiv);
+
+    // 提示文本
+    const hintDiv = document.createElement("div");
+    hintDiv.style.color = "#858585";
+    hintDiv.style.fontSize = "12px";
+    hintDiv.textContent = "点击图片查看全尺寸";
+    wrapper.appendChild(hintDiv);
+
+    this.container.appendChild(wrapper);
+  }
+
+  /**
+   * 打开灯箱
+   */
+  _openLightbox(imageSrc) {
+    const lightbox = document.createElement("div");
+    lightbox.className = "image-lightbox";
+    lightbox.style.position = "fixed";
+    lightbox.style.top = "0";
+    lightbox.style.left = "0";
+    lightbox.style.width = "100%";
+    lightbox.style.height = "100%";
+    lightbox.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
+    lightbox.style.display = "flex";
+    lightbox.style.alignItems = "center";
+    lightbox.style.justifyContent = "center";
+    lightbox.style.zIndex = "10000";
+
+    // 图片容器
+    const imgContainer = document.createElement("div");
+    imgContainer.style.position = "relative";
+    imgContainer.style.maxWidth = "90%";
+    imgContainer.style.maxHeight = "90%";
+    imgContainer.style.overflow = "auto";
+
+    const img = document.createElement("img");
+    img.src = imageSrc;
+    img.style.maxWidth = "100%";
+    img.style.maxHeight = "100%";
+    img.style.display = "block";
+
+    imgContainer.appendChild(img);
+
+    // 控制栏
+    const controls = document.createElement("div");
+    controls.style.position = "absolute";
+    controls.style.bottom = "20px";
+    controls.style.left = "50%";
+    controls.style.transform = "translateX(-50%)";
+    controls.style.display = "flex";
+    controls.style.gap = "10px";
+    controls.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+    controls.style.padding = "10px";
+    controls.style.borderRadius = "4px";
+
+    // 缩放按钮
+    const zoomInBtn = this._createButton("放大", () => {
+      this.currentZoom += 0.2;
+      img.style.transform = `scale(${this.currentZoom})`;
+    });
+
+    const zoomOutBtn = this._createButton("缩小", () => {
+      if (this.currentZoom > 0.2) {
+        this.currentZoom -= 0.2;
+        img.style.transform = `scale(${this.currentZoom})`;
+      }
+    });
+
+    const fitBtn = this._createButton("适应", () => {
+      this.currentZoom = 1;
+      img.style.transform = "scale(1)";
+    });
+
+    controls.appendChild(zoomInBtn);
+    controls.appendChild(zoomOutBtn);
+    controls.appendChild(fitBtn);
+
+    imgContainer.appendChild(controls);
+
+    // 关闭按钮
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "✕";
+    closeBtn.style.position = "absolute";
+    closeBtn.style.top = "20px";
+    closeBtn.style.right = "20px";
+    closeBtn.style.width = "40px";
+    closeBtn.style.height = "40px";
+    closeBtn.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+    closeBtn.style.color = "white";
+    closeBtn.style.border = "none";
+    closeBtn.style.borderRadius = "4px";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.style.fontSize = "20px";
+    closeBtn.addEventListener("click", () => {
+      document.body.removeChild(lightbox);
+    });
+
+    imgContainer.appendChild(closeBtn);
+    lightbox.appendChild(imgContainer);
+
+    // 点击外部关闭
+    lightbox.addEventListener("click", (e) => {
+      if (e.target === lightbox) {
+        document.body.removeChild(lightbox);
+      }
+    });
+
+    // Escape键关闭
+    const closeOnEscape = (e) => {
+      if (e.key === "Escape") {
+        if (document.body.contains(lightbox)) {
+          document.body.removeChild(lightbox);
+        }
+        document.removeEventListener("keydown", closeOnEscape);
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+
+    document.body.appendChild(lightbox);
+  }
+
+  /**
+   * 创建按钮
+   */
+  _createButton(text, onClick) {
+    const btn = document.createElement("button");
+    btn.textContent = text;
+    btn.style.padding = "8px 16px";
+    btn.style.backgroundColor = "#07c160";
+    btn.style.color = "white";
+    btn.style.border = "none";
+    btn.style.borderRadius = "4px";
+    btn.style.cursor = "pointer";
+    btn.style.fontSize = "12px";
+    btn.addEventListener("click", onClick);
+    return btn;
+  }
+
+  /**
+   * 格式化文件大小
+   */
+  _formatSize(bytes) {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
+  }
 }
 
-// 导出供其他模块使用
-window.ImageViewer = ImageViewer;
+// 导出
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = ImageViewer;
+}

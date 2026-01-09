@@ -25,7 +25,7 @@ export class ArtifactStore {
 
   /**
    * 写入工件并返回引用。
-   * @param {{type:string, content:any, meta?:object}} artifact
+   * @param {{type:string, content:any, meta?:object, messageId?:string}} artifact
    * @returns {Promise<string>} artifact_ref
    */
   async putArtifact(artifact) {
@@ -38,7 +38,7 @@ export class ArtifactStore {
       ...artifact
     };
     await writeFile(filePath, JSON.stringify(payload, null, 2), "utf8");
-    void this.log.info("写入工件", { id, type: payload.type, ref: `artifact:${id}` });
+    void this.log.info("写入工件", { id, type: payload.type, ref: `artifact:${id}`, messageId: artifact.messageId || null });
     return `artifact:${id}`;
   }
 

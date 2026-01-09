@@ -2349,3 +2349,733 @@ body {
 .error-bubble {
   border-radius: 8px !important;
 }
+
+
+/* ========== 工件管理器浮动窗口样式 ========== */
+.artifact-window {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 800px;
+  height: 600px;
+  background-color: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.artifact-window.hidden {
+  display: none !important;
+}
+
+.artifact-window.maximized {
+  top: 0;
+  left: 0;
+  transform: none;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+/* artifact-manager 容器需要撑满父元素 */
+#artifact-manager {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 工件管理器按钮 */
+.artifacts-btn {
+  padding: 6px 10px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 8px;
+  transition: all 0.2s;
+}
+
+.artifacts-btn:hover {
+  background-color: #454545;
+  border-color: #07c160;
+}
+
+/* ========== 工件管理器样式 ========== */
+
+.artifact-manager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+}
+
+.artifact-manager-header {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background-color: #252526;
+  border-bottom: 1px solid #3e3e42;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.artifact-manager-header h2 {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.artifact-window-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.window-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  color: #858585;
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.window-btn:hover {
+  background-color: #3e3e42;
+  color: #d4d4d4;
+}
+
+.window-btn.close-btn:hover {
+  background-color: #e81123;
+  color: #fff;
+}
+
+.artifact-manager-toolbar {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  background-color: #2d2d30;
+  border-bottom: 1px solid #3e3e42;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.artifact-search-input {
+  flex: 1;
+  min-width: 150px;
+  padding: 6px 10px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  font-size: 12px;
+}
+
+.artifact-search-input::placeholder {
+  color: #858585;
+}
+
+.artifact-filter-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.filter-btn {
+  padding: 4px 8px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  background-color: #454545;
+}
+
+.filter-btn.active {
+  background-color: #07c160;
+  color: #fff;
+  border-color: #07c160;
+}
+
+.artifact-view-toggle {
+  display: flex;
+  gap: 2px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.view-mode-btn {
+  padding: 4px 8px;
+  border: none;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.view-mode-btn:hover {
+  background-color: #454545;
+}
+
+.view-mode-btn.active {
+  background-color: #07c160;
+  color: #fff;
+}
+
+.clear-filters-btn,
+.refresh-btn {
+  padding: 4px 8px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.clear-filters-btn:hover,
+.refresh-btn:hover {
+  background-color: #454545;
+}
+
+/* 图标视图 */
+.artifact-list.icon-view {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;
+  align-content: start;
+  background-color: #1e1e1e;
+}
+
+.artifact-list.icon-view .artifact-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  height: fit-content;
+}
+
+.artifact-list.icon-view .artifact-item:hover {
+  background-color: #2d2d30;
+}
+
+.artifact-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.artifact-list.icon-view .artifact-item-name {
+  font-size: 11px;
+  text-align: center;
+  word-break: break-all;
+  line-height: 1.3;
+}
+
+/* 详情视图 */
+.artifact-list.detail-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background-color: #1e1e1e;
+}
+
+.artifact-detail-header {
+  display: flex;
+  padding: 8px 16px;
+  background-color: #252526;
+  border-bottom: 1px solid #3e3e42;
+  font-size: 11px;
+  color: #858585;
+  font-weight: 500;
+}
+
+.artifact-list.detail-view .artifact-item {
+  display: flex;
+  padding: 10px 16px;
+  border-bottom: 1px solid #3e3e42;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 12px;
+}
+
+.artifact-list.detail-view .artifact-item:hover {
+  background-color: #2d2d30;
+}
+
+.col-name {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-type {
+  flex: 0 0 80px;
+  text-align: center;
+  color: #858585;
+}
+
+.col-size {
+  flex: 0 0 80px;
+  text-align: right;
+  color: #858585;
+}
+
+.col-date {
+  flex: 0 0 150px;
+  text-align: right;
+  color: #858585;
+}
+
+.artifact-icon-small {
+  font-size: 16px;
+}
+
+/* 工件查看器弹窗 */
+.artifact-viewer-modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.artifact-viewer-modal.hidden {
+  display: none;
+}
+
+.artifact-viewer-dialog {
+  width: 90%;
+  height: 90%;
+  background-color: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.artifact-viewer-header {
+  padding: 12px 16px;
+  background-color: #252526;
+  border-bottom: 1px solid #3e3e42;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.artifact-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.artifact-viewer-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.text-mode-toggle {
+  display: flex;
+  gap: 2px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.text-mode-btn {
+  padding: 4px 10px;
+  border: none;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.text-mode-btn:hover {
+  background-color: #454545;
+}
+
+.text-mode-btn.active {
+  background-color: #07c160;
+  color: #fff;
+}
+
+.artifact-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.view-source-btn {
+  padding: 4px 10px;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  background-color: #07c160;
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.view-source-btn:hover {
+  background-color: #06b150;
+}
+
+.close-viewer-btn {
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: #858585;
+  cursor: pointer;
+  font-size: 16px;
+  transition: color 0.2s;
+}
+
+.close-viewer-btn:hover {
+  color: #d4d4d4;
+}
+
+.artifact-viewer-container {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.artifact-manager .empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 100px;
+  color: #858585;
+  font-size: 13px;
+}
+
+.artifact-manager .empty-state.error {
+  color: #f48771;
+}
+
+/* Markdown 查看器样式 */
+.markdown-viewer {
+  padding: 20px;
+  color: #d4d4d4;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.markdown-viewer h1 {
+  font-size: 24px;
+  margin: 20px 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.markdown-viewer h2 {
+  font-size: 20px;
+  margin: 18px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.markdown-viewer h3 {
+  font-size: 16px;
+  margin: 16px 0 6px;
+}
+
+.markdown-viewer p {
+  margin: 10px 0;
+}
+
+.markdown-viewer code {
+  background-color: #3c3c3c;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+}
+
+.markdown-viewer pre {
+  background-color: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.markdown-viewer pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdown-viewer ul, .markdown-viewer ol {
+  margin: 10px 0;
+  padding-left: 24px;
+}
+
+.markdown-viewer li {
+  margin: 4px 0;
+}
+
+.markdown-viewer a {
+  color: #4fc3f7;
+  text-decoration: none;
+}
+
+.markdown-viewer a:hover {
+  text-decoration: underline;
+}
+
+.markdown-viewer hr {
+  border: none;
+  border-top: 1px solid #3e3e42;
+  margin: 20px 0;
+}
+
+.markdown-viewer strong {
+  font-weight: 600;
+}
+
+.markdown-viewer em {
+  font-style: italic;
+}
+
+/* JSON查看器样式 */
+.json-tree {
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.json-node {
+  margin-left: 20px;
+}
+
+.json-node-header {
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.json-node-header:hover {
+  background-color: #2d2d30;
+}
+
+.json-toggle-btn {
+  width: 20px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #858585;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+}
+
+.json-toggle-btn:hover {
+  color: #d4d4d4;
+}
+
+.json-toggle-spacer {
+  width: 20px;
+  display: inline-block;
+}
+
+.json-key {
+  color: #9cdcfe;
+  margin-right: 4px;
+}
+
+.json-colon {
+  color: #d4d4d4;
+}
+
+.json-string {
+  color: #ce9178;
+}
+
+.json-number {
+  color: #b5cea8;
+}
+
+.json-boolean {
+  color: #569cd6;
+}
+
+.json-null {
+  color: #569cd6;
+}
+
+.json-type {
+  color: #858585;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.json-node-content {
+  margin-left: 0;
+}
+
+.json-context-menu {
+  background-color: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  min-width: 150px;
+}
+
+.json-context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: #d4d4d4;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.json-context-menu-item:hover {
+  background-color: #3e3e42;
+}
+
+.json-copy-toast {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* 文本查看器样式 */
+.text-viewer {
+  display: flex;
+  height: 100%;
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+}
+
+.text-viewer-line-numbers {
+  background-color: #252526;
+  border-right: 1px solid #3e3e42;
+  padding: 10px 0;
+  text-align: right;
+  padding-right: 10px;
+  user-select: none;
+  color: #858585;
+  overflow-y: hidden;
+}
+
+.text-viewer-content-wrapper {
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
+}
+
+.text-viewer-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 图片查看器样式 */
+.image-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+  padding: 20px;
+  background-color: #1e1e1e;
+}
+
+.image-info {
+  margin-bottom: 20px;
+  color: #d4d4d4;
+  font-size: 13px;
+}
+
+.image-thumbnail {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.image-thumbnail img {
+  max-width: 100%;
+  max-height: 300px;
+  cursor: pointer;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+}
+
+.image-lightbox {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.image-lightbox img {
+  max-width: 90%;
+  max-height: 90%;
+  display: block;
+}

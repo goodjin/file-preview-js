@@ -17,6 +17,7 @@ const App = {
   maxBackoffInterval: 30000, // 最大退避间隔（30秒）
   isPollingPaused: false,   // 轮询是否暂停
   _isSelecting: false,      // 是否正在选择智能体（防止递归）
+  artifactManager: null,    // 工件管理器实例
 
   /**
    * 初始化应用
@@ -54,6 +55,7 @@ const App = {
     const listBtn = document.getElementById('view-list-btn');
     const overviewBtn = document.getElementById('view-overview-btn');
     const modulesBtn = document.getElementById('view-modules-btn');
+    const openArtifactsBtn = document.getElementById('open-artifacts-btn');
 
     if (listBtn) {
       listBtn.addEventListener('click', () => this.switchToListView());
@@ -64,6 +66,14 @@ const App = {
     if (modulesBtn) {
       modulesBtn.addEventListener('click', () => this.switchToModulesView());
     }
+    if (openArtifactsBtn) {
+      openArtifactsBtn.addEventListener('click', () => this.openArtifactManager());
+    }
+
+    // 监听导航到消息事件（从工件管理器触发）
+    window.addEventListener('navigateToMessage', (e) => {
+      this.handleNavigateToMessage(e.detail.messageId);
+    });
   },
 
   /**
@@ -106,6 +116,22 @@ const App = {
   },
 
   /**
+   * 打开工件管理器窗口
+   */
+  openArtifactManager() {
+    if (!this.artifactManager) {
+      this.artifactManager = new ArtifactManager({
+        container: document.getElementById('artifact-manager'),
+        windowEl: document.getElementById('artifact-manager-window'),
+        api: API,
+        logger: console
+      });
+    } else {
+      this.artifactManager.show();
+    }
+  },
+
+  /**
    * 显示模块管理面板
    */
   showModulesPanel() {
@@ -132,6 +158,34 @@ const App = {
     if (agentList) agentList.classList.remove('hidden');
     if (toolbar) toolbar.classList.remove('hidden');
     if (modulesPanel) modulesPanel.classList.add('hidden');
+  },
+
+  /**
+   * 处理导航到消息事件
+   * @param {string} messageId - 消息 ID
+   */
+  async handleNavigateToMessage(messageId) {
+    try {
+      // 查找包含该消息的智能体
+      for (const agent of this.agents) {
+        const res = await API.getAgentMessages(agent.id);
+        const messages = res.messages || [];
+        const message = messages.find(m => m.id === messageId);
+        
+        if (message) {
+          // 切换到列表视图
+          this.switchToListView();
+          // 选择智能体并滚动到消息
+          await this.selectAgentAndScrollToMessage(agent.id, messageId);
+          return;
+        }
+      }
+      
+      Toast.warning('未找到对应的消息');
+    } catch (error) {
+      console.error('导航到消息失败:', error);
+      Toast.error('导航到消息失败');
+    }
   },
 
   /**
