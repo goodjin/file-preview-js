@@ -96,6 +96,7 @@ class ArtifactManager {
                 <button class="text-mode-btn active" data-mode="text">纯文本</button>
                 <button class="text-mode-btn" data-mode="markdown">Markdown</button>
               </div>
+              <button class="viewer-maximize-btn" title="最大化/还原">⬜</button>
               <button class="close-viewer-btn" title="关闭">✕</button>
             </div>
           </div>
@@ -121,10 +122,13 @@ class ArtifactManager {
     this.closeWindowBtn = this.container.querySelector(".close-btn");
     this.textModeToggle = this.container.querySelector(".text-mode-toggle");
     this.textModeButtons = this.container.querySelectorAll(".text-mode-btn");
+    this.viewerMaximizeBtn = this.container.querySelector(".viewer-maximize-btn");
+    this.viewerDialog = this.container.querySelector(".artifact-viewer-dialog");
     
     // 文本显示模式
     this.textDisplayMode = "text"; // "text" 或 "markdown"
     this.currentTextContent = null; // 当前文本内容
+    this.isViewerMaximized = false; // 查看器是否最大化
   }
 
   /**
@@ -199,6 +203,11 @@ class ArtifactManager {
         const mode = e.target.dataset.mode;
         this.setTextDisplayMode(mode);
       });
+    });
+
+    // 查看器最大化/还原
+    this.viewerMaximizeBtn?.addEventListener("click", () => {
+      this.toggleViewerMaximize();
     });
 
     // 最大化/还原
@@ -280,11 +289,24 @@ class ArtifactManager {
     this.isViewerOpen = false;
     this.selectedArtifact = null;
     this.currentTextContent = null;
+    this.isViewerMaximized = false;
+    this.viewerDialog?.classList.remove("maximized");
+    this.viewerMaximizeBtn.textContent = "⬜";
     this.viewerModal?.classList.add("hidden");
     this.viewerPanel.innerHTML = '<div class="empty-state">请选择一个工件</div>';
     this.artifactNameSpan.textContent = "未选择工件";
     this.viewSourceBtn.style.display = "none";
     this.textModeToggle.style.display = "none";
+  }
+
+  /**
+   * 切换查看器最大化
+   */
+  toggleViewerMaximize() {
+    this.isViewerMaximized = !this.isViewerMaximized;
+    this.viewerDialog?.classList.toggle("maximized", this.isViewerMaximized);
+    this.viewerMaximizeBtn.textContent = this.isViewerMaximized ? "❐" : "⬜";
+    this.viewerMaximizeBtn.title = this.isViewerMaximized ? "还原" : "最大化";
   }
 
   /**

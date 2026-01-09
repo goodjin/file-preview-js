@@ -2687,6 +2687,30 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.artifact-viewer-dialog.maximized {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+.viewer-maximize-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  color: #858585;
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.viewer-maximize-btn:hover {
+  background-color: #3e3e42;
+  color: #d4d4d4;
 }
 
 .artifact-viewer-header {
