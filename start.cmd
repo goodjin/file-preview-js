@@ -23,6 +23,11 @@ echo           Agent Society 启动脚本
 echo ============================================================
 echo.
 
+REM 尝试更新代码（忽略错误）
+echo [0/3] 尝试更新代码...
+git pull 2>nul || echo      git pull 跳过（可能未安装 git 或网络问题）
+echo.
+
 REM 检测 bun
 echo [1/3] 检测 bun 运行时...
 where bun >nul 2>nul

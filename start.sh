@@ -24,6 +24,11 @@ echo "           Agent Society 启动脚本"
 echo "============================================================"
 echo ""
 
+# 尝试更新代码（忽略错误）
+echo "[0/3] 尝试更新代码..."
+git pull 2>/dev/null || echo "     git pull 跳过（可能未安装 git 或网络问题）"
+echo ""
+
 # 检测 bun
 echo "[1/3] 检测 bun 运行时..."
 
