@@ -528,6 +528,9 @@ const ChatPanel = {
     
     // 构建图片缩略图
     const imagesHtml = this.renderMessageImages(message);
+    
+    // 生成唯一 ID 用于折叠控制
+    const detailsId = `tool-details-${message.id}`;
 
     return `
       <div class="message-item tool-call" data-message-id="${message.id}">
@@ -539,14 +542,20 @@ const ChatPanel = {
             <span class="message-time">${time}</span>
           </div>
           ${thinkingHtml}
-          <div class="tool-call-details">
-            <div class="tool-call-section">
-              <span class="tool-call-section-label">参数:</span>
-              <pre class="tool-call-args">${this.escapeHtml(argsDisplay)}</pre>
+          <div class="tool-call-details-wrapper">
+            <div class="tool-call-toggle" onclick="ChatPanel.toggleToolDetails('${detailsId}')">
+              <span class="tool-call-toggle-arrow" id="${detailsId}-arrow">▶</span>
+              <span class="tool-call-toggle-label">参数与结果</span>
             </div>
-            <div class="tool-call-section">
-              <span class="tool-call-section-label">结果:</span>
-              <pre class="tool-call-result">${this.escapeHtml(resultDisplay)}</pre>
+            <div class="tool-call-details hidden" id="${detailsId}">
+              <div class="tool-call-section">
+                <span class="tool-call-section-label">参数:</span>
+                <pre class="tool-call-args">${this.escapeHtml(argsDisplay)}</pre>
+              </div>
+              <div class="tool-call-section">
+                <span class="tool-call-section-label">结果:</span>
+                <pre class="tool-call-result">${this.escapeHtml(resultDisplay)}</pre>
+              </div>
             </div>
           </div>
           ${imagesHtml}
@@ -556,6 +565,20 @@ const ChatPanel = {
         </div>
       </div>
     `;
+  },
+
+  /**
+   * 切换工具调用详情的展开/折叠状态
+   * @param {string} id - 详情内容元素的 ID
+   */
+  toggleToolDetails(id) {
+    const contentEl = document.getElementById(id);
+    const arrowEl = document.getElementById(`${id}-arrow`);
+    
+    if (contentEl && arrowEl) {
+      contentEl.classList.toggle('hidden');
+      arrowEl.textContent = contentEl.classList.contains('hidden') ? '▶' : '▼';
+    }
   },
 
   /**

@@ -1496,6 +1496,42 @@ body {
   font-size: 14px;
 }
 
+/* 工具调用详情折叠包装器 */
+.tool-call-details-wrapper {
+  margin-top: 8px;
+  max-width: 500px;
+}
+
+/* 工具调用折叠切换按钮 */
+.tool-call-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 6px 10px;
+  background-color: #f0f4f8;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #555;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.tool-call-toggle:hover {
+  background-color: #e3e8ed;
+}
+
+.tool-call-toggle-arrow {
+  font-size: 10px;
+  color: #888;
+  transition: transform 0.2s;
+}
+
+.tool-call-toggle-label {
+  font-weight: 500;
+}
+
 .tool-call-details {
   background-color: #f8f9fa;
   border: 1px solid #e0e0e0;
@@ -1504,6 +1540,11 @@ body {
   margin-top: 8px;
   max-width: 500px;
   overflow: hidden;
+}
+
+/* 折叠状态 */
+.tool-call-details.hidden {
+  display: none;
 }
 
 .tool-call-section {
