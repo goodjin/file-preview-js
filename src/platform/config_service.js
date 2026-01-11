@@ -119,11 +119,12 @@ export class ConfigService {
     const content = await readFile(this.appLocalJsonPath, "utf8");
     config = JSON.parse(content);
 
-    // 只更新 llm 字段
+    // 只更新 llm 字段（如果没有传递新的 apiKey，保留原来的值）
+    const existingApiKey = config.llm?.apiKey || "";
     config.llm = {
       baseURL: llmConfig.baseURL || "",
       model: llmConfig.model || "",
-      apiKey: llmConfig.apiKey || "",
+      apiKey: llmConfig.apiKey || existingApiKey,
       maxConcurrentRequests: typeof llmConfig.maxConcurrentRequests === "number" 
         ? llmConfig.maxConcurrentRequests 
         : 2
@@ -249,13 +250,14 @@ export class ConfigService {
       throw new Error(`服务 "${serviceId}" 不存在`);
     }
 
-    // 更新服务
+    // 更新服务（如果没有传递新的 apiKey，保留原来的值）
+    const existingService = services[index];
     const updatedService = {
       id: service.id || serviceId,
       name: service.name || "",
       baseURL: service.baseURL || "",
       model: service.model || "",
-      apiKey: service.apiKey || "",
+      apiKey: service.apiKey || existingService.apiKey || "",
       maxConcurrentRequests: typeof service.maxConcurrentRequests === "number" 
         ? service.maxConcurrentRequests 
         : 2,
