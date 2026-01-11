@@ -427,7 +427,7 @@ export class HTTPServer {
     if (this._recentErrors.length > this._maxRecentEvents) {
       this._recentErrors.shift();
     }
-    void this.log.debug("存储错误事件", { agentId: event.agentId, errorType: event.errorType });
+    void this.log.info("存储错误事件", { agentId: event.agentId, errorType: event.errorType, message: event.message });
   }
   
   /**
@@ -440,7 +440,7 @@ export class HTTPServer {
     if (this._recentRetries.length > this._maxRecentEvents) {
       this._recentRetries.shift();
     }
-    void this.log.debug("存储重试事件", { agentId: event.agentId, attempt: event.attempt, maxRetries: event.maxRetries });
+    void this.log.info("存储重试事件", { agentId: event.agentId, attempt: event.attempt, maxRetries: event.maxRetries, errorMessage: event.errorMessage });
   }
   
   /**

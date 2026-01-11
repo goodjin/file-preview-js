@@ -180,7 +180,7 @@ export function getToolDefinitions() {
               },
               description: "要获取的元素类型（可选），不指定则获取所有类型。可选值：link（链接）、button（按钮）、input（输入框，自动包含 textarea）、text（文本块）、image（图片）、select（下拉框，自动包含 checkbox 和 radio）、textarea（文本域）、checkbox（复选框）、radio（单选框）"
             },
-            maxElements: { type: "number", description: "最大返回元素数量（可选），默认 100，避免返回过多数据" }
+            maxElements: { type: "number", description: "最大返回元素数量（可选），默认 1000，避免返回过多数据" }
           },
           required: ["tabId"]
         }

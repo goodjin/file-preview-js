@@ -575,6 +575,7 @@ const App = {
       
       // 处理错误事件
       if (result.errors && result.errors.length > 0) {
+        console.log('[checkEvents] 收到错误事件:', result.errors);
         for (const error of result.errors) {
           // 显示错误弹窗
           if (window.ErrorModal) {
@@ -595,6 +596,7 @@ const App = {
       
       // 处理重试事件
       if (result.retries && result.retries.length > 0) {
+        console.log('[checkEvents] 收到重试事件:', result.retries);
         for (const retry of result.retries) {
           // 显示重试提示
           const agentName = this._getAgentDisplayName(retry.agentId);

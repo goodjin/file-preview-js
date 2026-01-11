@@ -290,7 +290,7 @@ export class PageActions {
     if ("error" in result) return result;
     
     const { page } = result;
-    const { types, maxElements = 100 } = options;
+    const { types, maxElements = 1000 } = options;
 
     // 清理选择器（如果提供）
     let cleanedSelector = options.selector;
@@ -310,10 +310,10 @@ export class PageActions {
     const typeAliases = {
       input: ['input', 'textarea'],           // 输入类控件
       button: ['button'],                      // 按钮类
-      link: ['link'],                          // 链接类
-      text: ['text'],                          // 文本类
-      image: ['image'],                        // 图片类
-      select: ['select', 'checkbox', 'radio'], // 选择类控件
+      link: ['link','a'],              // 链接类
+      text: ['text','span','p','div'],                          // 文本类
+      image: ['image','img'],                        // 图片类
+      select: ['select', 'checkbox', 'radio','option'], // 选择类控件
       checkbox: ['checkbox'],
       radio: ['radio'],
       textarea: ['textarea']
