@@ -31,6 +31,12 @@ let moduleConfig = {};
  */
 export default {
   name: "chrome",
+  
+  // 工具组标识符，用于工具组管理
+  toolGroupId: "chrome",
+  
+  // 工具组描述
+  toolGroupDescription: "Chrome 浏览器控制工具，提供无头浏览器操作能力",
 
   /**
    * 初始化模块

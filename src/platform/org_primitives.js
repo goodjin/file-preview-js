@@ -23,6 +23,14 @@ function validateRole(role) {
   if (typeof role.rolePrompt !== "string") {
     errors.push("岗位提示词必须是字符串");
   }
+  // toolGroups 是可选的，如果存在则必须是字符串数组或 null
+  if (role.toolGroups !== undefined && role.toolGroups !== null) {
+    if (!Array.isArray(role.toolGroups)) {
+      errors.push("岗位工具组必须是数组或null");
+    } else if (!role.toolGroups.every(g => typeof g === "string")) {
+      errors.push("岗位工具组数组元素必须是字符串");
+    }
+  }
   return { valid: errors.length === 0, errors };
 }
 
@@ -363,8 +371,8 @@ export class OrgPrimitives {
 
   /**
    * 创建岗位（Role）。
-   * @param {{name:string, rolePrompt:string, createdBy?:string, llmServiceId?:string}} input
-   * @returns {Promise<{id:string, name:string, rolePrompt:string, llmServiceId:string|null}>}
+   * @param {{name:string, rolePrompt:string, createdBy?:string, llmServiceId?:string, toolGroups?:string[]}} input
+   * @returns {Promise<{id:string, name:string, rolePrompt:string, llmServiceId:string|null, toolGroups:string[]|null}>}
    */
   async createRole(input) {
     const existing = this.findRoleByName(input.name);
@@ -380,19 +388,20 @@ export class OrgPrimitives {
       createdBy: input.createdBy ?? null,
       createdAt: formatLocalTimestamp(),
       status: "active",  // 默认状态为活跃
-      llmServiceId: input.llmServiceId ?? null  // 新增：指定的 LLM 服务 ID
+      llmServiceId: input.llmServiceId ?? null,  // 指定的 LLM 服务 ID
+      toolGroups: Array.isArray(input.toolGroups) ? input.toolGroups : null  // 工具组列表，null 表示使用默认（全部工具组）
     };
     this._roles.set(id, role);
     await this.persist();
-    void this.log.info("创建岗位", { id, name: role.name, createdBy: role.createdBy, llmServiceId: role.llmServiceId });
+    void this.log.info("创建岗位", { id, name: role.name, createdBy: role.createdBy, llmServiceId: role.llmServiceId, toolGroups: role.toolGroups });
     return role;
   }
 
   /**
    * 更新岗位信息。
    * @param {string} roleId - 岗位ID
-   * @param {{rolePrompt?: string, llmServiceId?: string|null}} updates - 要更新的字段
-   * @returns {Promise<{id:string, name:string, rolePrompt:string, llmServiceId:string|null}|null>}
+   * @param {{rolePrompt?: string, llmServiceId?: string|null, toolGroups?: string[]|null}} updates - 要更新的字段
+   * @returns {Promise<{id:string, name:string, rolePrompt:string, llmServiceId:string|null, toolGroups:string[]|null}|null>}
    */
   async updateRole(roleId, updates) {
     const role = this._roles.get(roleId);
@@ -411,10 +420,20 @@ export class OrgPrimitives {
       role.llmServiceId = updates.llmServiceId === "" ? null : (updates.llmServiceId ?? null);
     }
     
+    // 更新工具组列表（允许设置为 null 表示使用默认的全部工具组）
+    if (updates.toolGroups !== undefined) {
+      if (Array.isArray(updates.toolGroups)) {
+        // 空数组也视为 null（使用默认的全部工具组）
+        role.toolGroups = updates.toolGroups.length > 0 ? updates.toolGroups : null;
+      } else {
+        role.toolGroups = null;
+      }
+    }
+    
     role.updatedAt = formatLocalTimestamp();
     
     await this.persist();
-    void this.log.info("更新岗位", { id: roleId, name: role.name, llmServiceId: role.llmServiceId });
+    void this.log.info("更新岗位", { id: roleId, name: role.name, llmServiceId: role.llmServiceId, toolGroups: role.toolGroups });
     return role;
   }
 

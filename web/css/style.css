@@ -1457,6 +1457,117 @@ body {
   border-color: #ccc;
 }
 
+/* ========== 工具组配置样式 ========== */
+.tool-groups-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tool-groups-default {
+  color: #999;
+  font-style: italic;
+}
+
+.tool-group-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border-radius: 12px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.tool-groups-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tool-groups-edit.hidden {
+  display: none;
+}
+
+.tool-groups-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+}
+
+.tool-group-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tool-group-checkbox:hover {
+  background-color: #e8f5e9;
+}
+
+.tool-group-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.tool-group-name {
+  font-family: monospace;
+  font-size: 13px;
+  color: #333;
+}
+
+.tool-group-count {
+  font-size: 12px;
+  color: #999;
+}
+
+.tool-groups-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: #fff3e0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #e65100;
+}
+
+.tool-groups-hint .hint-icon {
+  font-size: 14px;
+}
+
+.edit-tool-groups-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  margin-left: 8px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.edit-tool-groups-btn:hover {
+  opacity: 1;
+}
+
+.no-tool-groups {
+  color: #999;
+  font-style: italic;
+  padding: 12px;
+  text-align: center;
+}
+
 /* ========== 工具调用消息样式 ========== */
 .message-item.tool-call {
   flex-direction: row;

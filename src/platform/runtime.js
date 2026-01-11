@@ -18,6 +18,7 @@ import { validateMessageFormat } from "./message_validator.js";
 import { ModuleLoader } from "./module_loader.js";
 import { LlmServiceRegistry } from "./llm_service_registry.js";
 import { ModelSelector } from "./model_selector.js";
+import { ToolGroupManager } from "./tool_group_manager.js";
 
 // 导入子模块
 import { JavaScriptExecutor } from "./runtime/javascript_executor.js";
@@ -92,6 +93,8 @@ export class Runtime {
     this.modelSelector = null;
     /** @type {Map<string, LlmClient>} */
     this.llmClientPool = new Map();
+    // 工具组管理器（在 init() 中会重新初始化带 logger）
+    this.toolGroupManager = new ToolGroupManager({ registerBuiltins: false });
     
     // 初始化子模块（模块化架构）
     // 这些子模块封装了 Runtime 的具体功能实现
@@ -280,6 +283,14 @@ export class Runtime {
     this.commandExecutor = new CommandExecutor({ logger: this.loggerRoot.forModule("command") });
     // 重新初始化 ContactManager 带 logger
     this.contactManager = new ContactManager({ logger: this.loggerRoot.forModule("contact") });
+
+    // 初始化工具组管理器（带 logger，注册内置工具组）
+    this.toolGroupManager = new ToolGroupManager({ 
+      logger: this.loggerRoot.forModule("tool_groups"),
+      registerBuiltins: true 
+    });
+    // 用实际的工具定义更新内置工具组
+    this._registerBuiltinToolGroups();
 
     // 初始化模块加载器并加载配置中启用的模块
     this.moduleLoader = new ModuleLoader({ logger: this.loggerRoot.forModule("modules") });
@@ -869,10 +880,171 @@ export class Runtime {
   }
 
   /**
+   * 注册内置工具组的实际工具定义。
+   * 在 init() 中调用，用实际的工具定义替换 ToolGroupManager 中的占位符。
+   * @private
+   */
+  _registerBuiltinToolGroups() {
+    // 获取所有内置工具定义
+    const allTools = this.getToolDefinitions();
+    
+    // 工具名到工具组的映射
+    const toolGroupMapping = {
+      find_role_by_name: "org_management",
+      create_role: "org_management",
+      spawn_agent: "org_management",
+      spawn_agent_with_task: "org_management",
+      terminate_agent: "org_management",
+      send_message: "org_management",
+      put_artifact: "artifact",
+      get_artifact: "artifact",
+      read_file: "workspace",
+      write_file: "workspace",
+      list_files: "workspace",
+      get_workspace_info: "workspace",
+      run_command: "command",
+      run_javascript: "command",
+      http_request: "network",
+      compress_context: "context",
+      get_context_status: "context",
+      console_print: "console"
+    };
+    
+    // 按工具组分类
+    const toolsByGroup = {
+      org_management: [],
+      artifact: [],
+      workspace: [],
+      command: [],
+      network: [],
+      context: [],
+      console: []
+    };
+    
+    // 分类工具定义（去重）
+    const seenTools = new Set();
+    for (const tool of allTools) {
+      const toolName = tool?.function?.name;
+      if (!toolName || seenTools.has(toolName)) continue;
+      
+      const groupId = toolGroupMapping[toolName];
+      if (groupId && toolsByGroup[groupId]) {
+        toolsByGroup[groupId].push(tool);
+        seenTools.add(toolName);
+      }
+    }
+    
+    // 更新每个内置工具组的工具定义
+    for (const [groupId, tools] of Object.entries(toolsByGroup)) {
+      if (tools.length > 0) {
+        this.toolGroupManager.updateGroupTools(groupId, tools);
+      }
+    }
+    
+    void this.log.debug("内置工具组工具定义已更新", {
+      groups: Object.keys(toolsByGroup),
+      toolCounts: Object.fromEntries(
+        Object.entries(toolsByGroup).map(([k, v]) => [k, v.length])
+      )
+    });
+  }
+
+  /**
+   * 获取指定智能体可用的工具定义。
+   * 根据智能体岗位配置的工具组返回相应的工具定义。
+   * @param {string} agentId - 智能体ID
+   * @returns {any[]} 工具定义列表
+   */
+  getToolDefinitionsForAgent(agentId) {
+    // root 岗位硬编码只有 org_management
+    if (agentId === "root") {
+      return this.toolGroupManager.getToolDefinitions(["org_management"]);
+    }
+    
+    // 获取智能体元数据
+    const meta = this._agentMetaById.get(agentId);
+    if (!meta) {
+      // 智能体不存在，返回所有工具（向后兼容）
+      return this.getToolDefinitions();
+    }
+    
+    // 获取岗位信息
+    const role = this.org.getRole(meta.roleId);
+    if (!role) {
+      // 岗位不存在，返回所有工具（向后兼容）
+      return this.getToolDefinitions();
+    }
+    
+    // 获取岗位配置的工具组，未配置则使用全部工具组
+    const toolGroups = role.toolGroups ?? this.toolGroupManager.getAllGroupIds();
+    const builtinTools = this.toolGroupManager.getToolDefinitions(toolGroups);
+    
+    // 合并模块提供的工具定义（模块工具暂时对所有非 root 岗位可用）
+    return [...builtinTools, ...this.moduleLoader.getToolDefinitions()];
+  }
+
+  /**
+   * 检查工具是否对指定智能体可用。
+   * @param {string} agentId - 智能体ID
+   * @param {string} toolName - 工具名称
+   * @returns {boolean}
+   */
+  isToolAvailableForAgent(agentId, toolName) {
+    // 检查是否是模块工具（模块工具对所有非 root 岗位可用）
+    if (this.moduleLoader.hasToolName(toolName)) {
+      return agentId !== "root";
+    }
+    
+    // root 岗位硬编码只有 org_management
+    if (agentId === "root") {
+      return this.toolGroupManager.isToolInGroups(toolName, ["org_management"]);
+    }
+    
+    // 获取智能体元数据
+    const meta = this._agentMetaById.get(agentId);
+    if (!meta) {
+      // 智能体不存在，允许所有工具（向后兼容）
+      return true;
+    }
+    
+    // 获取岗位信息
+    const role = this.org.getRole(meta.roleId);
+    if (!role) {
+      // 岗位不存在，允许所有工具（向后兼容）
+      return true;
+    }
+    
+    // 获取岗位配置的工具组，未配置则使用全部工具组
+    const toolGroups = role.toolGroups ?? this.toolGroupManager.getAllGroupIds();
+    return this.toolGroupManager.isToolInGroups(toolName, toolGroups);
+  }
+
+  /**
    * 返回可供 LLM 工具调用的工具定义（OpenAI tools schema）。
    * @returns {any[]}
    */
+  /**
+   * 生成工具组可选值的描述文本。
+   * 从 toolGroupManager 动态获取所有已注册的工具组。
+   * @returns {string}
+   */
+  _generateToolGroupsDescription() {
+    const groups = this.toolGroupManager.listGroups();
+    if (groups.length === 0) {
+      return "工具组标识符列表，限制该岗位可用的工具函数。不指定则使用全部工具组。";
+    }
+    
+    const groupDescriptions = groups
+      .map(g => `${g.id}（${g.description}）`)
+      .join("、");
+    
+    return `工具组标识符列表，限制该岗位可用的工具函数。可选值：${groupDescriptions}。不指定则使用全部工具组。`;
+  }
+
   getToolDefinitions() {
+    // 动态生成工具组描述
+    const toolGroupsDescription = this._generateToolGroupsDescription();
+    
     return [
       {
         type: "function",
@@ -890,12 +1062,17 @@ export class Runtime {
         type: "function",
         function: {
           name: "create_role",
-          description: "创建岗位（Role），必须提供岗位名与岗位提示词。",
+          description: "创建岗位（Role），定义智能体的职责和行为规范。必须提供岗位名与岗位提示词。可通过 toolGroups 参数限制该岗位可用的工具函数，实现对大模型上下文长度的压缩。",
           parameters: {
             type: "object",
             properties: {
-              name: { type: "string" },
-              rolePrompt: { type: "string" }
+              name: { type: "string", description: "岗位名称，如 task_executor、web_crawler 等" },
+              rolePrompt: { type: "string", description: "岗位提示词，描述该岗位的职责、行为规范和工作边界" },
+              toolGroups: { 
+                type: "array", 
+                items: { type: "string" },
+                description: toolGroupsDescription
+              }
             },
             required: ["name", "rolePrompt"]
           }
@@ -1132,7 +1309,7 @@ export class Runtime {
         type: "function",
         function: {
           name: "http_request",
-          description: "发起 HTTPS 请求访问外部 API 或网页。仅支持 HTTPS 协议。请求和响应数据会被记录到日志中。",
+          description: "发起 HTTP/HTTPS 请求调用已知的、确定的 API 接口。【适用场景】调用 REST API、JSON API、GraphQL 等有明确接口规范的服务；获取结构化数据（JSON、XML 等）；与后端服务进行程序化交互。【不适用场景】如需模拟人类浏览网页、访问需要 JavaScript 渲染的动态页面、执行点击/输入等页面交互、处理登录/验证码等复杂流程，请使用 chrome 工具组（chrome_launch、chrome_navigate、chrome_screenshot 等）。",
           parameters: {
             type: "object",
             properties: {
@@ -2140,6 +2317,21 @@ export class Runtime {
   }
 
   /**
+   * 格式化工具组信息，用于注入到系统提示词中。
+   * @returns {string}
+   * @private
+   */
+  _formatToolGroupsInfo() {
+    const groups = this.toolGroupManager.listGroups();
+    if (!groups || groups.length === 0) {
+      return "";
+    }
+    
+    const lines = groups.map(g => `- ${g.id}：${g.description}（${g.tools.join("、")}）`);
+    return `\n\n【可用工具组列表】\n${lines.join("\n")}`;
+  }
+
+  /**
    * 生成当前智能体的 system prompt（包含工具调用规则）。
    * @param {any} ctx
    * @returns {string}
@@ -2152,7 +2344,9 @@ export class Runtime {
 
     if (ctx.agent?.id === "root") {
       const rootPrompt = ctx.agent?.rolePrompt ?? "";
-      return rootPrompt + runtimeInfo;
+      // 动态注入可用工具组列表
+      const toolGroupsInfo = this._formatToolGroupsInfo();
+      return rootPrompt + runtimeInfo + toolGroupsInfo;
     }
 
     const base = ctx.systemBasePrompt ?? "";

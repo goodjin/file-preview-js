@@ -83,12 +83,17 @@ export class ToolExecutor {
         type: "function",
         function: {
           name: "create_role",
-          description: "创建岗位（Role），必须提供岗位名与岗位提示词。",
+          description: "创建岗位（Role），必须提供岗位名与岗位提示词。可选指定工具组列表，限制该岗位可用的工具函数。",
           parameters: {
             type: "object",
             properties: {
               name: { type: "string" },
-              rolePrompt: { type: "string" }
+              rolePrompt: { type: "string" },
+              toolGroups: { 
+                type: "array", 
+                items: { type: "string" },
+                description: "工具组标识符列表，限制该岗位可用的工具函数。不指定则使用全部工具组。"
+              }
             },
             required: ["name", "rolePrompt"]
           }
@@ -498,7 +503,8 @@ export class ToolExecutor {
     const result = await ctx.tools.createRole({ 
       name: args.name, 
       rolePrompt: args.rolePrompt,
-      llmServiceId
+      llmServiceId,
+      toolGroups: args.toolGroups
     });
     
     if (isRoot && isFromUser && taskId) {

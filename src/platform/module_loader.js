@@ -16,6 +16,7 @@ export class ModuleLoader {
     this.modulesDir = options.modulesDir ?? path.resolve(process.cwd(), "modules");
     this._modules = new Map(); // moduleName -> moduleInstance
     this._toolNameToModule = new Map(); // toolName -> moduleName
+    this._moduleToolGroupIds = new Map(); // moduleName -> toolGroupId
     this._runtime = null;
     this._initialized = false;
   }
@@ -143,6 +144,32 @@ export class ModuleLoader {
           });
         }
         this._toolNameToModule.set(toolName, moduleName);
+      }
+    }
+
+    // 向 ToolGroupManager 注册模块工具组
+    if (this._runtime?.toolGroupManager && tools.length > 0) {
+      const toolGroupId = moduleInstance.toolGroupId ?? moduleName;
+      const toolGroupDescription = moduleInstance.toolGroupDescription ?? `${moduleName} 模块提供的工具`;
+      
+      const result = this._runtime.toolGroupManager.registerGroup(toolGroupId, {
+        description: toolGroupDescription,
+        tools: tools
+      });
+      
+      if (result.ok) {
+        this._moduleToolGroupIds.set(moduleName, toolGroupId);
+        void this.log.info("模块工具组注册成功", { 
+          module: moduleName, 
+          toolGroupId,
+          toolCount: tools.length 
+        });
+      } else {
+        void this.log.warn("模块工具组注册失败", { 
+          module: moduleName, 
+          toolGroupId,
+          error: result.error 
+        });
       }
     }
 
@@ -295,7 +322,7 @@ export class ModuleLoader {
 
   /**
    * 获取所有已加载模块的信息。
-   * @returns {Array<{name: string, toolCount: number, hasWebComponent: boolean, hasHttpHandler: boolean}>}
+   * @returns {Array<{name: string, toolCount: number, toolGroupId: string, hasWebComponent: boolean, hasHttpHandler: boolean}>}
    */
   getLoadedModules() {
     const modules = [];
@@ -305,12 +332,30 @@ export class ModuleLoader {
       modules.push({
         name: moduleName,
         toolCount: tools.length,
+        toolGroupId: this._moduleToolGroupIds.get(moduleName) ?? moduleName,
         hasWebComponent: typeof moduleInstance.getWebComponent === "function",
         hasHttpHandler: typeof moduleInstance.getHttpHandler === "function"
       });
     }
 
     return modules;
+  }
+
+  /**
+   * 获取模块的工具组ID。
+   * @param {string} moduleName - 模块名称
+   * @returns {string|null}
+   */
+  getModuleToolGroupId(moduleName) {
+    return this._moduleToolGroupIds.get(moduleName) ?? null;
+  }
+
+  /**
+   * 获取所有模块的工具组ID列表。
+   * @returns {string[]}
+   */
+  getAllModuleToolGroupIds() {
+    return Array.from(this._moduleToolGroupIds.values());
   }
 
   /**
@@ -322,6 +367,17 @@ export class ModuleLoader {
 
     for (const [moduleName, moduleInstance] of this._modules) {
       try {
+        // 从 ToolGroupManager 注销模块工具组
+        const toolGroupId = this._moduleToolGroupIds.get(moduleName);
+        if (toolGroupId && this._runtime?.toolGroupManager) {
+          const result = this._runtime.toolGroupManager.unregisterGroup(toolGroupId);
+          if (result.ok) {
+            void this.log.debug("模块工具组注销成功", { module: moduleName, toolGroupId });
+          } else {
+            void this.log.warn("模块工具组注销失败", { module: moduleName, toolGroupId, error: result.error });
+          }
+        }
+        
         if (typeof moduleInstance.shutdown === "function") {
           void this.log.debug("关闭模块", { module: moduleName });
           await moduleInstance.shutdown();
@@ -334,6 +390,7 @@ export class ModuleLoader {
 
     this._modules.clear();
     this._toolNameToModule.clear();
+    this._moduleToolGroupIds.clear();
     this._initialized = false;
     
     void this.log.info("所有模块已关闭");

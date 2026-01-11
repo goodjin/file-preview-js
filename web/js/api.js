@@ -182,6 +182,26 @@ const API = {
   },
 
   /**
+   * 获取所有可用工具组列表
+   * @returns {Promise<{toolGroups: Array, count: number}>} 工具组列表
+   */
+  async getToolGroups() {
+    return this.get('/tool-groups');
+  },
+
+  /**
+   * 更新岗位的工具组配置
+   * @param {string} roleId - 岗位 ID
+   * @param {string[]|null} toolGroups - 工具组列表（null 表示使用默认的全部工具组）
+   * @returns {Promise<object>} 更新结果
+   */
+  async updateRoleToolGroups(roleId, toolGroups) {
+    return this.post(`/role/${encodeURIComponent(roleId)}/tool-groups`, {
+      toolGroups: toolGroups,
+    });
+  },
+
+  /**
    * 获取指定智能体的对话历史（包含思考过程）
    * @param {string} agentId - 智能体 ID
    * @returns {Promise<{agentId: string, messages: Array, thinkingMap: object}>} 对话历史

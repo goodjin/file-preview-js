@@ -13,6 +13,7 @@
 - 调用 create_role 工具
 - 必须提供 name 参数（岗位名称，如"task_executor"、"web_crawler"等）
 - 必须提供 rolePrompt 参数（详细的岗位职责描述）
+- 可选提供 toolGroups 参数（工具组标识符数组，限制该岗位可用的工具函数，不指定则使用全部工具组）
 
 步骤2：创建子智能体实例
 - 调用 spawn_agent 工具
@@ -30,8 +31,17 @@
 ```
 1. create_role({
    "name": "web_task_executor",
-   "rolePrompt": "负责执行网页相关任务，包括打开网站、截图、遍历链接等操作。需要向用户反馈进度，向上级汇报结果。"
+   "rolePrompt": "负责执行网页相关任务，包括打开网站、截图、遍历链接等操作。需要向用户反馈进度，向上级汇报结果。",
+   "toolGroups": ["org_management", "artifact", "chrome"]
 })
+// toolGroups 参数说明：
+// - 通过 toolGroups 可以限制该岗位可用的工具函数
+// - 可选值会根据系统已注册的工具组动态生成，调用 create_role 时会在参数描述中列出
+// 
+// 【重要】选择工具组的原则：
+// - 需要访问网页、截图、页面交互 → 使用 chrome 工具组
+// - 需要调用已知的 REST API / JSON API → 使用 network 工具组
+// - 根据任务需要选择最小必要的工具组集合
 
 2. spawn_agent({
    "roleId": "刚创建的岗位ID",

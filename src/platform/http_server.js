@@ -13,7 +13,9 @@ import { createNoopModuleLogger } from "./logger.js";
  * - POST /api/send - 发送消息到指定智能体
  * - GET /api/messages/:taskId - 查询任务消息（按taskId）
  * - GET /api/agents - 列出所有智能体（含持久化数据）
- * - GET /api/roles - 列出所有岗位及智能体数量
+ * - GET /api/roles - 列出所有岗位及智能体数量（含 toolGroups）
+ * - GET /api/tool-groups - 获取所有可用工具组列表
+ * - POST /api/role/:roleId/tool-groups - 更新岗位工具组配置
  * - GET /api/agent-messages/:agentId - 查询智能体消息（按agentId）
  * - GET /api/org/tree - 获取组织层级树结构
  * - GET /api/org/role-tree - 获取岗位从属关系树结构
@@ -600,6 +602,18 @@ export class HTTPServer {
         this._handleGetAgents(res);
       } else if (method === "GET" && pathname === "/api/roles") {
         this._handleGetRoles(res);
+      } else if (method === "GET" && pathname === "/api/tool-groups") {
+        // 获取工具组列表
+        this._handleGetToolGroups(res);
+      } else if (method === "POST" && pathname.startsWith("/api/role/") && pathname.endsWith("/tool-groups")) {
+        // 更新岗位工具组: POST /api/role/:roleId/tool-groups
+        const match = pathname.match(/^\/api\/role\/(.+)\/tool-groups$/);
+        if (match) {
+          const roleId = decodeURIComponent(match[1]);
+          this._handleUpdateRoleToolGroups(req, roleId, res);
+        } else {
+          this._sendJson(res, 404, { error: "not_found", path: pathname });
+        }
       } else if (method === "DELETE" && pathname.startsWith("/api/agent/")) {
         // 删除智能体: DELETE /api/agent/:agentId
         const agentId = decodeURIComponent(pathname.slice("/api/agent/".length));
@@ -1311,7 +1325,8 @@ export class HTTPServer {
           createdBy: null,
           createdAt: null,
           agentCount: 1,
-          llmServiceId: null
+          llmServiceId: null,
+          toolGroups: ["org_management"]  // root 岗位硬编码为 org_management
         },
         {
           id: "user",
@@ -1320,7 +1335,8 @@ export class HTTPServer {
           createdBy: null,
           createdAt: null,
           agentCount: 1,
-          llmServiceId: null
+          llmServiceId: null,
+          toolGroups: null  // user 不需要工具组
         },
         ...roles.map(r => ({
           id: r.id,
@@ -1329,7 +1345,8 @@ export class HTTPServer {
           createdBy: r.createdBy,
           createdAt: r.createdAt,
           agentCount: agentCountByRole.get(r.id) ?? 0,
-          llmServiceId: r.llmServiceId ?? null
+          llmServiceId: r.llmServiceId ?? null,
+          toolGroups: r.toolGroups ?? null  // null 表示使用默认的全部工具组
         }))
       ];
 
@@ -3235,5 +3252,135 @@ export class HTTPServer {
       void this.log.error("重新加载 LLM Service Registry 失败", { error: err.message });
       throw err;
     }
+  }
+
+  /**
+   * 处理 GET /api/tool-groups - 获取所有可用工具组列表。
+   * @param {import("node:http").ServerResponse} res
+   */
+  _handleGetToolGroups(res) {
+    try {
+      if (!this.society || !this.society.runtime) {
+        this._sendJson(res, 500, { error: "society_not_initialized" });
+        return;
+      }
+
+      const toolGroupManager = this.society.runtime.toolGroupManager;
+      if (!toolGroupManager) {
+        this._sendJson(res, 500, { error: "tool_group_manager_not_initialized" });
+        return;
+      }
+
+      const groups = toolGroupManager.listGroups();
+      
+      void this.log.debug("HTTP查询工具组列表", { count: groups.length });
+      this._sendJson(res, 200, {
+        toolGroups: groups,
+        count: groups.length
+      });
+    } catch (err) {
+      void this.log.error("查询工具组列表失败", { error: err.message, stack: err.stack });
+      this._sendJson(res, 500, { error: "internal_error", message: err.message });
+    }
+  }
+
+  /**
+   * 处理 POST /api/role/:roleId/tool-groups - 更新岗位工具组配置。
+   * @param {import("node:http").IncomingMessage} req
+   * @param {string} roleId
+   * @param {import("node:http").ServerResponse} res
+   */
+  _handleUpdateRoleToolGroups(req, roleId, res) {
+    let body = "";
+    req.on("data", chunk => { body += chunk; });
+    req.on("end", async () => {
+      try {
+        if (!this.society || !this.society.runtime) {
+          this._sendJson(res, 500, { error: "society_not_initialized" });
+          return;
+        }
+
+        // 不允许修改 root 和 user 岗位的工具组
+        if (roleId === "root" || roleId === "user") {
+          this._sendJson(res, 400, { 
+            error: "cannot_modify_system_role", 
+            message: "不能修改系统岗位的工具组配置" 
+          });
+          return;
+        }
+
+        const org = this.society.runtime.org;
+        if (!org) {
+          this._sendJson(res, 500, { error: "org_not_initialized" });
+          return;
+        }
+
+        const role = org.getRole(roleId);
+        if (!role) {
+          this._sendJson(res, 404, { error: "role_not_found", roleId });
+          return;
+        }
+
+        let data;
+        try {
+          data = JSON.parse(body);
+        } catch (parseErr) {
+          this._sendJson(res, 400, { error: "invalid_json", message: parseErr.message });
+          return;
+        }
+
+        // toolGroups 可以是数组或 null
+        const toolGroups = data.toolGroups;
+        if (toolGroups !== null && !Array.isArray(toolGroups)) {
+          this._sendJson(res, 400, { 
+            error: "invalid_tool_groups", 
+            message: "toolGroups 必须是数组或 null" 
+          });
+          return;
+        }
+
+        // 验证工具组是否存在
+        if (Array.isArray(toolGroups) && toolGroups.length > 0) {
+          const toolGroupManager = this.society.runtime.toolGroupManager;
+          if (toolGroupManager) {
+            const invalidGroups = toolGroups.filter(g => !toolGroupManager.hasGroup(g));
+            if (invalidGroups.length > 0) {
+              this._sendJson(res, 400, { 
+                error: "invalid_tool_group_ids", 
+                message: `以下工具组不存在: ${invalidGroups.join(", ")}`,
+                invalidGroups 
+              });
+              return;
+            }
+          }
+        }
+
+        // 更新岗位
+        const updatedRole = await org.updateRole(roleId, { toolGroups });
+        
+        if (!updatedRole) {
+          this._sendJson(res, 500, { error: "update_failed" });
+          return;
+        }
+
+        void this.log.info("HTTP更新岗位工具组", { 
+          roleId, 
+          roleName: role.name, 
+          toolGroups: updatedRole.toolGroups 
+        });
+        
+        this._sendJson(res, 200, { 
+          ok: true, 
+          role: {
+            id: updatedRole.id,
+            name: updatedRole.name,
+            toolGroups: updatedRole.toolGroups
+          }
+        });
+      } catch (err) {
+        void this.log.error("更新岗位工具组失败", { roleId, error: err.message, stack: err.stack });
+        this._sendJson(res, 500, { error: "internal_error", message: err.message });
+      }
+    });
   }
 }

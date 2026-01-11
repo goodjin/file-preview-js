@@ -14,6 +14,9 @@ const RoleDetailModal = {
   
   // LLM 服务列表缓存
   llmServices: null,
+  
+  // 工具组列表缓存
+  toolGroups: null,
 
   /**
    * 初始化组件
@@ -47,6 +50,22 @@ const RoleDetailModal = {
     
     // 预加载 LLM 服务列表
     this.loadLlmServices();
+    
+    // 预加载工具组列表
+    this.loadToolGroups();
+  },
+
+  /**
+   * 加载工具组列表
+   */
+  async loadToolGroups() {
+    try {
+      const result = await API.getToolGroups();
+      this.toolGroups = result.toolGroups || [];
+    } catch (error) {
+      console.error('加载工具组列表失败:', error);
+      this.toolGroups = [];
+    }
   },
 
   /**
@@ -102,6 +121,11 @@ const RoleDetailModal = {
     // 确保 LLM 服务列表已加载
     if (!this.llmServices) {
       await this.loadLlmServices();
+    }
+    
+    // 确保工具组列表已加载
+    if (!this.toolGroups) {
+      await this.loadToolGroups();
     }
     
     this.renderContent(role, agents);
@@ -189,6 +213,34 @@ const RoleDetailModal = {
           </div>
         </div>
         ${isSystemRole ? `<div class="hint-text">系统岗位不可修改</div>` : ''}
+      </div>
+
+      <!-- 工具组配置 -->
+      <div class="detail-section">
+        <h4 class="section-title">
+          工具组配置
+          ${!isSystemRole ? `<button class="edit-tool-groups-btn" onclick="RoleDetailModal.toggleToolGroupsEditMode()" title="修改">✏️</button>` : ''}
+        </h4>
+        <div id="tool-groups-view" class="detail-item">
+          <div class="detail-label">可用工具组</div>
+          <div class="detail-value tool-groups-display">
+            ${this.renderToolGroupsDisplay(role.toolGroups)}
+          </div>
+        </div>
+        <div id="tool-groups-edit" class="tool-groups-edit hidden">
+          <div class="tool-groups-checkboxes">
+            ${this.renderToolGroupsCheckboxes(role.toolGroups)}
+          </div>
+          <div class="tool-groups-hint">
+            <span class="hint-icon">💡</span>
+            <span>不选择任何工具组将使用默认的全部工具组</span>
+          </div>
+          <div class="edit-actions">
+            <button class="cancel-btn" onclick="RoleDetailModal.cancelToolGroupsEdit()">取消</button>
+            <button class="save-btn" onclick="RoleDetailModal.saveToolGroups()">保存</button>
+          </div>
+        </div>
+        ${isSystemRole ? `<div class="hint-text">${role.id === 'root' ? 'root 岗位仅使用组织管理工具' : '系统岗位不可修改'}</div>` : ''}
       </div>
 
       <!-- 智能体统计 -->
@@ -349,6 +401,126 @@ const RoleDetailModal = {
       }
     } catch (error) {
       console.error('保存大模型服务失败:', error);
+      Toast.show('保存失败: ' + error.message, 'error');
+    }
+  },
+
+  /**
+   * 渲染工具组显示
+   * @param {string[]|null} toolGroups - 工具组列表
+   * @returns {string} HTML 字符串
+   */
+  renderToolGroupsDisplay(toolGroups) {
+    if (!toolGroups || toolGroups.length === 0) {
+      return '<span class="tool-groups-default">全部工具组（默认）</span>';
+    }
+    
+    return toolGroups.map(groupId => {
+      const group = this.toolGroups?.find(g => g.id === groupId);
+      const name = group ? group.id : groupId;
+      const description = group?.description || '';
+      return `<span class="tool-group-tag" title="${this.escapeHtml(description)}">${this.escapeHtml(name)}</span>`;
+    }).join('');
+  },
+
+  /**
+   * 渲染工具组复选框
+   * @param {string[]|null} selectedGroups - 已选中的工具组
+   * @returns {string} HTML 字符串
+   */
+  renderToolGroupsCheckboxes(selectedGroups) {
+    if (!this.toolGroups || this.toolGroups.length === 0) {
+      return '<div class="no-tool-groups">暂无可用工具组</div>';
+    }
+    
+    const selectedSet = new Set(selectedGroups || []);
+    
+    return this.toolGroups.map(group => {
+      const checked = selectedSet.has(group.id) ? 'checked' : '';
+      const toolList = group.tools?.join(', ') || '';
+      return `
+        <label class="tool-group-checkbox" title="${this.escapeHtml(group.description || '')}\n工具: ${this.escapeHtml(toolList)}">
+          <input type="checkbox" name="toolGroup" value="${this.escapeHtml(group.id)}" ${checked}>
+          <span class="tool-group-name">${this.escapeHtml(group.id)}</span>
+          <span class="tool-group-count">(${group.toolCount || 0})</span>
+        </label>
+      `;
+    }).join('');
+  },
+
+  /**
+   * 切换工具组编辑模式
+   */
+  toggleToolGroupsEditMode() {
+    const viewEl = document.getElementById('tool-groups-view');
+    const editEl = document.getElementById('tool-groups-edit');
+    
+    if (viewEl && editEl) {
+      viewEl.classList.add('hidden');
+      editEl.classList.remove('hidden');
+    }
+  },
+
+  /**
+   * 取消工具组编辑
+   */
+  cancelToolGroupsEdit() {
+    const viewEl = document.getElementById('tool-groups-view');
+    const editEl = document.getElementById('tool-groups-edit');
+    
+    if (viewEl && editEl) {
+      viewEl.classList.remove('hidden');
+      editEl.classList.add('hidden');
+      
+      // 恢复原始选择
+      const checkboxes = editEl.querySelectorAll('input[name="toolGroup"]');
+      const selectedSet = new Set(this.currentRole?.toolGroups || []);
+      checkboxes.forEach(cb => {
+        cb.checked = selectedSet.has(cb.value);
+      });
+    }
+  },
+
+  /**
+   * 保存工具组设置
+   */
+  async saveToolGroups() {
+    if (!this.currentRole) return;
+    
+    const checkboxes = document.querySelectorAll('#tool-groups-edit input[name="toolGroup"]:checked');
+    const selectedGroups = Array.from(checkboxes).map(cb => cb.value);
+    
+    // 如果没有选择任何工具组，设为 null（使用默认的全部工具组）
+    const toolGroups = selectedGroups.length > 0 ? selectedGroups : null;
+    
+    try {
+      const result = await API.updateRoleToolGroups(this.currentRole.id, toolGroups);
+      
+      if (result.ok && result.role) {
+        // 更新本地数据
+        this.currentRole.toolGroups = result.role.toolGroups;
+        
+        // 更新 App 中的岗位数据
+        if (window.App?.roles) {
+          const roleIndex = window.App.roles.findIndex(r => r.id === this.currentRole.id);
+          if (roleIndex !== -1) {
+            window.App.roles[roleIndex].toolGroups = result.role.toolGroups;
+          }
+        }
+        
+        // 更新显示
+        const displayEl = document.querySelector('#tool-groups-view .tool-groups-display');
+        if (displayEl) {
+          displayEl.innerHTML = this.renderToolGroupsDisplay(result.role.toolGroups);
+        }
+        
+        // 退出编辑模式
+        this.cancelToolGroupsEdit();
+        
+        Toast.show('工具组配置已更新', 'success');
+      }
+    } catch (error) {
+      console.error('保存工具组配置失败:', error);
       Toast.show('保存失败: ' + error.message, 'error');
     }
   },
