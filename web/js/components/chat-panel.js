@@ -11,6 +11,7 @@ const ChatPanel = {
   messagesById: new Map(), // 消息 ID 索引
   thinkingMap: {},       // 思考过程映射（tool_call_id -> reasoning_content）
   isUploading: false,    // 是否正在上传附件
+  autoScroll: true,      // 是否自动滚动到底部
 
   // DOM 元素引用
   headerTitle: null,
@@ -64,6 +65,9 @@ const ChatPanel = {
         this._onAttachmentStateChange(state);
       });
     }
+    
+    // 初始化自动滚动按钮
+    this.initAutoScrollButton();
     
     // 绑定上传按钮事件
     this._bindUploadEvents();
@@ -875,9 +879,53 @@ const ChatPanel = {
    * 滚动到底部
    */
   scrollToBottom() {
-    if (this.messageList) {
+    if (this.messageList && this.autoScroll) {
       this.messageList.scrollTop = this.messageList.scrollHeight;
     }
+  },
+
+  /**
+   * 切换自动滚动状态
+   */
+  toggleAutoScroll() {
+    this.autoScroll = !this.autoScroll;
+    this.updateAutoScrollButton();
+    if (this.autoScroll) {
+      this.scrollToBottom();
+    }
+  },
+
+  /**
+   * 更新自动滚动按钮状态
+   */
+  updateAutoScrollButton() {
+    const btn = document.getElementById('auto-scroll-btn');
+    if (btn) {
+      btn.classList.toggle('active', this.autoScroll);
+      btn.title = this.autoScroll ? '自动滚动：开' : '自动滚动：关';
+    }
+  },
+
+  /**
+   * 初始化自动滚动按钮
+   */
+  initAutoScrollButton() {
+    const messageListContainer = document.querySelector('.message-list');
+    if (!messageListContainer) return;
+    
+    // 检查按钮是否已存在
+    if (document.getElementById('auto-scroll-btn')) return;
+    
+    const btn = document.createElement('button');
+    btn.id = 'auto-scroll-btn';
+    btn.className = 'auto-scroll-btn active';
+    btn.title = '自动滚动：开';
+    btn.innerHTML = '⬇';
+    btn.onclick = () => this.toggleAutoScroll();
+    
+    // 将按钮添加到消息列表容器的父元素
+    messageListContainer.parentElement.style.position = 'relative';
+    messageListContainer.parentElement.appendChild(btn);
   },
 
   /**

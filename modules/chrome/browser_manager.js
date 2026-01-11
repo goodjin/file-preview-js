@@ -62,7 +62,7 @@ export class BrowserManager {
 
   /**
    * 启动新的浏览器实例
-   * @param {{headless?: boolean, args?: string[], executablePath?: string}} options
+   * @param {{headless?: boolean, executablePath?: string}} options
    * @returns {Promise<{ok: boolean, browserId: string, createdAt: string}>}
    */
   async launch(options = {}) {
@@ -70,7 +70,6 @@ export class BrowserManager {
     const defaultHeadless = this.config.headless ?? true;
     const {
       headless = defaultHeadless,
-      args = [],
       executablePath
     } = options;
 
@@ -84,10 +83,9 @@ export class BrowserManager {
         headless: headless ? "new" : false,
         executablePath: chromePath,
         args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          ...args
+          // "--no-sandbox",
+          // "--disable-setuid-sandbox",
+          // "--disable-dev-shm-usage"
         ]
       });
 

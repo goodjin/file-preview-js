@@ -23,13 +23,7 @@ export function getToolDefinitions() {
         description: "启动一个新的 Chrome 浏览器实例。这是使用 chrome 工具组的第一步，启动后会返回 browserId 用于后续操作。",
         parameters: {
           type: "object",
-          properties: {
-            args: {
-              type: "array",
-              items: { type: "string" },
-              description: "Chrome 启动参数（可选），如 --headless、--disable-gpu 等"
-            }
-          }
+          properties: {}
         }
       }
     },
