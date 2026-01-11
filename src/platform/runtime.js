@@ -2579,6 +2579,73 @@ export class Runtime {
   }
 
   /**
+   * 重新加载默认 LLM Client。
+   * 从配置文件重新读取 LLM 配置并创建新的 LlmClient 实例。
+   * @returns {Promise<void>}
+   */
+  async reloadLlmClient() {
+    try {
+      // 重新加载配置
+      const newConfig = await loadConfig(this.configPath, { dataDir: this.dataDir });
+      
+      if (!newConfig.llm) {
+        void this.log.warn("配置文件中没有 LLM 配置");
+        return;
+      }
+
+      // 创建新的 LlmClient 实例
+      const newLlmClient = new LlmClient({
+        ...newConfig.llm,
+        logger: this.loggerRoot.forModule("llm")
+      });
+
+      // 替换旧的 LlmClient
+      this.llm = newLlmClient;
+      
+      // 更新配置中的 llm 部分
+      this.config.llm = newConfig.llm;
+
+      void this.log.info("默认 LLM Client 已重新加载", {
+        baseURL: newConfig.llm.baseURL,
+        model: newConfig.llm.model
+      });
+    } catch (err) {
+      const message = err && typeof err.message === "string" ? err.message : String(err);
+      void this.log.error("重新加载 LLM Client 失败", { error: message });
+      throw err;
+    }
+  }
+
+  /**
+   * 重新加载 LLM 服务注册表。
+   * 从配置文件重新读取服务配置并清空客户端池。
+   * @returns {Promise<void>}
+   */
+  async reloadLlmServiceRegistry() {
+    try {
+      // 清空现有的客户端池
+      this.llmClientPool.clear();
+      void this.log.info("LLM 客户端池已清空");
+
+      // 重新加载服务注册表
+      if (this.serviceRegistry) {
+        const result = await this.serviceRegistry.load();
+        void this.log.info("LLM 服务注册表已重新加载", {
+          loaded: result.loaded,
+          serviceCount: result.services.length,
+          errors: result.errors.length
+        });
+      } else {
+        void this.log.warn("服务注册表未初始化，跳过重新加载");
+      }
+    } catch (err) {
+      const message = err && typeof err.message === "string" ? err.message : String(err);
+      void this.log.error("重新加载 LLM 服务注册表失败", { error: message });
+      throw err;
+    }
+  }
+
+  /**
    * 获取智能体所属的 taskId。
    * 通过追溯智能体的创建链，找到由 root 创建的入口智能体对应的 taskId。
    * @param {string} agentId
