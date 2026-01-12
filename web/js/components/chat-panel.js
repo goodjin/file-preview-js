@@ -732,7 +732,7 @@ const ChatPanel = {
       if (result !== undefined && result !== null) {
         const resultStr = JSON.stringify(result, null, 2);
         // 如果结果太长，截断显示
-        resultDisplay = resultStr.length > 200 ? resultStr.substring(0, 200) + '...' : resultStr;
+        resultDisplay = resultStr.length > 50000 ? resultStr.substring(0, 50000) + '...' : resultStr;
       } else {
         resultDisplay = '(无返回值)';
       }

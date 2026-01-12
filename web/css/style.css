@@ -1580,8 +1580,9 @@ body {
 }
 
 /* ========== 工具调用消息样式 ========== */
+/* 工具调用消息右对齐，看起来像智能体的自言自语 */
 .message-item.tool-call {
-  flex-direction: row;
+  flex-direction: row-reverse;
 }
 
 .message-item.tool-call .message-avatar {
@@ -1591,10 +1592,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-left: 8px;
+  margin-right: 0;
 }
 
 .message-item.tool-call .message-content {
-  align-items: flex-start;
+  align-items: flex-end;
 }
 
 .message-item.tool-call .message-header {
