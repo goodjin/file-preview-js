@@ -735,6 +735,9 @@ export class Runtime {
     const maxConcurrent = this.llm?.concurrencyController?.maxConcurrentRequests ?? 3;
     
     while (!this._stopRequested) {
+      // 检查并投递到期的延迟消息
+      this.bus.deliverDueMessages();
+      
       // 尝试调度新的消息处理
       const scheduled = await this._scheduleMessageProcessing(maxConcurrent);
       
@@ -752,9 +755,21 @@ export class Runtime {
     }
     
     if (this._forceExit) {
+      // 强制退出时记录未投递的延迟消息
+      const remainingDelayed = this.bus.getDelayedCount();
+      if (remainingDelayed > 0) {
+        void this.log.warn("强制退出，丢弃延迟消息", { count: remainingDelayed });
+      }
       void this.log.info("强制退出，跳过等待活跃消息");
       process.exit(1);
     }
+    
+    // 优雅关闭时强制投递所有延迟消息
+    const forcedCount = this.bus.forceDeliverAllDelayed();
+    if (forcedCount > 0) {
+      void this.log.info("关闭时强制投递延迟消息", { count: forcedCount });
+    }
+    
     // 等待所有正在处理的消息完成（除非强制退出）
     while (this._activeProcessingAgents.size > 0 && !this._forceExit) {
       void this.log.info("等待活跃消息处理完成", { 
