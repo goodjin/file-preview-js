@@ -299,14 +299,44 @@ export class HTTPServer {
    * @returns {Promise<void>}
    */
   async _storeMessage(message) {
-    // 去重检查
-    if (this._messagesById.has(message.id)) {
+    // 检查是否是延迟消息的投递
+    const existingMessage = this._messagesById.get(message.id);
+    if (existingMessage) {
+      // 如果是延迟消息投递（有 deliveredAt 字段），需要存储到收件人的消息列表
+      if (message.deliveredAt && existingMessage.scheduledDeliveryTime) {
+        // 创建收件人视角的消息（用实际投递时间作为 createdAt）
+        const recipientMessage = {
+          ...existingMessage,
+          createdAt: message.deliveredAt,  // 用实际投递时间
+          deliveredAt: message.deliveredAt,
+          scheduledDeliveryTime: undefined  // 收件人不需要看到预计时间
+        };
+        delete recipientMessage.scheduledDeliveryTime;
+        
+        const to = existingMessage.to;
+        const from = existingMessage.from;
+        
+        // 只存储到收件人的消息列表（发送者已经在发送时存储过了）
+        if (to && to !== from) {
+          if (!this._messagesByAgent.has(to)) {
+            this._messagesByAgent.set(to, []);
+          }
+          this._messagesByAgent.get(to).push(recipientMessage);
+          await this._appendMessageToFile(to, recipientMessage);
+        }
+        
+        // 更新发送者消息的 deliveredAt 字段
+        existingMessage.deliveredAt = message.deliveredAt;
+        return;
+      }
+      // 其他情况跳过（真正的重复消息）
       return;
     }
     
     this._messagesById.set(message.id, message);
 
     const { from, to } = message;
+    const isDelayedMessage = !!message.scheduledDeliveryTime;
 
     // 存储到发送者的消息列表
     if (from) {
@@ -318,7 +348,8 @@ export class HTTPServer {
     }
 
     // 存储到接收者的消息列表（如果不同于发送者）
-    if (to && to !== from) {
+    // 延迟消息在发送时不存储到收件人列表，等投递时再存储
+    if (to && to !== from && !isDelayedMessage) {
       if (!this._messagesByAgent.has(to)) {
         this._messagesByAgent.set(to, []);
       }
@@ -380,18 +411,32 @@ export class HTTPServer {
       if (society.runtime && society.runtime.bus) {
         const originalSend = society.runtime.bus.send.bind(society.runtime.bus);
         society.runtime.bus.send = (msg) => {
-          const messageId = originalSend(msg);
-          // 存储消息
+          const result = originalSend(msg);
+          // 存储消息（包含延迟消息的预计到达时间）
           void this._storeMessage({
-            id: messageId,
+            id: result.messageId,
             from: msg.from,
             to: msg.to,
             taskId: msg.taskId,
             payload: msg.payload,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            scheduledDeliveryTime: result.scheduledDeliveryTime ?? null  // 延迟消息的预计到达时间
           });
-          return messageId;
+          return result;
         };
+        
+        // 监听延迟消息投递事件（确保前端能看到延迟投递的消息）
+        society.runtime.bus.onDelayedDelivery((message) => {
+          void this._storeMessage({
+            id: message.id,
+            from: message.from,
+            to: message.to,
+            taskId: message.taskId,
+            payload: message.payload,
+            createdAt: message.createdAt,
+            deliveredAt: new Date().toISOString()  // 实际投递时间
+          });
+        });
       }
 
       // 监听工具调用事件（如果 runtime 支持）

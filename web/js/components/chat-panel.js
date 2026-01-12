@@ -443,6 +443,26 @@ const ChatPanel = {
   },
 
   /**
+   * 渲染延迟消息的预计到达时间标记
+   * @param {object} message - 消息对象
+   * @returns {string} HTML 字符串，如果不是延迟消息则返回空字符串
+   */
+  renderScheduledDeliveryTime(message) {
+    if (!message.scheduledDeliveryTime) {
+      return '';
+    }
+    
+    const scheduledTime = new Date(message.scheduledDeliveryTime);
+    const formattedTime = scheduledTime.toLocaleString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    
+    return `<span class="scheduled-delivery-time" title="预计到达时间: ${message.scheduledDeliveryTime}">⏰ ${formattedTime}</span>`;
+  },
+
+  /**
    * 获取消息内容文本
    * @param {object} message - 消息对象
    * @returns {string} 消息文本
@@ -541,6 +561,9 @@ const ChatPanel = {
       const receiverName = this.getReceiverName(message);
       const messageText = this.getMessageText(message);
       const time = this.formatMessageTime(message.createdAt);
+      
+      // 构建延迟消息标记
+      const scheduledTimeHtml = this.renderScheduledDeliveryTime(message);
 
       // 构建发送者/接收者显示文本
       let headerText = '';
@@ -575,6 +598,7 @@ const ChatPanel = {
             <div class="message-header">
               ${headerText}
               <span class="message-time">${time}</span>
+              ${scheduledTimeHtml}
             </div>
             ${thinkingHtml}
             <div class="message-bubble">${this.escapeHtml(messageText)}</div>

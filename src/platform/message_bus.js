@@ -12,7 +12,32 @@ export class MessageBus {
     this._queues = new Map();
     this._delayedMessages = [];  // 延迟消息队列，按 deliverAt 排序
     this._waiters = new Set();
+    this._deliveryListeners = new Set();  // 延迟消息投递监听器
     this.log = options.logger ?? createNoopModuleLogger();
+  }
+
+  /**
+   * 注册延迟消息投递监听器。
+   * @param {(message: {id:string, to:string, from:string, payload:any, taskId?:string, createdAt:string}) => void} listener
+   */
+  onDelayedDelivery(listener) {
+    if (typeof listener === "function") {
+      this._deliveryListeners.add(listener);
+    }
+  }
+
+  /**
+   * 触发延迟消息投递事件。
+   * @param {object} message
+   */
+  _emitDelayedDelivery(message) {
+    for (const listener of this._deliveryListeners) {
+      try {
+        listener(message);
+      } catch (err) {
+        void this.log.warn("延迟消息投递监听器执行失败", { error: err?.message ?? String(err) });
+      }
+    }
   }
 
   /**
@@ -204,6 +229,9 @@ export class MessageBus {
       this._queues.set(envelope.to, q);
       
       deliveredCount++;
+      
+      // 触发延迟消息投递事件（通知前端）
+      this._emitDelayedDelivery(envelope);
       
       void this.log.info("延迟消息已投递", {
         id: envelope.id,

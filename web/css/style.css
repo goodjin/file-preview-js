@@ -699,6 +699,17 @@ body {
   color: #999;
 }
 
+/* 延迟消息预计到达时间标记 */
+.scheduled-delivery-time {
+  color: #ff9800;
+  font-size: 12px;
+  margin-left: 8px;
+  padding: 2px 6px;
+  background-color: #fff3e0;
+  border-radius: 4px;
+  cursor: help;
+}
+
 /* 消息气泡样式 */
 .message-bubble {
   padding: 10px 14px;
