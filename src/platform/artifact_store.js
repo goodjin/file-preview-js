@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { createNoopModuleLogger } from "./logger.js";
+import { BinaryDetector } from "./binary_detector.js";
 
 /**
  * 元信息文件后缀
@@ -19,6 +20,7 @@ export class ArtifactStore {
   constructor(options) {
     this.artifactsDir = options.artifactsDir;
     this.log = options.logger ?? createNoopModuleLogger();
+    this.binaryDetector = new BinaryDetector({ logger: this.log });
   }
 
   /**
@@ -127,17 +129,23 @@ export class ArtifactStore {
     const filePath = path.resolve(this.artifactsDir, `${id}${extension}`);
     
     try {
-      // 判断是否为二进制文件
-      const isBinary = this._isBinaryExtension(extension);
+      // 读取文件内容
+      const buffer = await readFile(filePath);
+      
+      // 使用增强的二进制检测系统
+      const isBinary = await this._detectBinary(buffer, {
+        mimeType: metadata?.mimeType,
+        extension: extension,
+        filename: metadata?.filename
+      });
       
       let content;
       if (isBinary) {
         // 二进制文件读取为 base64
-        const buffer = await readFile(filePath);
         content = buffer.toString("base64");
       } else {
         // 文本文件按 utf8 读取
-        const raw = await readFile(filePath, "utf8");
+        const raw = buffer.toString("utf8");
         // 尝试解析 JSON，如果失败则返回原始文本
         try {
           content = JSON.parse(raw);
@@ -170,21 +178,40 @@ export class ArtifactStore {
   }
 
   /**
-   * 判断文件扩展名是否为二进制类型。
-   * @param {string} extension - 文件扩展名（包含点号）
-   * @returns {boolean}
+   * 使用增强的二进制检测系统判断文件是否为二进制
+   * @param {Buffer} buffer - 文件内容缓冲区
+   * @param {Object} options - 检测选项
+   * @param {string} [options.mimeType] - MIME 类型
+   * @param {string} [options.filename] - 文件名
+   * @param {string} [options.extension] - 文件扩展名
+   * @returns {Promise<boolean>} 是否为二进制文件
    * @private
    */
-  _isBinaryExtension(extension) {
-    const binaryExtensions = new Set([
-      ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif", ".ico",
-      ".pdf", ".zip", ".rar", ".7z", ".tar", ".gz",
-      ".mp3", ".mp4", ".wav", ".avi", ".mov", ".webm",
-      ".bin", ".exe", ".dll", ".so", ".dylib",
-      ".woff", ".woff2", ".ttf", ".otf", ".eot"
-    ]);
-    return binaryExtensions.has(extension?.toLowerCase() || "");
+  async _detectBinary(buffer, options = {}) {
+    try {
+      const result = await this.binaryDetector.detectBinary(buffer, options);
+      
+      void this.log.debug("二进制检测完成", {
+        isBinary: result.isBinary,
+        method: result.method,
+        confidence: result.confidence,
+        mimeType: options.mimeType || null,
+        extension: options.extension || null
+      });
+      
+      return result.isBinary;
+    } catch (error) {
+      void this.log.error("二进制检测失败，默认为二进制", { 
+        error: error.message,
+        mimeType: options.mimeType || null,
+        extension: options.extension || null
+      });
+      
+      // 出错时默认为二进制（安全处理）
+      return true;
+    }
   }
+
 
   /**
    * 保存图片文件。
