@@ -63,17 +63,38 @@ Write-Host ""
 # ============================================================
 Write-Host "[2/6] 检测 bun 运行时..." -ForegroundColor Yellow
 
-$BunPath = Get-Command bun -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+$BunPath = $null
+$BunDir = $null
 
-if (-not $BunPath) {
+# 检查默认安装路径
+$DefaultBunPath = Join-Path $env:USERPROFILE ".bun\bin\bun.exe"
+if (Test-Path $DefaultBunPath) {
+    $BunPath = $DefaultBunPath
+    $BunDir = Join-Path $env:USERPROFILE ".bun"
+    Write-Host "     在默认路径找到 bun: $BunPath"
+}
+# 检查 BUN_INSTALL 环境变量
+elseif ($env:BUN_INSTALL -and (Test-Path (Join-Path $env:BUN_INSTALL "bin\bun.exe"))) {
+    $BunPath = Join-Path $env:BUN_INSTALL "bin\bun.exe"
+    $BunDir = $env:BUN_INSTALL
+    Write-Host "     在 BUN_INSTALL 路径找到 bun: $BunPath"
+}
+else {
     Write-Host ""
     Write-Host "错误: 未找到 bun 运行时" -ForegroundColor Red
+    Write-Host "已检查路径:" -ForegroundColor Red
+    Write-Host "  - $DefaultBunPath" -ForegroundColor Red
+    if ($env:BUN_INSTALL) {
+        Write-Host "  - $env:BUN_INSTALL\bin\bun.exe" -ForegroundColor Red
+    }
+    Write-Host ""
     Write-Host "解决方案: 请先安装 bun" -ForegroundColor Red
     Write-Host "安装指南: https://bun.sh" -ForegroundColor Red
     exit 1
 }
 
 Write-Host "     找到 bun: $BunPath"
+Write-Host "     bun 目录: $BunDir"
 Write-Host ""
 
 # ============================================================
@@ -112,11 +133,11 @@ if (Test-Path $TempDir) {
 }
 New-Item -ItemType Directory -Path $PackDir -Force | Out-Null
 
-# 创建 runtime 目录并复制 bun
+# 创建 runtime 目录并复制整个 bun 运行时
 Write-Host "     复制 bun 运行时..."
 $RuntimeDir = Join-Path $PackDir "runtime"
 New-Item -ItemType Directory -Path $RuntimeDir -Force | Out-Null
-Copy-Item $BunPath (Join-Path $RuntimeDir "bun.exe")
+Copy-Item $BunDir (Join-Path $RuntimeDir "bun") -Recurse -Force
 
 # 复制目录的函数
 function Copy-ProjectDir {

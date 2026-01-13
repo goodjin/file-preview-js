@@ -43,7 +43,7 @@ REM ============================================================
 echo [1/3] 检测 bun 运行时...
 
 REM 首先检查本地 runtime 目录
-set "LOCAL_BUN=%~dp0runtime\bun.exe"
+set "LOCAL_BUN=%~dp0runtime\bun\bin\bun.exe"
 if exist "!LOCAL_BUN!" (
     echo      使用本地 bun: !LOCAL_BUN!
     set "BUN_CMD=!LOCAL_BUN!"

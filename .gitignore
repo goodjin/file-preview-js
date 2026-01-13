@@ -2,7 +2,7 @@ data/runtime/
 test/.tmp/
 data/
 my_project/
-
+.pack-temp/
 # Logs
 logs
 *.log

@@ -36,8 +36,8 @@ describe("One-Click Packaging - Unit Tests", () => {
       
       const content = readFileSync(startCmdPath, "utf-8");
       
-      // 检查本地 bun 检测逻辑
-      expect(content).toContain("runtime\\bun.exe");
+      // 检查本地 bun 检测逻辑（新路径 runtime\bun\bin\bun.exe）
+      expect(content).toContain("runtime\\bun\\bin\\bun.exe");
       expect(content).toContain("LOCAL_BUN");
       
       // 检查 .git 目录检测逻辑
