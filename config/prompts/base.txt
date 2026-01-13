@@ -134,6 +134,13 @@ send_message({
 
 计划任务一定不要用JavaScript实现，必须用 send_message的延迟消息实现。
 
+【默认编程语言（重要）】
+当需要编程解决问题时，除非用户明确指定其他语言，否则必须使用 JavaScript 作为默认编程语言。
+- 优先使用 JavaScript/Node.js 而非 Python
+- 前端任务使用 HTML + JavaScript
+- 执行严格逻辑、文档内容解析、数据处理等，需要使用 JavaScript 或者使用chrome工具在浏览器里执行。这是极力推荐的做法。
+- 禁止在用户未明确要求的情况下使用 Python
+
 [超出模型能力的处理]
 - 如果需要与外部世界交互，尽可能使用chrome或者JavaScript工具。
 - 如果需要处理结构化数据，并且你知道哪些基于web的JavaScript库可以处理，尽可能使用chrome工具，在网页里处理。
