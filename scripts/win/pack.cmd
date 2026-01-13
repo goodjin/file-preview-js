@@ -207,6 +207,17 @@ echo      复制 config...
 xcopy "%PROJECT_ROOT%\config" "!PACK_DIR!\config" /E /I /Q >nul
 echo [DEBUG] config 复制完成
 
+REM 删除敏感配置文件（不应包含在发布包中）
+echo      排除敏感配置文件...
+if exist "!PACK_DIR!\config\app.local.json" (
+    del "!PACK_DIR!\config\app.local.json"
+    echo [DEBUG] 已排除 app.local.json
+)
+if exist "!PACK_DIR!\config\llmservices.json" (
+    del "!PACK_DIR!\config\llmservices.json"
+    echo [DEBUG] 已排除 llmservices.json
+)
+
 echo      复制 modules...
 if exist "%PROJECT_ROOT%\modules" (
     xcopy "%PROJECT_ROOT%\modules" "!PACK_DIR!\modules" /E /I /Q >nul

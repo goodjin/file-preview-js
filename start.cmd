@@ -14,8 +14,6 @@ REM   start.cmd ./my-data                 # 自定义数据目录
 REM   start.cmd --port 3001               # 自定义端口
 REM   start.cmd ./my-data -p 3001 --no-browser
 
-setlocal enabledelayedexpansion
-
 REM 切换到脚本所在目录
 cd /d "%~dp0"
 
@@ -42,11 +40,10 @@ REM 步骤 1: 检测 bun 运行时
 REM ============================================================
 echo [1/3] 检测 bun 运行时...
 
-REM 首先检查本地 runtime 目录
-set "LOCAL_BUN=%~dp0runtime\bun\bin\bun.exe"
-if exist "!LOCAL_BUN!" (
-    echo      使用本地 bun: !LOCAL_BUN!
-    set "BUN_CMD=!LOCAL_BUN!"
+REM 首先检查本地 runtime 目录（分发包模式）
+if exist "%~dp0runtime\bun\bin\bun.exe" (
+    echo      使用本地 bun: %~dp0runtime\bun\bin\bun.exe
+    set "BUN_CMD=%~dp0runtime\bun\bin\bun.exe"
     goto :install_deps
 )
 
@@ -66,8 +63,8 @@ echo 是否自动安装 bun? (安装来源: https://bun.sh)
 echo.
 set /p INSTALL_BUN="请输入 Y 安装，N 退出 [Y/N]: "
 
-if /i "!INSTALL_BUN!"=="Y" goto :install_bun
-if /i "!INSTALL_BUN!"=="y" goto :install_bun
+if /i "%INSTALL_BUN%"=="Y" goto :install_bun
+if /i "%INSTALL_BUN%"=="y" goto :install_bun
 
 REM 用户拒绝安装
 echo.
@@ -96,7 +93,7 @@ REM 刷新 PATH 环境变量（从注册表读取用户 PATH）
 echo.
 echo      刷新环境变量...
 for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USER_PATH=%%b"
-set "PATH=!USER_PATH!;%PATH%"
+set "PATH=%USER_PATH%;%PATH%"
 
 REM 验证 bun 安装
 where bun >nul 2>nul
@@ -114,9 +111,9 @@ set "BUN_CMD=bun"
 REM 安装依赖
 echo.
 echo [2/3] 安装项目依赖...
-echo      执行: "!BUN_CMD!" install
+echo      执行: bun install
 echo.
-"!BUN_CMD!" install
+call %BUN_CMD% install
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -129,6 +126,4 @@ REM 启动服务器
 echo.
 echo [3/3] 启动服务器...
 echo.
-"!BUN_CMD!" run start.js %*
-
-endlocal
+call %BUN_CMD% run start.js %*
