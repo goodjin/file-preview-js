@@ -428,4 +428,109 @@ describe('CapabilityRouter', () => {
       expect(result.unsupportedAttachments.length).toBe(1);
     });
   });
+
+  describe('Property 4: Formatted Text Content Option', () => {
+    it('使用 formattedTextContent 选项时应使用预格式化的文本', async () => {
+      const registry = createMockRegistry({
+        'text-model': { capabilities: { input: ['text'], output: ['text'] } }
+      });
+      const router = new CapabilityRouter({ serviceRegistry: registry });
+      
+      const message = {
+        payload: {
+          text: 'Original text',
+          attachments: []
+        }
+      };
+      
+      const formattedText = '【来自用户的消息】\nOriginal text\n\n【上下文状态】已使用 100/1000 tokens';
+      const result = await router.routeContent(message, 'text-model', { 
+        formattedTextContent: formattedText 
+      });
+      
+      expect(result.canProcess).toBe(true);
+      expect(result.processedContent).toBe(formattedText);
+    });
+
+    it('formattedTextContent 与附件处理结合使用', async () => {
+      const registry = createMockRegistry({
+        'vision-model': { capabilities: { input: ['text', 'vision'], output: ['text'] } }
+      });
+      const router = new CapabilityRouter({ serviceRegistry: registry });
+      
+      const message = {
+        payload: {
+          text: 'Look at this',
+          attachments: [{ type: 'image', artifactRef: 'artifact:img1', filename: 'photo.png' }]
+        }
+      };
+      
+      const formattedText = '【来自用户的消息】\nLook at this\n\n【上下文状态】已使用 100/1000 tokens';
+      const getImageBase64 = async () => ({ data: 'imgdata', mimeType: 'image/png' });
+      
+      const result = await router.routeContent(message, 'vision-model', { 
+        formattedTextContent: formattedText,
+        getImageBase64
+      });
+      
+      expect(result.canProcess).toBe(true);
+      
+      // 应该是多模态数组
+      expect(Array.isArray(result.processedContent)).toBe(true);
+      
+      // 第一个元素应该是预格式化的文本
+      const textContent = result.processedContent.find(c => c.type === 'text');
+      expect(textContent.text).toBe(formattedText);
+    });
+
+    it('不支持视觉的模型收到图片时应转换为文本描述', async () => {
+      const registry = createMockRegistry({
+        'text-only': { capabilities: { input: ['text'], output: ['text'] } }
+      });
+      const contentAdapter = new ContentAdapter({ serviceRegistry: registry });
+      const router = new CapabilityRouter({ 
+        serviceRegistry: registry,
+        contentAdapter
+      });
+      
+      const message = {
+        payload: {
+          text: 'What is in this image?',
+          attachments: [{ type: 'image', artifactRef: 'artifact:img1', filename: 'photo.png' }]
+        }
+      };
+      
+      const formattedText = '【来自用户的消息】\nWhat is in this image?';
+      
+      // 模拟 getImageBase64 - 不应该被调用，因为模型不支持视觉
+      let imageRequested = false;
+      const getImageBase64 = async () => {
+        imageRequested = true;
+        return { data: 'imgdata', mimeType: 'image/png' };
+      };
+      
+      const result = await router.routeContent(message, 'text-only', { 
+        formattedTextContent: formattedText,
+        getImageBase64
+      });
+      
+      // 应该标记为不能完全处理
+      expect(result.canProcess).toBe(false);
+      
+      // 图片应该在不支持的附件列表中
+      expect(result.unsupportedAttachments.length).toBe(1);
+      expect(result.unsupportedAttachments[0].type).toBe('image');
+      
+      // 处理后的内容应该是字符串（不是多模态数组）
+      expect(typeof result.processedContent).toBe('string');
+      
+      // 应该包含预格式化的文本
+      expect(result.processedContent).toContain(formattedText);
+      
+      // 应该包含图片的文本描述
+      expect(result.processedContent).toContain('artifact:img1');
+      expect(result.processedContent).toContain('photo.png');
+    });
+  });
+
 });

@@ -42,14 +42,16 @@ export class CapabilityRouter {
    * @param {Object} [options] - 额外选项
    * @param {function} [options.getImageBase64] - 获取图片 base64 数据的函数
    * @param {function} [options.getFileContent] - 获取文件内容的函数
+   * @param {string} [options.formattedTextContent] - 预格式化的文本内容（如果提供，将使用此内容而不是从 payload 提取）
    * @returns {Promise<Object>} 路由结果
    */
   async routeContent(message, serviceId, options = {}) {
-    const { getImageBase64, getFileContent } = options;
+    const { getImageBase64, getFileContent, formattedTextContent } = options;
     
     // 获取消息内容和附件
     const payload = message?.payload;
-    const textContent = this._extractTextContent(payload);
+    // 如果提供了预格式化的文本内容，使用它；否则从 payload 提取
+    const textContent = formattedTextContent !== undefined ? formattedTextContent : this._extractTextContent(payload);
     const attachments = this._extractAttachments(payload);
     
     // 如果没有附件，直接返回文本内容

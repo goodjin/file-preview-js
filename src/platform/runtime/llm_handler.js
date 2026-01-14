@@ -32,7 +32,7 @@
  * @module runtime/llm_handler
  */
 
-import { hasImageAttachments, getImageAttachments, formatMultimodalContent, hasFileAttachments, getFileAttachments, formatFileAttachmentContent } from "../message_formatter.js";
+import { hasImageAttachments, getImageAttachments, hasFileAttachments, getFileAttachments, formatFileAttachmentContent } from "../message_formatter.js";
 
 /**
  * LLM 处理器类
@@ -48,6 +48,41 @@ export class LlmHandler {
   constructor(runtime) {
     /** @type {object} Runtime 实例引用 */
     this.runtime = runtime;
+  }
+
+  /**
+   * 获取智能体使用的 LLM 服务 ID
+   * 
+   * @param {string|null} agentId - 智能体ID
+   * @returns {string|null} 服务ID
+   * @private
+   */
+  _getServiceIdForAgent(agentId) {
+    const runtime = this.runtime;
+    
+    if (!agentId) {
+      return null;
+    }
+    
+    // 获取智能体的角色信息
+    const agentMeta = runtime._agentMetaById?.get(agentId);
+    if (!agentMeta?.roleId) {
+      return null;
+    }
+    
+    // 从组织原语获取角色的 LLM 服务 ID
+    const role = runtime.org?.getRole?.(agentMeta.roleId);
+    if (role?.llmServiceId) {
+      return role.llmServiceId;
+    }
+    
+    // 如果角色没有指定服务，返回默认服务 ID
+    // 检查默认 LLM 客户端的配置
+    if (runtime.llm?.config?.serviceId) {
+      return runtime.llm.config.serviceId;
+    }
+    
+    return null;
   }
 
   /**
@@ -149,93 +184,152 @@ export class LlmHandler {
       attachmentsCount: message?.payload?.attachments?.length ?? 0
     });
     
-    // 处理非图片附件（文件）：读取文件内容并添加到文本中
-    if (hasFiles) {
-      const attachments = message?.payload?.attachments ?? [];
-      
-      // 创建获取文件内容的函数
-      const getFileContent = async (artifactRef) => {
-        void runtime.log?.info?.("获取文件内容", { artifactRef });
-        try {
-          if (runtime.artifacts && typeof runtime.artifacts.getUploadedFile === 'function') {
-            const fileData = await runtime.artifacts.getUploadedFile(artifactRef);
-            if (fileData && fileData.buffer) {
-              // 尝试将 buffer 转换为文本
-              const content = fileData.buffer.toString('utf-8');
-              void runtime.log?.info?.("文件内容获取成功", { 
-                artifactRef, 
-                contentLength: content.length,
-                mimeType: fileData.metadata?.mimeType 
-              });
-              return {
-                content,
-                metadata: fileData.metadata
-              };
-            }
-          }
-          void runtime.log?.warn?.("获取文件内容失败: 文件不存在或格式错误", { artifactRef });
-          return null;
-        } catch (err) {
-          void runtime.log?.error?.("获取文件内容异常", { artifactRef, error: err?.message, stack: err?.stack });
-          return null;
-        }
-      };
-      
+    // 获取当前智能体使用的 LLM 服务 ID
+    const serviceId = this._getServiceIdForAgent(agentId);
+    
+    // 创建获取文件内容的函数
+    const getFileContent = async (artifactRef) => {
+      void runtime.log?.debug?.("获取文件内容", { artifactRef });
       try {
-        userTextContent = await formatFileAttachmentContent(userTextContent, attachments, getFileContent);
-        void runtime.log?.info?.("文件附件内容已添加到消息", {
-          agentId,
-          fileCount: getFileAttachments(message).length
-        });
+        if (runtime.artifacts && typeof runtime.artifacts.getUploadedFile === 'function') {
+          const fileData = await runtime.artifacts.getUploadedFile(artifactRef);
+          if (fileData && fileData.buffer) {
+            const content = fileData.buffer.toString('utf-8');
+            void runtime.log?.debug?.("文件内容获取成功", { 
+              artifactRef, 
+              contentLength: content.length,
+              mimeType: fileData.metadata?.mimeType 
+            });
+            return {
+              content,
+              metadata: fileData.metadata
+            };
+          }
+        }
+        void runtime.log?.warn?.("获取文件内容失败: 文件不存在或格式错误", { artifactRef });
+        return null;
       } catch (err) {
-        void runtime.log?.error?.("处理文件附件失败", { error: err?.message, stack: err?.stack });
+        void runtime.log?.error?.("获取文件内容异常", { artifactRef, error: err?.message, stack: err?.stack });
+        return null;
       }
-    }
+    };
     
-    // 检查是否有图片附件，构建多模态内容
-    let userContent = userTextContent;
-    
-    if (hasImages) {
-      const attachments = message?.payload?.attachments ?? [];
-      
-      // 创建获取图片 base64 数据的函数
-      const getImageBase64 = async (artifactRef) => {
-        void runtime.log?.info?.("获取图片 base64 数据", { artifactRef });
-        try {
-          // 从 artifact store 获取图片数据
-          if (runtime.artifacts && typeof runtime.artifacts.getUploadedFile === 'function') {
-            const fileData = await runtime.artifacts.getUploadedFile(artifactRef);
-            if (fileData && fileData.buffer) {
-              void runtime.log?.info?.("图片数据获取成功", { 
-                artifactRef, 
-                bufferSize: fileData.buffer.length,
-                mimeType: fileData.metadata?.mimeType 
-              });
-              return {
-                data: fileData.buffer.toString('base64'),
-                mimeType: fileData.metadata?.mimeType || 'image/jpeg'
-              };
-            }
-          }
-          void runtime.log?.warn?.("获取图片数据失败: 文件不存在或格式错误", { artifactRef });
-          return null;
-        } catch (err) {
-          void runtime.log?.error?.("获取图片数据异常", { artifactRef, error: err?.message, stack: err?.stack });
-          return null;
-        }
-      };
-      
+    // 创建获取图片 base64 数据的函数
+    const getImageBase64 = async (artifactRef) => {
+      void runtime.log?.debug?.("获取图片 base64 数据", { artifactRef });
       try {
-        userContent = await formatMultimodalContent(userTextContent, attachments, getImageBase64);
-        void runtime.log?.info?.("构建多模态消息内容完成", {
+        if (runtime.artifacts && typeof runtime.artifacts.getUploadedFile === 'function') {
+          const fileData = await runtime.artifacts.getUploadedFile(artifactRef);
+          if (fileData && fileData.buffer) {
+            void runtime.log?.debug?.("图片数据获取成功", { 
+              artifactRef, 
+              bufferSize: fileData.buffer.length,
+              mimeType: fileData.metadata?.mimeType 
+            });
+            return {
+              data: fileData.buffer.toString('base64'),
+              mimeType: fileData.metadata?.mimeType || 'image/jpeg'
+            };
+          }
+        }
+        void runtime.log?.warn?.("获取图片数据失败: 文件不存在或格式错误", { artifactRef });
+        return null;
+      } catch (err) {
+        void runtime.log?.error?.("获取图片数据异常", { artifactRef, error: err?.message, stack: err?.stack });
+        return null;
+      }
+    };
+    
+    // 使用能力路由器处理消息内容
+    let userContent = userTextContent;
+    const attachments = message?.payload?.attachments ?? [];
+    
+    if (attachments.length > 0 && runtime.capabilityRouter && serviceId) {
+      // 使用能力路由器根据模型能力处理附件
+      try {
+        const routeResult = await runtime.capabilityRouter.routeContent(message, serviceId, {
+          getImageBase64,
+          getFileContent,
+          formattedTextContent: userTextContent  // 传入已格式化的文本内容
+        });
+        
+        // 使用路由结果的内容
+        if (typeof routeResult.processedContent === 'string') {
+          userContent = routeResult.processedContent;
+        } else if (Array.isArray(routeResult.processedContent)) {
+          userContent = routeResult.processedContent;
+        } else {
+          userContent = userTextContent;
+        }
+        
+        void runtime.log?.info?.("能力路由处理完成", {
           agentId,
-          imageCount: getImageAttachments(message).length,
+          serviceId,
+          canProcess: routeResult.canProcess,
+          unsupportedCount: routeResult.unsupportedAttachments?.length ?? 0,
           isMultimodal: Array.isArray(userContent),
           contentType: Array.isArray(userContent) ? 'array' : typeof userContent
         });
+        
+        // 如果有不支持的附件，记录警告
+        if (routeResult.unsupportedAttachments?.length > 0) {
+          void runtime.log?.warn?.("部分附件类型不被当前模型支持，已转换为文本描述", {
+            agentId,
+            serviceId,
+            unsupportedAttachments: routeResult.unsupportedAttachments.map(a => ({
+              type: a.type,
+              filename: a.filename,
+              artifactRef: a.artifactRef
+            }))
+          });
+        }
       } catch (err) {
-        void runtime.log?.error?.("构建多模态内容失败，使用纯文本", { error: err?.message, stack: err?.stack });
-        userContent = userTextContent;
+        void runtime.log?.error?.("能力路由处理失败，回退到基础处理", { 
+          error: err?.message, 
+          stack: err?.stack 
+        });
+        // 回退到基础处理：只处理文件附件
+        if (hasFiles) {
+          try {
+            userContent = await formatFileAttachmentContent(userTextContent, attachments, getFileContent);
+          } catch (fileErr) {
+            void runtime.log?.error?.("处理文件附件失败", { error: fileErr?.message });
+          }
+        }
+      }
+    } else if (hasFiles || hasImages) {
+      // 没有能力路由器或服务ID，使用旧的处理逻辑
+      void runtime.log?.warn?.("能力路由器不可用，使用基础附件处理", {
+        agentId,
+        hasCapabilityRouter: !!runtime.capabilityRouter,
+        hasServiceId: !!serviceId
+      });
+      
+      // 处理文件附件
+      if (hasFiles) {
+        try {
+          userContent = await formatFileAttachmentContent(userTextContent, attachments, getFileContent);
+          void runtime.log?.info?.("文件附件内容已添加到消息", {
+            agentId,
+            fileCount: getFileAttachments(message).length
+          });
+        } catch (err) {
+          void runtime.log?.error?.("处理文件附件失败", { error: err?.message, stack: err?.stack });
+        }
+      }
+      
+      // 处理图片附件（仅当没有能力路由器时才直接处理，可能导致错误）
+      if (hasImages) {
+        void runtime.log?.warn?.("无法检查模型视觉能力，图片附件将被转换为文本描述", { agentId });
+        // 将图片附件转换为文本描述，而不是直接发送
+        const imageAttachments = getImageAttachments(message);
+        const imageDescriptions = imageAttachments.map(att => {
+          return `\n\n【图片附件: ${att.filename || '未命名图片'}】\n工件ID: ${att.artifactRef}\n[当前模型不支持视觉理解，无法处理图片内容]`;
+        }).join('');
+        
+        if (typeof userContent === 'string') {
+          userContent = userContent + imageDescriptions;
+        }
       }
     }
     
