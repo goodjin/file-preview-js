@@ -14,6 +14,7 @@ export class LlmClient {
     this.model = options.model;
     this.apiKey = options.apiKey;
     this.maxRetries = options.maxRetries ?? 3;
+    this.maxTokens = options.maxTokens ?? undefined; // 最大生成 token 数，undefined 时使用 API 默认值
     this.log = options.logger ?? createNoopModuleLogger();
     // 重试事件回调
     this._onRetry = options.onRetry ?? null;
@@ -122,6 +123,7 @@ export class LlmClient {
       tools: input.tools,
       tool_choice: input.tools && input.tools.length > 0 ? "auto" : undefined,
       temperature: typeof input.temperature === "number" ? input.temperature : 0.2,
+      max_new_tokens: this.maxTokens, // undefined 时不会发送此参数
       extra_body:{
         "thinking":{"type":"enabled"}
       }

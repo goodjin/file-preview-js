@@ -39,6 +39,7 @@ const LlmSettingsModal = {
   modelInput: null,
   apiKeyInput: null,
   maxConcurrentInput: null,
+  maxTokensInput: null,
   
   // 服务列表元素
   serviceList: null,
@@ -51,6 +52,7 @@ const LlmSettingsModal = {
   serviceBaseUrlInput: null,
   serviceModelInput: null,
   serviceApiKeyInput: null,
+  serviceMaxTokensInput: null,
   serviceCapabilityTagsInput: null,
   serviceDescriptionInput: null,
   
@@ -124,6 +126,11 @@ const LlmSettingsModal = {
               <div class="form-group">
                 <label for="llm-max-concurrent">最大并发请求数</label>
                 <input type="number" id="llm-max-concurrent" min="1" max="10" value="2">
+              </div>
+              <div class="form-group">
+                <label for="llm-max-tokens">最大生成 Token 数</label>
+                <input type="number" id="llm-max-tokens" min="1" placeholder="4096">
+                <span class="form-hint">限制模型单次响应的最大 token 数，留空使用 API 默认值</span>
               </div>
               
               <!-- 默认模型能力配置区域 -->
@@ -199,6 +206,11 @@ const LlmSettingsModal = {
                   </div>
                 </div>
                 <div class="form-group">
+                  <label for="service-max-tokens">最大生成 Token 数</label>
+                  <input type="number" id="service-max-tokens" min="1" placeholder="4096">
+                  <span class="form-hint">限制模型单次响应的最大 token 数，留空使用 API 默认值</span>
+                </div>
+                <div class="form-group">
                   <label for="service-capability-tags">能力标签</label>
                   <input type="text" id="service-capability-tags" placeholder="编程, 逻辑推理">
                   <span class="form-hint">用逗号分隔，用于模型选择时的标签显示</span>
@@ -256,6 +268,7 @@ const LlmSettingsModal = {
     this.modelInput = this.overlay.querySelector('#llm-model');
     this.apiKeyInput = this.overlay.querySelector('#llm-api-key');
     this.maxConcurrentInput = this.overlay.querySelector('#llm-max-concurrent');
+    this.maxTokensInput = this.overlay.querySelector('#llm-max-tokens');
     
     // 服务管理
     this.serviceList = this.overlay.querySelector('#llm-service-list');
@@ -271,6 +284,7 @@ const LlmSettingsModal = {
     this.serviceBaseUrlInput = this.overlay.querySelector('#service-base-url');
     this.serviceModelInput = this.overlay.querySelector('#service-model');
     this.serviceApiKeyInput = this.overlay.querySelector('#service-api-key');
+    this.serviceMaxTokensInput = this.overlay.querySelector('#service-max-tokens');
     this.serviceCapabilityTagsInput = this.overlay.querySelector('#service-capability-tags');
     this.serviceDescriptionInput = this.overlay.querySelector('#service-description');
     this.cancelServiceBtn = this.overlay.querySelector('#cancel-service-btn');
@@ -600,6 +614,7 @@ const LlmSettingsModal = {
       this.apiKeyInput.value = ''; // API Key 不回显，显示占位符
       this.apiKeyInput.placeholder = this.config.apiKey ? `当前: ${this.config.apiKey}` : 'sk-...';
       this.maxConcurrentInput.value = this.config.maxConcurrentRequests || 2;
+      this.maxTokensInput.value = this.config.maxTokens || '';
       
       // 设置默认配置的能力配置
       this._setDefaultCapabilities(this.config.capabilities);
@@ -700,6 +715,7 @@ const LlmSettingsModal = {
       this.serviceModelInput.value = service.model || '';
       this.serviceApiKeyInput.value = '';
       this.serviceApiKeyInput.placeholder = service.apiKey ? `当前: ${service.apiKey}` : 'sk-...';
+      this.serviceMaxTokensInput.value = service.maxTokens || '';
       this.serviceCapabilityTagsInput.value = (service.capabilityTags || []).join(', ');
       this.serviceDescriptionInput.value = service.description || '';
       
@@ -715,6 +731,7 @@ const LlmSettingsModal = {
       this.serviceModelInput.value = '';
       this.serviceApiKeyInput.value = '';
       this.serviceApiKeyInput.placeholder = 'sk-...';
+      this.serviceMaxTokensInput.value = '';
       this.serviceCapabilityTagsInput.value = '';
       this.serviceDescriptionInput.value = '';
       
@@ -804,6 +821,12 @@ const LlmSettingsModal = {
       capabilities: this._getDefaultSelectedCapabilities()
     };
     
+    // maxTokens 只有输入了值才设置
+    const maxTokensValue = parseInt(this.maxTokensInput.value);
+    if (maxTokensValue > 0) {
+      config.maxTokens = maxTokensValue;
+    }
+    
     // 只有输入了新的 API Key 才更新
     if (this.apiKeyInput.value) {
       config.apiKey = this.apiKeyInput.value;
@@ -849,6 +872,12 @@ const LlmSettingsModal = {
       capabilities: this._getSelectedCapabilities(),
       description: this.serviceDescriptionInput.value.trim()
     };
+    
+    // maxTokens 只有输入了值才设置
+    const maxTokensValue = parseInt(this.serviceMaxTokensInput.value);
+    if (maxTokensValue > 0) {
+      service.maxTokens = maxTokensValue;
+    }
     
     // 只有输入了新的 API Key 才更新
     if (this.serviceApiKeyInput.value) {

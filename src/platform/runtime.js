@@ -2673,6 +2673,7 @@ export class Runtime {
         baseURL: serviceConfig.baseURL,
         model: serviceConfig.model,
         apiKey: serviceConfig.apiKey,
+        maxTokens: serviceConfig.maxTokens,
         maxConcurrentRequests: serviceConfig.maxConcurrentRequests ?? 2,
         logger: this.loggerRoot.forModule(`llm_${serviceId}`),
         onRetry: (event) => this._emitLlmRetry(event)

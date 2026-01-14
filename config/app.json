@@ -10,7 +10,8 @@
     "baseURL": "http://127.0.0.1:1234/v1",
     "model": "zai-org/glm-4.6v-flash",
     "apiKey": "NOT_NEEDED",
-    "maxConcurrentRequests": 2
+    "maxConcurrentRequests": 2,
+    "maxTokens": 4096
   },
   "contextLimit": {
     "maxTokens": 12000000,

@@ -121,6 +121,7 @@ export class ConfigService {
 
     // 只更新 llm 字段（如果没有传递新的 apiKey，保留原来的值）
     const existingApiKey = config.llm?.apiKey || "";
+    const existingMaxTokens = config.llm?.maxTokens;
     config.llm = {
       baseURL: llmConfig.baseURL || "",
       model: llmConfig.model || "",
@@ -128,6 +129,9 @@ export class ConfigService {
       maxConcurrentRequests: typeof llmConfig.maxConcurrentRequests === "number" 
         ? llmConfig.maxConcurrentRequests 
         : 2,
+      maxTokens: typeof llmConfig.maxTokens === "number" 
+        ? llmConfig.maxTokens 
+        : existingMaxTokens,
       capabilities: llmConfig.capabilities || { input: ["text"], output: ["text"] }
     };
 
@@ -213,6 +217,7 @@ export class ConfigService {
       maxConcurrentRequests: typeof service.maxConcurrentRequests === "number" 
         ? service.maxConcurrentRequests 
         : 2,
+      maxTokens: typeof service.maxTokens === "number" ? service.maxTokens : undefined,
       capabilityTags: Array.isArray(service.capabilityTags) ? service.capabilityTags : [],
       capabilities: service.capabilities || { input: ["text"], output: ["text"] },
       description: service.description || ""
@@ -263,6 +268,9 @@ export class ConfigService {
       maxConcurrentRequests: typeof service.maxConcurrentRequests === "number" 
         ? service.maxConcurrentRequests 
         : 2,
+      maxTokens: typeof service.maxTokens === "number" 
+        ? service.maxTokens 
+        : existingService.maxTokens,
       capabilityTags: Array.isArray(service.capabilityTags) ? service.capabilityTags : [],
       capabilities: service.capabilities || existingService.capabilities || { input: ["text"], output: ["text"] },
       description: service.description || ""

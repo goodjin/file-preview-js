@@ -6,6 +6,7 @@
       "baseURL": "http://127.0.0.1:1234/v1",
       "model": "text-model-name",
       "apiKey": "NOT_NEEDED",
+      "maxTokens": 4096,
       "capabilityTags": ["文本对话", "工具调用"],
       "capabilities": {
         "input": ["text"],
@@ -19,6 +20,7 @@
       "baseURL": "http://127.0.0.1:1234/v1",
       "model": "vision-model-name",
       "apiKey": "NOT_NEEDED",
+      "maxTokens": 2048,
       "capabilityTags": ["视觉理解", "图像分析", "多模态"],
       "capabilities": {
         "input": ["text", "vision"],
@@ -32,6 +34,7 @@
       "baseURL": "http://127.0.0.1:1234/v1",
       "model": "multimodal-model-name",
       "apiKey": "NOT_NEEDED",
+      "maxTokens": 4096,
       "capabilityTags": ["多模态", "视觉理解", "音频理解", "文件阅读"],
       "capabilities": {
         "input": ["text", "vision", "audio", "file"],
@@ -45,6 +48,7 @@
       "baseURL": "http://127.0.0.1:1234/v1",
       "model": "coding-model-name",
       "apiKey": "NOT_NEEDED",
+      "maxTokens": 8192,
       "capabilityTags": ["编程", "代码生成", "代码审查"],
       "capabilities": {
         "input": ["text", "file"],
@@ -58,6 +62,7 @@
       "baseURL": "http://127.0.0.1:1234/v1",
       "model": "high-intelligence-model-name",
       "apiKey": "NOT_NEEDED",
+      "maxTokens": 8192,
       "capabilityTags": ["高智能", "复杂推理", "深度分析"],
       "capabilities": {
         "input": ["text"],
@@ -71,6 +76,7 @@
       "baseURL": "http://127.0.0.1:1234/v1",
       "model": "low-cost-model-name",
       "apiKey": "NOT_NEEDED",
+      "maxTokens": 2048,
       "capabilityTags": ["低成本", "快速响应", "简单任务"],
       "capabilities": {
         "input": ["text"],
@@ -84,6 +90,7 @@
       "baseURL": "http://127.0.0.1:1234/v1",
       "model": "audio-model-name",
       "apiKey": "NOT_NEEDED",
+      "maxTokens": 4096,
       "capabilityTags": ["音频处理", "语音识别", "音频分析"],
       "capabilities": {
         "input": ["text", "audio"],
