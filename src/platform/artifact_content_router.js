@@ -346,16 +346,20 @@ export class ArtifactContentRouter {
     const hasFile = this.hasCapability(serviceId, 'file');
     
     if (hasFile) {
-      // Route to file field
+      // Route to file field using file_url format with base64 data URL
+      const mimeType = artifact.mimeType || artifact.meta?.mimeType || 'application/octet-stream';
+      const base64Data = Buffer.isBuffer(artifact.content) 
+        ? artifact.content.toString('base64')
+        : Buffer.from(artifact.content).toString('base64');
+      const dataUrl = `data:${mimeType};base64,${base64Data}`;
+      
       return {
         contentType: 'binary',
         routing: 'file',
         file: {
-          type: 'file',
-          file: {
-            filename: artifact.meta?.filename || artifact.id,
-            mimeType: artifact.mimeType || artifact.meta?.mimeType || 'application/octet-stream',
-            data: artifact.content
+          type: 'file_url',
+          file_url: {
+            url: dataUrl
           }
         },
         metadata: {

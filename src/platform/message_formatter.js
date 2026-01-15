@@ -316,7 +316,7 @@ export async function formatFileAttachmentContent(textContent, attachments, getF
     
     // 检查是否为文本文件
     if (!isTextFile(filename)) {
-      fileContents.push(`\n\n【附件: ${filename}(${att.artifactRef})】\n[二进制文件，无法显示内容]`);
+      fileContents.push(`\n\n【附件: ${filename}(${att.artifactRef})】\n[二进制文件，需要建立专门读取该类型文件的智能体帮助解读]`);
       continue;
     }
     

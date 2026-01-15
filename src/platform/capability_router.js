@@ -243,7 +243,7 @@ export class CapabilityRouter {
       
       // 检查是否为文本文件
       if (!isTextFile(filename)) {
-        contents.push(`\n\n【附件: ${filename} (${att.artifactRef})】\n[二进制文件，无法显示内容]`);
+        contents.push(`\n\n【附件: ${filename} (${att.artifactRef})】\n[二进制文件，如果需要读取内容，需要建立专门读取该类型文件的智能体帮助解读]`);
         continue;
       }
       
