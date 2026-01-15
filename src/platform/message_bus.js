@@ -6,7 +6,7 @@ import { createNoopModuleLogger, formatLocalTime } from "./logger.js";
 
 export class MessageBus {
   /**
-   * @param {{logger?: {debug:(m:string,d?:any)=>Promise<void>, info:(m:string,d?:any)=>Promise<void>, warn:(m:string,d?:any)=>Promise<void>, error:(m:string,d?:any)=>Promise<void>}}} [options]
+   * @param {{logger?: {debug:(m:string,d?:any)=>Promise<void>, info:(m:string,d?:any)=>Promise<void>, warn:(m:string,d?:any)=>Promise<void>, error:(m:string,d?:any)=>Promise<void>}, getAgentStatus?: (agentId: string) => string}} [options]
    */
   constructor(options = {}) {
     this._queues = new Map();
@@ -14,6 +14,7 @@ export class MessageBus {
     this._waiters = new Set();
     this._deliveryListeners = new Set();  // 延迟消息投递监听器
     this.log = options.logger ?? createNoopModuleLogger();
+    this._getAgentStatus = options.getAgentStatus ?? null;  // 获取智能体状态的回调函数
   }
 
   /**
@@ -43,9 +44,27 @@ export class MessageBus {
   /**
    * 发送异步消息（支持延迟投递）。
    * @param {{to:string, from:string, payload:any, taskId?:string, delayMs?:number|string}} message
-   * @returns {{messageId:string, scheduledDeliveryTime?:string}} 消息ID和预计投递时间（延迟消息）
+   * @returns {{messageId:string, scheduledDeliveryTime?:string, rejected?:boolean, reason?:string}} 消息ID和预计投递时间（延迟消息）
    */
   send(message) {
+    // 检查目标智能体状态
+    if (this._getAgentStatus) {
+      const status = this._getAgentStatus(message.to);
+      if (status === 'stopped' || status === 'stopping' || status === 'terminating') {
+        void this.log.info("拒绝发送消息：目标智能体已停止", {
+          to: message.to,
+          from: message.from,
+          status,
+          taskId: message.taskId ?? null
+        });
+        return { 
+          messageId: '', 
+          rejected: true, 
+          reason: `agent_${status}` 
+        };
+      }
+    }
+
     const id = randomUUID();
     const now = Date.now();
     // 支持字符串形式的数字（LLM 可能传递字符串）

@@ -388,6 +388,24 @@ const AgentList = {
       `;
     }
     
+    if (computeStatus === 'stopping') {
+      return `
+        <span class="compute-status stopping" title="正在停止">⏸️</span>
+      `;
+    }
+    
+    if (computeStatus === 'stopped') {
+      return `
+        <span class="compute-status stopped" title="已停止">⏹️</span>
+      `;
+    }
+    
+    if (computeStatus === 'terminating') {
+      return `
+        <span class="compute-status terminating" title="正在删除">🗑️</span>
+      `;
+    }
+    
     return '';
   },
 

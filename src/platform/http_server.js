@@ -622,7 +622,13 @@ export class HTTPServer {
     return new Promise((resolve) => {
       try {
         this._server = createServer((req, res) => {
-          this._handleRequest(req, res);
+          this._handleRequest(req, res).catch(err => {
+            void this.log.error("处理请求时发生异常", { 
+              error: err?.message ?? String(err),
+              stack: err?.stack ?? null
+            });
+            this._sendJson(res, 500, { error: "internal_error", message: err?.message ?? String(err) });
+          });
         });
 
         this._server.on("error", (err) => {
@@ -681,7 +687,7 @@ export class HTTPServer {
    * @param {import("node:http").IncomingMessage} req
    * @param {import("node:http").ServerResponse} res
    */
-  _handleRequest(req, res) {
+  async _handleRequest(req, res) {
     try {
       const url = new URL(req.url ?? "/", `http://localhost:${this.port}`);
       const method = req.method?.toUpperCase() ?? "GET";
@@ -797,7 +803,7 @@ export class HTTPServer {
         const match = pathname.match(/^\/api\/agent\/(.+)\/abort$/);
         if (match) {
           const agentId = decodeURIComponent(match[1]);
-          this._handleAbortLlmCall(agentId, res);
+          await this._handleAbortLlmCall(agentId, res);
         } else {
           this._sendJson(res, 404, { error: "not_found", path: pathname });
         }
@@ -2018,7 +2024,7 @@ export class HTTPServer {
    * @param {string} agentId - 智能体ID
    * @param {import("node:http").ServerResponse} res
    */
-  _handleAbortLlmCall(agentId, res) {
+  async _handleAbortLlmCall(agentId, res) {
     if (!this.society || !this.society.runtime) {
       void this.log.error("中断请求失败：系统未初始化", { agentId });
       this._sendJson(res, 500, { error: "society_not_initialized" });
@@ -2026,7 +2032,7 @@ export class HTTPServer {
     }
 
     try {
-      const result = this.society.runtime.abortAgentLlmCall(agentId);
+      const result = await this.society.runtime.abortAgentLlmCall(agentId);
 
       if (!result.ok) {
         const statusCode = result.reason === "agent_not_found" ? 404 : 400;
