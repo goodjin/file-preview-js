@@ -1088,8 +1088,8 @@ class ArtifactManager {
     // 图片类型
     if (this._isImageType(lowerType)) return "image";
     
-    // HTML 类型使用 iframe 查看器
-    if (lowerType === "html") return "html";
+    // HTML 类型使用 iframe 查看器（支持 "html" 和 "text/html" MIME类型）
+    if (lowerType === "html" || lowerType === "text/html") return "html";
     
     // JSON 类型检查：通过 type 或 MIME 类型判断
     if (lowerType === "json" || lowerType === "application/json") {
