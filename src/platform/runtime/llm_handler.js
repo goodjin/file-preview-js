@@ -274,7 +274,7 @@ export class LlmHandler {
           void runtime.log?.warn?.("获取文件内容失败: 文件不存在或格式错误", { artifactRef });
           return null;
         } catch (err) {
-          void runtime.log?.error?.("获取文件内容异常", { artifactRef, error: err?.message, stack: err?.stack });
+          void runtime.log?.error?.("获取文件内容异常", { artifactRef, error: err });
           return null;
         }
       };
@@ -300,7 +300,7 @@ export class LlmHandler {
         void runtime.log?.warn?.("获取图片数据失败: 文件不存在或格式错误", { artifactRef });
         return null;
       } catch (err) {
-        void runtime.log?.error?.("获取图片数据异常", { artifactRef, error: err?.message, stack: err?.stack });
+        void runtime.log?.error?.("获取图片数据异常", { artifactRef, error: err });
         return null;
       }
     };
@@ -350,15 +350,14 @@ export class LlmHandler {
         }
       } catch (err) {
         void runtime.log?.error?.("能力路由处理失败，回退到基础处理", { 
-          error: err?.message, 
-          stack: err?.stack 
+          error: err
         });
         // 回退到基础处理：只处理文件附件
         if (hasFiles) {
           try {
             userContent = await formatFileAttachmentContent(userTextContent, attachments, getFileContent);
           } catch (fileErr) {
-            void runtime.log?.error?.("处理文件附件失败", { error: fileErr?.message });
+            void runtime.log?.error?.("处理文件附件失败", { error: fileErr });
           }
         }
       }
@@ -379,7 +378,7 @@ export class LlmHandler {
             fileCount: getFileAttachments(message).length
           });
         } catch (err) {
-          void runtime.log?.error?.("处理文件附件失败", { error: err?.message, stack: err?.stack });
+          void runtime.log?.error?.("处理文件附件失败", { error: err });
         }
       }
       
@@ -433,18 +432,18 @@ export class LlmHandler {
         runtime.setAgentComputeStatus?.(agentId, 'processing');
       } catch (err) {
         runtime.setAgentComputeStatus?.(agentId, 'idle');
-        const text = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
-        const errorType = err?.name ?? "UnknownError";
         
+        // 打印完整的原始错误信息（包含堆栈和行号）
         void runtime.log?.error?.("LLM 调用失败", { 
           agentId: ctx.agent?.id ?? null, 
           messageId: message?.id ?? null, 
           taskId: message?.taskId ?? null,
-          errorType,
-          message: text,
           round: i + 1,
-          stack: err?.stack ?? null
+          error: err // 直接传递原始错误对象，让日志系统处理
         });
+        
+        const text = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
+        const errorType = err?.name ?? "UnknownError";
 
         // 从对话历史中移除导致失败的用户消息，避免下次调用时再次发送
         if (i === 0 && conv.length > 0 && conv[conv.length - 1].role === "user") {
@@ -701,14 +700,16 @@ export class LlmHandler {
     try {
       args = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
     } catch (parseErr) {
-      const parseError = parseErr && typeof parseErr.message === "string" ? parseErr.message : String(parseErr ?? "unknown parse error");
+      // 打印完整的原始错误信息
       void runtime.log?.error?.("工具调用参数解析失败", { 
         agentId: ctx.agent?.id ?? null,
         toolName: call.function?.name ?? "unknown",
         arguments: call.function?.arguments ?? "null",
-        parseError,
-        callId: call.id
+        callId: call.id,
+        error: parseErr // 直接传递原始错误对象
       });
+      
+      const parseError = parseErr && typeof parseErr.message === "string" ? parseErr.message : String(parseErr ?? "unknown parse error");
       
       conv.push({
         role: "tool",
@@ -729,15 +730,16 @@ export class LlmHandler {
     try {
       result = await runtime.executeToolCall(ctx, toolName, args);
     } catch (toolErr) {
-      const toolError = toolErr && typeof toolErr.message === "string" ? toolErr.message : String(toolErr ?? "unknown tool error");
+      // 打印完整的原始错误信息
       void runtime.log?.error?.("工具执行失败", {
         agentId: ctx.agent?.id ?? null,
         toolName,
         args,
-        toolError,
         callId: call.id,
-        stack: toolErr?.stack ?? null
+        error: toolErr // 直接传递原始错误对象
       });
+      
+      const toolError = toolErr && typeof toolErr.message === "string" ? toolErr.message : String(toolErr ?? "unknown tool error");
       
       result = {
         error: "工具执行失败",
@@ -930,13 +932,10 @@ export class LlmHandler {
         return false;
       }
     } catch (err) {
-      // 处理取消失败的情况
-      const errorMessage = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
-      
+      // 处理取消失败的情况 - 打印完整的原始错误信息
       void runtime.log?.error?.("取消工具调用时发生异常", {
         agentId,
-        error: errorMessage,
-        stack: err?.stack ?? null
+        error: err // 直接传递原始错误对象
       });
       
       // 即使取消失败，也尝试将状态设置为 idle，避免智能体卡住

@@ -36,6 +36,7 @@ import { RuntimeEvents } from "../runtime/runtime_events.js";
 import { RuntimeLifecycle } from "../runtime/runtime_lifecycle.js";
 import { RuntimeMessaging } from "../runtime/runtime_messaging.js";
 import { RuntimeTools } from "../runtime/runtime_tools.js";
+import { RuntimeLlm } from "../runtime/runtime_llm.js";
 
 /**
  * 运行时：将平台能力（org/message/artifact/prompt）与智能体行为连接起来。
@@ -155,6 +156,8 @@ export class Runtime {
     this._toolExecutor = new ToolExecutor(this);
     /** @type {RuntimeTools} 工具管理器 */
     this._tools = new RuntimeTools(this);
+    /** @type {RuntimeLlm} LLM 交互管理器 */
+    this._llm = new RuntimeLlm(this);
     /** @type {LlmHandler} LLM 处理器 */
     this._llmHandler = new LlmHandler(this);
     /** @type {ShutdownManager} 关闭管理器 */
@@ -637,8 +640,8 @@ export class Runtime {
    * @returns {Promise<void>}
    */
   async _handleWithLlm(ctx, message) {
-    // 委托给 LlmHandler 处理
-    return await this._llmHandler.handleWithLlm(ctx, message);
+    // 委托给 RuntimeLlm 处理
+    return await this._llm.handleWithLlm(ctx, message);
   }
 
   /**
@@ -652,332 +655,8 @@ export class Runtime {
    * @private
    */
   async _doLlmProcessing(ctx, message, conv, agentId, llmClient) {
-    // 在用户消息中注入上下文状态提示
-    const contextStatusPrompt = this._conversationManager.buildContextStatusPrompt(agentId);
-    const userContent = this._formatMessageForLlm(ctx, message) + contextStatusPrompt;
-    conv.push({ role: "user", content: userContent });
-
-    // 检查上下文长度并在超限时发出警告
-    this._checkContextAndWarn(ctx.agent.id);
-
-    const tools = this.getToolDefinitions();
-    for (let i = 0; i < this.maxToolRounds; i += 1) {
-      let msg = null;
-      try {
-        const llmMeta = {
-          agentId: ctx.agent?.id ?? null,
-          roleId: ctx.agent?.roleId ?? null,
-          roleName: ctx.agent?.roleName ?? null,
-          messageId: message?.id ?? null,
-          messageFrom: message?.from ?? null,
-          taskId: message?.taskId ?? null,
-          round: i + 1
-        };
-        void this.log.info("请求 LLM", llmMeta);
-        // 设置状态为等待LLM响应
-        this._state.setAgentComputeStatus(agentId, 'waiting_llm');
-        msg = await llmClient.chat({ messages: conv, tools, meta: llmMeta });
-        
-        // 检查智能体状态：如果已被停止或正在停止，丢弃响应
-        const statusAfterLlm = this._state.getAgentComputeStatus(agentId);
-        if (statusAfterLlm === 'stopped' || statusAfterLlm === 'stopping' || statusAfterLlm === 'terminating') {
-          void this.log.info("智能体已停止，丢弃 LLM 响应", {
-            agentId,
-            status: statusAfterLlm,
-            messageId: message?.id ?? null
-          });
-          return; // 丢弃响应，结束处理
-        }
-        
-        // LLM响应后设置为处理中
-        this._state.setAgentComputeStatus(agentId, 'processing');
-      } catch (err) {
-        // 改进的异常处理：区分不同类型的错误
-        this._state.setAgentComputeStatus(agentId, 'idle');
-        const text = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
-        const errorType = err?.name ?? "UnknownError";
-        
-        // 详细记录异常信息
-        void this.log.error("LLM 调用失败", { 
-          agentId: ctx.agent?.id ?? null, 
-          messageId: message?.id ?? null, 
-          taskId: message?.taskId ?? null,
-          errorType,
-          message: text,
-          round: i + 1,
-          stack: err?.stack ?? null
-        });
-
-        // 从对话历史中移除导致失败的用户消息，避免下次调用时再次发送
-        if (i === 0 && conv.length > 0 && conv[conv.length - 1].role === "user") {
-          conv.pop();
-          void this.log.info("已从对话历史中移除导致失败的用户消息", {
-            agentId: ctx.agent?.id ?? null,
-            messageId: message?.id ?? null
-          });
-        }
-
-        // 根据错误类型决定处理策略
-        if (errorType === "AbortError") {
-          // 中断错误：记录日志但不停止整个系统
-          void this.log.info("LLM 调用被用户中断，智能体将继续处理其他消息", { 
-            agentId: ctx.agent?.id ?? null,
-            messageId: message?.id ?? null,
-            taskId: message?.taskId ?? null
-          });
-          
-          // 不发送通知消息（根据需求 2.4）
-          
-          return; // 结束当前消息处理，但不停止整个系统
-        } else {
-          // 其他错误：记录详细信息，向父智能体发送错误通知，但不停止系统
-          void this.log.error("LLM 调用遇到非中断错误", {
-            agentId: ctx.agent?.id ?? null,
-            messageId: message?.id ?? null,
-            taskId: message?.taskId ?? null,
-            errorType,
-            errorMessage: text,
-            willContinueProcessing: true
-          });
-          
-          // 向父智能体发送错误通知
-          await this._sendErrorNotificationToParent(agentId, message, {
-            errorType: "llm_call_failed",
-            message: `LLM 调用失败: ${text}`,
-            originalError: text,
-            errorName: errorType
-          });
-          
-          return; // 结束当前消息处理，但不停止整个系统
-        }
-      }
-      if (!msg) {
-        this._state.setAgentComputeStatus(agentId, 'idle');
-        return;
-      }
-      
-      // 更新 token 使用统计（基于 LLM 返回的实际值）
-      if (agentId && msg._usage) {
-        this._conversationManager.updateTokenUsage(agentId, msg._usage);
-        const status = this._conversationManager.getContextStatus(agentId);
-        void this.log.debug("更新上下文 token 使用统计", {
-          agentId,
-          promptTokens: msg._usage.promptTokens,
-          completionTokens: msg._usage.completionTokens,
-          totalTokens: msg._usage.totalTokens,
-          usagePercent: (status.usagePercent * 100).toFixed(1) + '%',
-          status: status.status
-        });
-        
-        // 如果更新后超过硬性限制，记录警告（下次调用时会被拒绝）
-        if (status.status === 'exceeded') {
-          void this.log.warn("上下文已超过硬性限制，下次 LLM 调用将被拒绝", {
-            agentId,
-            usedTokens: status.usedTokens,
-            maxTokens: status.maxTokens,
-            usagePercent: (status.usagePercent * 100).toFixed(1) + '%'
-          });
-        }
-      }
-      
-      conv.push(msg);
-
-      const toolCalls = msg.tool_calls ?? [];
-      if (!toolCalls || toolCalls.length === 0) {
-        // 检测 LLM 是否在文本中描述了工具调用意图但没有实际调用
-        const content = msg.content ?? "";
-        const toolIntentPatterns = [
-          /我将.*创建/,
-          /让我.*创建/,
-          /我需要.*创建/,
-          /我会.*创建/,
-          /首先.*创建/,
-          /create_role/i,
-          /spawn_agent/i,
-          /send_message/i,
-          /我将.*调用/,
-          /让我.*调用/,
-          /我要.*调用/
-        ];
-        const hasToolIntent = toolIntentPatterns.some(pattern => pattern.test(content));
-        
-        if (hasToolIntent && i < this.maxToolRounds - 1) {
-          // LLM 描述了工具调用意图但没有实际调用，添加提示并重试
-          void this.log.warn("检测到 LLM 描述了工具调用意图但未实际调用，添加提示重试", {
-            agentId: ctx.agent?.id ?? null,
-            round: i + 1,
-            contentPreview: content.substring(0, 200)
-          });
-          
-          conv.push({
-            role: "user",
-            content: "【系统提示】你刚才描述了想要执行的操作，但没有实际调用工具函数。请注意：你必须通过 tool_calls 调用工具函数来执行操作，而不是在文本中描述。例如，如果你想创建岗位，请直接调用 create_role 工具；如果你想创建智能体，请直接调用 spawn_agent 工具。请立即调用相应的工具函数来执行你描述的操作。"
-          });
-          continue; // 继续下一轮，让 LLM 重新生成带 tool_calls 的响应
-        }
-        
-        // 没有工具调用但有文本内容，自动发送给 user
-        if (content.trim()) {
-          const currentAgentId = ctx.agent?.id ?? "unknown";
-          // 没有调用 send_message 的回复默认发给 user
-          const targetId = "user";
-          const currentTaskId = ctx.currentMessage?.taskId ?? null;
-          
-          void this.log.info("LLM 返回纯文本无 tool_calls，自动发送消息", {
-            agentId: currentAgentId,
-            targetId,
-            contentPreview: content.substring(0, 100)
-          });
-          
-          const sendResult = ctx.tools.sendMessage({
-            to: targetId,
-            from: currentAgentId,
-            taskId: currentTaskId,
-            payload: { text: content.trim() }
-          });
-          
-          // 记录智能体发送消息的生命周期事件
-          void this.loggerRoot.logAgentLifecycleEvent("agent_message_sent", {
-            agentId: currentAgentId,
-            messageId: sendResult?.messageId ?? null,
-            to: targetId,
-            taskId: currentTaskId,
-            autoSent: true
-          });
-        }
-        
-        // 没有工具调用，处理完成，重置为空闲状态
-        this._state.setAgentComputeStatus(agentId, 'idle');
-        return;
-      }
-
-      const toolNames = toolCalls.map((c) => c?.function?.name).filter(Boolean);
-      void this.log.debug("LLM 返回工具调用", {
-        agentId: ctx.agent?.id ?? null,
-        count: toolCalls.length,
-        toolNames
-      });
-
-      for (const call of toolCalls) {
-        // 在执行每个工具调用前检查智能体状态
-        const statusBeforeTool = this._state.getAgentComputeStatus(agentId);
-        if (statusBeforeTool === 'stopped' || statusBeforeTool === 'stopping' || statusBeforeTool === 'terminating') {
-          void this.log.info("智能体已停止，跳过剩余工具调用", {
-            agentId,
-            status: statusBeforeTool,
-            toolName: call.function?.name ?? "unknown",
-            remainingCalls: toolCalls.length
-          });
-          // 立即返回，不执行任何工具调用
-          return;
-        }
-        
-        let args = {};
-        try {
-          args = call.function?.arguments ? JSON.parse(call.function.arguments) : {};
-        } catch (parseErr) {
-          // 工具参数解析失败
-          const parseError = parseErr && typeof parseErr.message === "string" ? parseErr.message : String(parseErr ?? "unknown parse error");
-          void this.log.error("工具调用参数解析失败", { 
-            agentId: ctx.agent?.id ?? null,
-            toolName: call.function?.name ?? "unknown",
-            arguments: call.function?.arguments ?? "null",
-            parseError,
-            callId: call.id
-          });
-          
-          // 返回解析错误结果，继续处理其他工具调用
-          conv.push({
-            role: "tool",
-            tool_call_id: call.id,
-            content: JSON.stringify({
-              error: "参数解析失败",
-              details: parseError,
-              toolName: call.function?.name ?? "unknown"
-            })
-          });
-          continue;
-        }
-        
-        const toolName = call.function?.name ?? null;
-        void this.log.debug("解析工具调用参数", { name: toolName });
-        
-        let result = null;
-        try {
-          result = await this.executeToolCall(ctx, toolName, args);
-        } catch (toolErr) {
-          // 工具执行失败
-          const toolError = toolErr && typeof toolErr.message === "string" ? toolErr.message : String(toolErr ?? "unknown tool error");
-          void this.log.error("工具执行失败", {
-            agentId: ctx.agent?.id ?? null,
-            toolName,
-            args,
-            toolError,
-            callId: call.id,
-            stack: toolErr?.stack ?? null
-          });
-          
-          // 返回工具执行错误结果，继续处理其他工具调用
-          result = {
-            error: "工具执行失败",
-            details: toolError,
-            toolName,
-            args
-          };
-        }
-        
-        // 在工具执行后再次检查状态
-        const statusAfterTool = this._state.getAgentComputeStatus(agentId);
-        if (statusAfterTool === 'stopped' || statusAfterTool === 'stopping' || statusAfterTool === 'terminating') {
-          void this.log.info("智能体在工具执行后已停止，跳过剩余工具调用", {
-            agentId,
-            status: statusAfterTool,
-            executedTool: toolName
-          });
-          // 立即返回，不继续处理
-          return;
-        }
-        
-        // 触发工具调用事件
-        this._emitToolCall({
-          agentId: ctx.agent?.id ?? null,
-          toolName,
-          args,
-          result,
-          taskId: message?.taskId ?? null,
-          callId: call.id,
-          timestamp: new Date().toISOString(),
-          reasoningContent: msg.reasoning_content ?? null
-        });
-        
-        conv.push({
-          role: "tool",
-          tool_call_id: call.id,
-          content: JSON.stringify(result ?? null)
-        });
-      }
-      if (ctx.yieldRequested) {
-        ctx.yieldRequested = false;
-        this._state.setAgentComputeStatus(agentId, 'idle');
-        return;
-      }
-    }
-    // 工具调用轮次达到上限，重置为空闲状态
-    this._state.setAgentComputeStatus(agentId, 'idle');
-    void this.log.warn("工具调用轮次达到上限，强制停止本次处理", {
-      agentId: ctx.agent?.id ?? null,
-      messageId: message?.id ?? null,
-      maxToolRounds: this.maxToolRounds
-    });
-
-    // 向父智能体发送错误通知（需求 5.3）
-    if (agentId) {
-      await this._sendErrorNotificationToParent(agentId, message, {
-        errorType: "max_tool_rounds_exceeded",
-        message: `智能体 ${agentId} 超过最大工具调用轮次限制 (${this.maxToolRounds})`,
-        maxToolRounds: this.maxToolRounds
-      });
-    }
+    // 委托给 RuntimeLlm 处理
+    return await this._llm.doLlmProcessing(ctx, message, conv, agentId, llmClient);
   }
 
   /**
@@ -989,92 +668,8 @@ export class Runtime {
    * @private
    */
   async _sendErrorNotificationToParent(agentId, originalMessage, errorInfo) {
-    if (!agentId) return;
-    
-    const timestamp = new Date().toISOString();
-    const errorPayload = {
-      kind: "error",
-      errorType: errorInfo.errorType,
-      message: errorInfo.message,
-      agentId,
-      originalMessageId: originalMessage?.id ?? null,
-      taskId: originalMessage?.taskId ?? null,
-      timestamp,
-      ...errorInfo
-    };
-    
-    // 触发全局错误事件（用于前端显示）
-    this._emitError({
-      agentId,
-      errorType: errorInfo.errorType,
-      message: errorInfo.message,
-      originalMessageId: originalMessage?.id ?? null,
-      taskId: originalMessage?.taskId ?? null,
-      timestamp,
-      ...errorInfo
-    });
-
-    // 1. 直接存储错误消息到聊天记录（不通过 bus.send，避免触发消息处理）
-    const errorMessageId = randomUUID();
-    const errorMessage = {
-      id: errorMessageId,
-      from: agentId,
-      to: agentId,
-      taskId: originalMessage?.taskId ?? null,
-      payload: errorPayload,
-      createdAt: timestamp
-    };
-    
-    if (typeof this._storeErrorMessageCallback === 'function') {
-      try {
-        this._storeErrorMessageCallback(errorMessage);
-        void this.log.info("已保存错误消息到智能体聊天记录", {
-          agentId,
-          errorType: errorInfo.errorType,
-          messageId: errorMessageId
-        });
-      } catch (storeErr) {
-        void this.log.error("保存错误消息到聊天记录失败", {
-          agentId,
-          errorType: errorInfo.errorType,
-          error: storeErr?.message ?? String(storeErr)
-        });
-      }
-    }
-    
-    // 2. 向父智能体发送错误通知（通过 bus.send，让父智能体知道子智能体出错了）
-    const parentAgentId = this._agentMetaById.get(agentId)?.parentAgentId ?? null;
-    if (!parentAgentId || !this._agents.has(parentAgentId)) {
-      void this.log.debug("未找到父智能体，跳过向父智能体发送错误通知", { 
-        agentId, 
-        parentAgentId,
-        errorType: errorInfo.errorType 
-      });
-      return;
-    }
-
-    try {
-      this.bus.send({
-        to: parentAgentId,
-        from: agentId,
-        taskId: originalMessage?.taskId ?? null,
-        payload: errorPayload
-      });
-      
-      void this.log.info("已向父智能体发送错误通知", {
-        agentId,
-        parentAgentId,
-        errorType: errorInfo.errorType,
-        taskId: originalMessage?.taskId ?? null
-      });
-    } catch (notifyErr) {
-      void this.log.error("发送错误通知失败", {
-        agentId,
-        parentAgentId,
-        errorType: errorInfo.errorType,
-        notifyError: notifyErr?.message ?? String(notifyErr)
-      });
-    }
+    // 委托给 RuntimeLlm 处理
+    return await this._llm.sendErrorNotificationToParent(agentId, originalMessage, errorInfo);
   }
 
   /**
@@ -1083,13 +678,8 @@ export class Runtime {
    * @private
    */
   _formatToolGroupsInfo() {
-    const groups = this.toolGroupManager.listGroups();
-    if (!groups || groups.length === 0) {
-      return "";
-    }
-    
-    const lines = groups.map(g => `- ${g.id}：${g.description}（${g.tools.join("、")}）`);
-    return `\n\n【可用工具组列表】\n${lines.join("\n")}`;
+    // 委托给 RuntimeLlm 处理
+    return this._llm.formatToolGroupsInfo();
   }
 
   /**
@@ -1098,110 +688,40 @@ export class Runtime {
    * @returns {string}
    */
   _buildSystemPromptForAgent(ctx) {
-    const toolRules = ctx.systemToolRules ? "\n\n" + ctx.systemToolRules : "";
-    const agentId = ctx.agent?.id ?? "";
-    const parentAgentId = this._agentMetaById.get(agentId)?.parentAgentId ?? null;
-    const runtimeInfo = `\n\n【运行时信息】\nagentId=${agentId}\nparentAgentId=${parentAgentId ?? ""}`;
-
-    if (ctx.agent?.id === "root") {
-      const rootPrompt = ctx.agent?.rolePrompt ?? "";
-      // 动态注入可用工具组列表
-      const toolGroupsInfo = this._formatToolGroupsInfo();
-      return rootPrompt + runtimeInfo + toolGroupsInfo;
-    }
-
-    const base = ctx.systemBasePrompt ?? "";
-    const role = ctx.agent?.rolePrompt ?? "";
-    
-    // 获取并格式化 TaskBrief（Requirements 1.5）
-    const taskBrief = this._agentTaskBriefs.get(agentId);
-    const taskBriefText = taskBrief ? "\n\n" + formatTaskBrief(taskBrief) : "";
-    
-    // 获取联系人列表信息
-    const contacts = this.contactManager.listContacts(agentId);
-    let contactsText = "";
-    if (contacts && contacts.length > 0) {
-      const contactLines = contacts.map(c => `- ${c.role}（${c.id}）`);
-      contactsText = `\n\n【联系人列表】\n${contactLines.join('\n')}`;
-    }
-    
-    const composed = ctx.tools.composePrompt({
-      base,
-      composeTemplate: ctx.systemComposeTemplate ?? "{{BASE}}\n{{ROLE}}\n{{TASK}}",
-      rolePrompt: role,
-      taskText: "",
-      workspace: ctx.systemWorkspacePrompt ?? ""
-    });
-    return composed + runtimeInfo + taskBriefText + contactsText + toolRules;
+    // 委托给 RuntimeLlm 处理
+    return this._llm.buildSystemPromptForAgent(ctx);
   }
 
   /**
    * 将运行时消息格式化为 LLM 可理解的文本输入。
-   * 对于非 root 智能体，隐藏 taskId 以降低心智负担。
-   * @param {any} ctx
-   * @param {any} message
+   * @param {any} ctx - 智能体上下文
+   * @param {any} message - 消息对象
    * @returns {string}
    */
   _formatMessageForLlm(ctx, message) {
-    const isRoot = ctx?.agent?.id === "root";
-    
-    // root 智能体使用原有格式（需要看到 taskId）
-    if (isRoot) {
-      const payloadText =
-        message?.payload?.text ??
-        message?.payload?.content ??
-        (typeof message?.payload === "string" ? message.payload : null);
-      const payload = payloadText ?? JSON.stringify(message?.payload ?? {}, null, 2);
-      return `from=${message?.from ?? ""}\nto=${message?.to ?? ""}\ntaskId=${message?.taskId ?? ""}\npayload=${payload}`;
-    }
-    
-    // 非 root 智能体使用新的消息格式化器（Requirements 10.1, 10.2, 10.3, 10.4, 10.5, 10.6）
-    const senderId = message?.from ?? 'unknown';
-    const senderInfo = this._getSenderInfo(senderId);
-    return formatMessageForAgent(message, senderInfo);
+    // 委托给 RuntimeLlm 处理
+    return this._llm.formatMessageForLlm(ctx, message);
   }
 
   /**
    * 获取发送者信息（用于消息格式化）
    * @param {string} senderId - 发送者ID
    * @returns {{role: string}|null}
-   * @private
    */
   _getSenderInfo(senderId) {
-    if (senderId === 'user') {
-      return { role: 'user' };
-    }
-    if (senderId === 'root') {
-      return { role: 'root' };
-    }
-    
-    // 尝试从已注册的智能体获取角色信息
-    const agent = this._agents.get(senderId);
-    if (agent) {
-      return { role: agent.roleName ?? 'unknown' };
-    }
-    
-    // 尝试从智能体元数据获取
-    const meta = this._agentMetaById.get(senderId);
-    if (meta) {
-      const role = this.org.getRole(meta.roleId);
-      return { role: role?.name ?? 'unknown' };
-    }
-    
-    return { role: 'unknown' };
+    // 委托给 RuntimeLlm 处理
+    return this._llm.getSenderInfo(senderId);
   }
 
   /**
    * 获取或创建某个智能体的会话上下文。
-   * @param {string} agentId
-   * @param {string} systemPrompt
+   * @param {string} agentId - 智能体ID
+   * @param {string} systemPrompt - 系统提示词
    * @returns {any[]}
    */
   _ensureConversation(agentId, systemPrompt) {
-    if (!this._conversations.has(agentId)) {
-      this._conversations.set(agentId, [{ role: "system", content: systemPrompt }]);
-    }
-    return this._conversations.get(agentId);
+    // 委托给 RuntimeLlm 处理
+    return this._llm.ensureConversation(agentId, systemPrompt);
   }
 
   /**
@@ -1210,55 +730,38 @@ export class Runtime {
    * @returns {any}
    */
   _buildAgentContext(agent) {
-    const tools = {
-      findRoleByName: (name) => this.org.findRoleByName(name),
-      createRole: (input) =>
-        this.org.createRole({
-          ...input,
-          createdBy: input?.createdBy ?? (agent?.id ? agent.id : null)
-        }),
-      spawnAgent: async (input) => {
-        const callerId = agent?.id ?? null;
-        if (!callerId) throw new Error("missing_creator_agent");
-        return await this.spawnAgentAs(callerId, input);
-      },
-      sendMessage: (message) => {
-        const to = message?.to ?? null;
-        if (!to || !this._agents.has(String(to))) {
-          void this.log.warn("发送消息收件人不存在（已拦截）", { to: to ?? null, from: message?.from ?? null });
-          return null;
-        }
-        return this.bus.send(message);
-      },
-      putArtifact: (artifact) => this.artifacts.putArtifact(artifact),
-      getArtifact: (ref) => this.artifacts.getArtifact(ref),
-      saveImage: (buffer, meta) => this.artifacts.saveImage(buffer, meta),
-      composePrompt: (parts) => this.prompts.compose(parts),
-      consolePrint: (text) => process.stdout.write(String(text ?? ""))
-    };
-
-    return {
-      runtime: this,
-      org: this.org,
-      bus: this.bus,
-      artifacts: this.artifacts,
-      prompts: this.prompts,
-      systemBasePrompt: this.systemBasePrompt,
-      systemComposeTemplate: this.systemComposeTemplate,
-      systemToolRules: this.systemToolRules,
-      systemWorkspacePrompt: this.systemWorkspacePrompt,
-      tools,
-      agent: agent ?? null
-    };
+    // 委托给 ContextBuilder 处理
+    return this._contextBuilder.buildAgentContext(agent);
   }
 
   /**
-   * 获取指定服务的 LlmClient（懒加载，池化复用）。
-   * @param {string} serviceId - 服务ID
+   * 设置智能体的运算状态。
+   * @param {string} agentId - 智能体ID
+   * @param {'idle'|'waiting_llm'|'processing'|'stopping'|'stopped'|'terminating'} status - 新状态
+   */
+  setAgentComputeStatus(agentId, status) {
+    // 委托给 RuntimeState 处理
+    this._state.setAgentComputeStatus(agentId, status);
+  }
+
+  /**
+   * 获取智能体的运算状态。
+   * @param {string} agentId - 智能体ID
+   * @returns {'idle'|'waiting_llm'|'processing'|'stopping'|'stopped'|'terminating'|null}
+   */
+  getAgentComputeStatus(agentId) {
+    // 委托给 RuntimeState 处理
+    return this._state.getAgentComputeStatus(agentId);
+  }
+
+  /**
+   * 获取指定 LLM 服务的客户端实例。
+   * 如果服务不存在或未配置，返回 null。
+   * @param {string} serviceId - LLM 服务 ID
    * @returns {LlmClient|null} LlmClient 实例，如果服务不存在则返回 null
    */
   getLlmClientForService(serviceId) {
-    if (!serviceId) {
+    if (!serviceId || !this.serviceRegistry) {
       return null;
     }
 
@@ -1267,10 +770,10 @@ export class Runtime {
       return this.llmClientPool.get(serviceId);
     }
 
-    // 从注册表获取服务配置
-    const serviceConfig = this.serviceRegistry?.getServiceById(serviceId);
+    // 从服务注册表获取服务配置
+    const serviceConfig = this.serviceRegistry.getServiceById(serviceId);
     if (!serviceConfig) {
-      void this.log.warn("LLM服务不存在", { serviceId });
+      void this.log.warn("LLM 服务不存在", { serviceId });
       return null;
     }
 
@@ -1362,7 +865,7 @@ export class Runtime {
     }
 
     // 检查服务是否存在
-    if (this.serviceRegistry?.getService?.(role.llmServiceId)) {
+    if (this.serviceRegistry?.getServiceById?.(role.llmServiceId)) {
       return role.llmServiceId;
     }
 
@@ -1828,17 +1331,8 @@ export class Runtime {
    * @returns {{warning:boolean, currentCount?:number, maxCount?:number}}
    */
   _checkContextAndWarn(agentId) {
-    const result = this._conversationManager.checkAndWarn(agentId);
-    
-    if (result.warning) {
-      void this.log.warn("智能体上下文超过限制", {
-        agentId,
-        currentCount: result.currentCount,
-        maxCount: result.maxCount
-      });
-    }
-
-    return result;
+    // 委托给 RuntimeLlm 处理
+    return this._llm.checkContextAndWarn(agentId);
   }
 
   /**

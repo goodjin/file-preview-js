@@ -205,6 +205,7 @@ export class MessageProcessor {
     } catch (err) {
       const errorMessage = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
       const errorType = err?.name ?? "UnknownError";
+      const errorStack = err?.stack ?? null;
       
       void runtime.log?.error?.("智能体消息处理异常（已隔离）", {
         agentId,
@@ -213,25 +214,27 @@ export class MessageProcessor {
         taskId: msg.taskId ?? null,
         errorType,
         error: errorMessage,
-        stack: err?.stack ?? null,
+        stack: errorStack,
         willContinueProcessing: true
       });
       
       // 重置状态
       runtime.setAgentComputeStatus?.(agentId, 'idle');
       
-      // 发送错误通知
+      // 发送错误通知（包含完整堆栈信息）
       try {
         await runtime._sendErrorNotificationToParent?.(agentId, msg, {
           errorType: "agent_message_processing_failed",
           message: `智能体 ${agentId} 消息处理异常: ${errorMessage}`,
           originalError: errorMessage,
-          errorName: errorType
+          errorName: errorType,
+          stack: errorStack
         });
       } catch (notifyErr) {
         void runtime.log?.error?.("发送异常通知失败", {
           agentId,
-          notifyError: notifyErr?.message ?? String(notifyErr)
+          notifyError: notifyErr?.message ?? String(notifyErr),
+          stack: notifyErr?.stack ?? null
         });
       }
     }

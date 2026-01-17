@@ -69,10 +69,10 @@ export class RuntimeMessaging {
         messageId: newMessage.id ?? 'unknown'
       });
     } catch (err) {
+      // 打印完整的原始错误信息
       void this.log.error("处理消息中断时发生错误", {
         agentId,
-        error: err?.message ?? String(err),
-        stack: err?.stack
+        error: err // 直接传递原始错误对象
       });
     }
   }
@@ -240,17 +240,13 @@ export class RuntimeMessaging {
     try {
       await agent.onMessage(this.runtime._buildAgentContext(agent), msg);
     } catch (err) {
-      const errorMessage = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
-      const errorType = err?.name ?? "UnknownError";
-      
+      // 打印完整的原始错误信息（包含堆栈和行号）
       void this.log.error("智能体消息处理异常（已隔离）", {
         agentId,
         messageId: msg.id ?? null,
         from: msg.from,
         taskId: msg.taskId ?? null,
-        errorType,
-        error: errorMessage,
-        stack: err?.stack ?? null,
+        error: err, // 直接传递原始错误对象，让日志系统处理
         willContinueProcessing: true
       });
       
@@ -259,16 +255,20 @@ export class RuntimeMessaging {
       
       // 向父智能体发送错误通知
       try {
+        const errorMessage = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
+        const errorType = err?.name ?? "UnknownError";
+        
         await this.runtime._sendErrorNotificationToParent(agentId, msg, {
           errorType: "agent_message_processing_failed",
           message: `智能体 ${agentId} 消息处理异常: ${errorMessage}`,
           originalError: errorMessage,
-          errorName: errorType
+          errorName: errorType,
+          stack: err?.stack ?? null // 传递堆栈信息
         });
       } catch (notifyErr) {
         void this.log.error("发送异常通知失败", {
           agentId,
-          notifyError: notifyErr?.message ?? String(notifyErr)
+          error: notifyErr // 直接传递原始错误对象
         });
       }
     }
