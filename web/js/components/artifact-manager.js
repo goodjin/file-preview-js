@@ -710,6 +710,8 @@ class ArtifactManager {
 
   /**
    * 设置文本显示模式
+   * 对于普通文本：text=纯文本，markdown=Markdown渲染
+   * 对于HTML工件：text=源码，markdown=HTML预览
    */
   setTextDisplayMode(mode) {
     this.textDisplayMode = mode;
@@ -717,9 +719,29 @@ class ArtifactManager {
       btn.classList.toggle("active", btn.dataset.mode === mode);
     });
     
-    // 重新渲染文本内容
+    // 重新渲染内容
     if (this.currentTextContent !== null) {
-      this._renderTextContent(this.currentTextContent);
+      // 判断当前工件类型
+      const isHtml = this.selectedArtifact && 
+                     (this.selectedArtifact.type === "html" || 
+                      this.selectedArtifact.type === "text/html");
+      
+      if (isHtml) {
+        // HTML工件：text模式显示源码，markdown模式显示HTML预览
+        this.viewerPanel.innerHTML = "";
+        if (mode === "text") {
+          // 显示HTML源码
+          const viewer = new TextViewer({ container: this.viewerPanel });
+          viewer.render(this.currentTextContent);
+          this.currentViewer = viewer;
+        } else {
+          // 显示HTML预览
+          this._renderHtmlViewer({ content: this.currentTextContent });
+        }
+      } else {
+        // 普通文本工件：使用原有逻辑
+        this._renderTextContent(this.currentTextContent);
+      }
     }
   }
 
@@ -1240,6 +1262,8 @@ class ArtifactManager {
     } else if (viewerType === "text") {
       // 显示文本模式切换按钮
       this.textModeToggle.style.display = "flex";
+      // 更新按钮标签为普通文本模式
+      this._updateTextModeButtonLabels("纯文本", "Markdown");
       this.currentTextContent = typeof artifact.content === "string" 
         ? artifact.content 
         : JSON.stringify(artifact.content, null, 2);
@@ -1249,15 +1273,50 @@ class ArtifactManager {
       viewer.render(artifact.content);
       this.currentViewer = viewer;
     } else if (viewerType === "html") {
-      // HTML 文件使用 iframe 预览
-      this._renderHtmlViewer(artifact);
+      // HTML 文件：支持文本/HTML切换
+      // 保存HTML源码
+      this.currentTextContent = typeof artifact.content === "string" 
+        ? artifact.content 
+        : "";
+      
+      // 显示文本模式切换按钮（用于HTML/文本切换）
+      this.textModeToggle.style.display = "flex";
+      // 更新按钮标签为HTML模式
+      this._updateTextModeButtonLabels("源码", "预览");
+      
+      // 根据当前模式渲染
+      if (this.textDisplayMode === "text") {
+        // 文本模式：显示HTML源码
+        this._renderTextContent(this.currentTextContent);
+      } else {
+        // Markdown模式：用作HTML预览模式
+        this._renderHtmlViewer(artifact);
+      }
     } else {
       this.viewerPanel.innerHTML = `<div class="empty-state error">不支持的文件类型: ${artifact.type || "unknown"}</div>`;
     }
   }
 
   /**
+   * 更新文本模式切换按钮的标签
+   * @param {string} textLabel - 文本模式的标签
+   * @param {string} markdownLabel - Markdown/预览模式的标签
+   */
+  _updateTextModeButtonLabels(textLabel, markdownLabel) {
+    this.textModeButtons?.forEach(btn => {
+      if (btn.dataset.mode === "text") {
+        btn.textContent = textLabel;
+      } else if (btn.dataset.mode === "markdown") {
+        btn.textContent = markdownLabel;
+      }
+    });
+  }
+
+  /**
    * 渲染 HTML 查看器（使用 iframe）
+   * 支持两种方式：
+   * 1. 工作空间文件：通过文件路径加载
+   * 2. 普通工件：通过文件名加载，或使用srcdoc加载HTML内容
    */
   _renderHtmlViewer(artifact) {
     const wrapper = document.createElement("div");
@@ -1269,23 +1328,30 @@ class ArtifactManager {
     iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups");
     iframe.setAttribute("title", artifact.actualFilename || artifact.filename || "HTML Preview");
     
-    // 获取 HTML 文件的 URL
-    let htmlUrl;
-    if (this.selectedArtifact?.isWorkspaceFile) {
-      // 工作空间文件
-      htmlUrl = `/workspace-files/${this.selectedArtifact.workspaceId}/${this.selectedArtifact.path}`;
-    } else {
-      // 普通工件
-      htmlUrl = `/artifacts/${artifact.content || artifact.filename}`;
-    }
-    
-    iframe.src = htmlUrl;
-    
     // 添加加载状态
     const loadingOverlay = document.createElement("div");
     loadingOverlay.className = "html-viewer-loading";
     loadingOverlay.textContent = "加载中...";
     
+    // 判断加载方式
+    if (this.selectedArtifact?.isWorkspaceFile) {
+      // 工作空间文件：通过文件路径加载
+      const htmlUrl = `/workspace-files/${this.selectedArtifact.workspaceId}/${this.selectedArtifact.path}`;
+      iframe.src = htmlUrl;
+    } else if (typeof artifact.content === "string" && artifact.content.includes("<")) {
+      // 普通工件且content是HTML源码：使用srcdoc直接加载
+      iframe.srcdoc = artifact.content;
+      // srcdoc加载很快，直接隐藏加载提示
+      setTimeout(() => {
+        loadingOverlay.style.display = "none";
+      }, 100);
+    } else {
+      // 普通工件且content是文件名：通过URL加载
+      const htmlUrl = `/artifacts/${artifact.content || artifact.filename || this.selectedArtifact.filename}`;
+      iframe.src = htmlUrl;
+    }
+    
+    // iframe加载事件
     iframe.addEventListener("load", () => {
       loadingOverlay.style.display = "none";
     });
@@ -1298,11 +1364,6 @@ class ArtifactManager {
     wrapper.appendChild(loadingOverlay);
     wrapper.appendChild(iframe);
     this.viewerPanel.appendChild(wrapper);
-    
-    // 保存当前文本内容以便复制（HTML 源码）
-    if (typeof artifact.content === "string" && artifact.content.includes("<")) {
-      this.currentTextContent = artifact.content;
-    }
   }
 
   /**
