@@ -353,7 +353,7 @@
     - 更新 Runtime 导入和使用
     - _需求：3.2, 7.1, 7.2_
   
-  - [ ] 13.7 重构 Runtime 核心协调器
+  - [x] 13.7 重构 Runtime 核心协调器
     - 保留 runtime.js 作为核心协调器
     - 保留初始化逻辑 (constructor, init)
     - 保留配置管理

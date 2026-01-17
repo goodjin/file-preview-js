@@ -5,16 +5,12 @@ import { MessageBus } from "./message_bus.js";
 import { OrgPrimitives } from "./org_primitives.js";
 import { PromptLoader } from "../prompt_loader.js";
 import { LlmClient } from "../llm_client.js";
-import { Logger, createNoopModuleLogger, normalizeLoggingConfig, formatLocalTime } from "../utils/logger/logger.js";
-import { Agent } from "../../agents/agent.js";
+import { Logger, createNoopModuleLogger, normalizeLoggingConfig } from "../utils/logger/logger.js";
 import { ConversationManager } from "../conversation_manager.js";
 import { HttpClient } from "../http_client.js";
 import { WorkspaceManager } from "../workspace_manager.js";
 import { CommandExecutor } from "../command_executor.js";
-import { validateTaskBrief, formatTaskBrief } from "../utils/message/task_brief.js";
 import { ContactManager } from "../contact_manager.js";
-import { formatMessageForAgent } from "../utils/message/message_formatter.js";
-import { validateMessageFormat } from "../utils/message/message_validator.js";
 import { ModuleLoader } from "../extensions/module_loader.js";
 import { LlmServiceRegistry } from "../llm_service_registry.js";
 import { ModelSelector } from "../model_selector.js";
@@ -39,16 +35,26 @@ import { RuntimeTools } from "../runtime/runtime_tools.js";
 import { RuntimeLlm } from "../runtime/runtime_llm.js";
 
 /**
- * 运行时：将平台能力（org/message/artifact/prompt）与智能体行为连接起来。
+ * Runtime - 运行时核心协调器
+ * 
+ * 【职责】
+ * Runtime 类作为核心协调器，负责：
+ * 1. 系统初始化：加载配置、初始化服务、注册智能体
+ * 2. 配置管理：管理系统配置和服务配置
+ * 3. 服务初始化：初始化各个平台服务（MessageBus、OrgPrimitives、ArtifactStore 等）
+ * 4. 子模块组合：导入并组合各个功能子模块
+ * 5. 统一接口：提供统一的公共 API，委托给子模块实现
  * 
  * 【模块化架构】
- * Runtime 类作为核心协调器，将具体功能委托给以下子模块：
+ * Runtime 将具体功能委托给以下子模块：
  * - RuntimeState: 状态管理（智能体注册表、运算状态、插话队列等）
  * - RuntimeEvents: 事件系统（工具调用、错误、LLM 重试等事件）
  * - RuntimeLifecycle: 生命周期管理（智能体创建、恢复、注册、查询、中断等）
  * - RuntimeMessaging: 消息处理循环（消息调度、处理、插话、并发控制）
  * - RuntimeTools: 工具管理（工具定义、工具执行、工具组管理、工具权限检查）
+ * - RuntimeLlm: LLM 交互管理（LLM 调用、上下文构建、错误处理）
  * - JavaScriptExecutor: JavaScript 代码执行
+ * - BrowserJavaScriptExecutor: 浏览器 JavaScript 执行
  * - ContextBuilder: 上下文构建
  * - AgentManager: 智能体生命周期管理
  * - MessageProcessor: 消息调度和处理
@@ -56,13 +62,32 @@ import { RuntimeLlm } from "../runtime/runtime_llm.js";
  * - LlmHandler: LLM 交互处理
  * - ShutdownManager: 优雅关闭管理
  * 
- * 公共 API 保持不变，内部实现委托给子模块。
+ * 【设计原则】
+ * - 单一职责：Runtime 只负责协调，不实现具体功能
+ * - 低耦合：通过子模块接口进行交互
+ * - 高内聚：相关功能集中在对应的子模块中
+ * - 向后兼容：保持公共 API 不变
+ * 
+ * 【需求】
+ * Requirements: 3.2, 7.1, 7.2
  */
 export class Runtime {
   /**
+   * 构造函数 - 初始化 Runtime 核心协调器
+   * 
+   * 【初始化流程】
+   * 1. 保存配置参数
+   * 2. 初始化临时日志系统
+   * 3. 初始化事件系统模块
+   * 4. 初始化状态管理模块
+   * 5. 暴露状态属性（向后兼容）
+   * 6. 初始化临时服务实例
+   * 7. 初始化所有子模块
+   * 
    * @param {{config?:object, maxSteps?:number, configPath?:string, maxToolRounds?:number, idleWarningMs?:number, dataDir?:string}} options
    */
   constructor(options = {}) {
+    // ==================== 配置参数 ====================
     this._passedConfig = options.config ?? null; // 外部传入的配置
     this.maxSteps = options.maxSteps ?? 200;
     this.configPath = options.configPath ?? "config/app.json";
@@ -73,22 +98,24 @@ export class Runtime {
     this._stopRequested = false;
     this._processingLoopPromise = null;
     
-    // 初始化日志系统（临时，在 init() 中会重新初始化）
+    // ==================== 日志系统（临时） ====================
+    // 在 init() 中会重新初始化
     this.loggerRoot = new Logger(normalizeLoggingConfig(null));
     this.log = createNoopModuleLogger();
     
-    // 初始化事件系统模块
+    // ==================== 事件系统模块 ====================
     this._events = new RuntimeEvents({
       logger: this.log
     });
     
-    // 初始化状态管理模块
+    // ==================== 状态管理模块 ====================
     this._state = new RuntimeState({
       logger: this.log,
       onComputeStatusChange: (agentId, status) => this._events.emitComputeStatusChange(agentId, status)
     });
     
-    // 为向后兼容，直接暴露状态属性（委托给 RuntimeState）
+    // ==================== 向后兼容：暴露状态属性 ====================
+    // 直接暴露状态属性以保持向后兼容
     this._agents = this._state._agents;
     this._agentMetaById = this._state._agentMetaById;
     this._agentComputeStatus = this._state._agentComputeStatus;
@@ -99,40 +126,39 @@ export class Runtime {
     this._agentTaskBriefs = this._state._agentTaskBriefs;
     this._stateLocks = this._state._stateLocks;
     
+    // ==================== 行为注册表 ====================
     this._behaviorRegistry = new Map();
     
-    // 初始化 ConversationManager（使用 RuntimeState 的 conversations）
+    // ==================== ConversationManager ====================
+    // 使用 RuntimeState 的 conversations
     this._conversationManager = new ConversationManager({ 
       maxContextMessages: this.maxContextMessages,
       conversations: this._state.getConversations(),
       contextLimit: options.contextLimit ?? null
     });
     
+    // ==================== 任务和工作空间映射 ====================
     this._rootTaskAgentByTaskId = new Map();
     this._rootTaskRoleByTaskId = new Map();
     this._rootTaskEntryAgentAnnouncedByTaskId = new Set();
     this._agentLastActivityTime = new Map(); // 跟踪智能体最后活动时间
     this._idleWarningEmitted = new Set(); // 跟踪已发出空闲警告的智能体
     
-    // 初始化 WorkspaceManager 和 CommandExecutor（在 init() 中会重新初始化带 logger）
+    // ==================== 临时服务实例 ====================
+    // 在 init() 中会重新初始化带 logger
     this.workspaceManager = new WorkspaceManager();
     this.commandExecutor = new CommandExecutor();
-    // 初始化 ContactManager（在 init() 中会重新初始化带 logger）
     this.contactManager = new ContactManager();
-    // 模块加载器（在 init() 中会重新初始化带 logger）
     this.moduleLoader = new ModuleLoader();
-    // LLM 服务注册表和模型选择器（在 init() 中初始化）
     this.serviceRegistry = null;
     this.modelSelector = null;
-    // 能力路由器和内容适配器（在 init() 中初始化）
     this.capabilityRouter = null;
     this.contentAdapter = null;
     /** @type {Map<string, LlmClient>} */
     this.llmClientPool = new Map();
-    // 工具组管理器（在 init() 中会重新初始化带 logger）
     this.toolGroupManager = new ToolGroupManager({ registerBuiltins: false });
     
-    // 初始化子模块（模块化架构）
+    // ==================== 子模块初始化 ====================
     // 这些子模块封装了 Runtime 的具体功能实现
     /** @type {RuntimeState} 状态管理器 */
     this._stateManager = this._state;
@@ -164,8 +190,14 @@ export class Runtime {
     this._shutdownManager = new ShutdownManager(this);
   }
 
+  // ==================== 事件系统接口 ====================
+  // 以下方法委托给 RuntimeEvents 子模块处理
+
   /**
-   * 注册工具调用事件监听器。
+   * 注册工具调用事件监听器
+   * 
+   * 【委托】委托给 RuntimeEvents 处理
+   * 
    * @param {(event: {agentId: string, toolName: string, args: object, result: any, taskId: string|null}) => void} listener
    */
   onToolCall(listener) {
@@ -173,7 +205,10 @@ export class Runtime {
   }
 
   /**
-   * 触发工具调用事件。
+   * 触发工具调用事件
+   * 
+   * 【委托】委托给 RuntimeEvents 处理
+   * 
    * @param {{agentId: string, toolName: string, args: object, result: any, taskId: string|null}} event
    */
   _emitToolCall(event) {
@@ -181,7 +216,10 @@ export class Runtime {
   }
 
   /**
-   * 注册错误事件监听器。
+   * 注册错误事件监听器
+   * 
+   * 【委托】委托给 RuntimeEvents 处理
+   * 
    * @param {(event: {agentId: string, errorType: string, message: string, timestamp: string, [key: string]: any}) => void} listener
    */
   onError(listener) {
@@ -189,7 +227,10 @@ export class Runtime {
   }
 
   /**
-   * 触发错误事件（用于向前端广播错误）。
+   * 触发错误事件（用于向前端广播错误）
+   * 
+   * 【委托】委托给 RuntimeEvents 处理
+   * 
    * @param {{agentId: string, errorType: string, message: string, timestamp: string, [key: string]: any}} event
    */
   _emitError(event) {
@@ -197,7 +238,10 @@ export class Runtime {
   }
 
   /**
-   * 注册 LLM 重试事件监听器。
+   * 注册 LLM 重试事件监听器
+   * 
+   * 【委托】委托给 RuntimeEvents 处理
+   * 
    * @param {(event: {agentId: string, attempt: number, maxRetries: number, delayMs: number, errorMessage: string, timestamp: string}) => void} listener
    */
   onLlmRetry(listener) {
@@ -205,7 +249,10 @@ export class Runtime {
   }
 
   /**
-   * 触发 LLM 重试事件。
+   * 触发 LLM 重试事件
+   * 
+   * 【委托】委托给 RuntimeEvents 处理
+   * 
    * @param {{agentId: string, attempt: number, maxRetries: number, delayMs: number, errorMessage: string, timestamp: string}} event
    */
   _emitLlmRetry(event) {
@@ -213,7 +260,10 @@ export class Runtime {
   }
 
   /**
-   * 触发运算状态变更事件。
+   * 触发运算状态变更事件
+   * 
+   * 【委托】委托给 RuntimeEvents 处理
+   * 
    * @param {string} agentId - 智能体ID
    * @param {'idle'|'waiting_llm'|'processing'|'stopping'|'stopped'|'terminating'} status - 新状态
    */
@@ -222,8 +272,24 @@ export class Runtime {
   }
 
   /**
-   * 处理消息中断（当新消息到达正在处理的智能体时）。
-   * 这个方法由 MessageBus 在检测到活跃处理智能体时调用。
+   * 注册运算状态变更事件监听器
+   * 
+   * 【委托】委托给 RuntimeEvents 处理
+   * 
+   * @param {(event: {agentId: string, status: string, timestamp: string}) => void} listener
+   */
+  onComputeStatusChange(listener) {
+    this._events.onComputeStatusChange(listener);
+  }
+
+  // ==================== 消息处理接口 ====================
+  // 以下方法委托给 RuntimeMessaging 子模块处理
+
+  /**
+   * 处理消息中断（当新消息到达正在处理的智能体时）
+   * 
+   * 【委托】委托给 RuntimeMessaging 处理
+   * 【调用者】MessageBus 在检测到活跃处理智能体时调用
    * 
    * @param {string} agentId - 智能体ID
    * @param {object} newMessage - 新到达的消息
@@ -232,21 +298,40 @@ export class Runtime {
    * Requirements: 1.1, 1.4, 5.1
    */
   handleMessageInterruption(agentId, newMessage) {
-    // 委托给 RuntimeMessaging 处理
     return this._messaging.handleMessageInterruption(agentId, newMessage);
   }
 
   /**
-   * 注册运算状态变更事件监听器。
-   * @param {(event: {agentId: string, status: string, timestamp: string}) => void} listener
+   * 启动常驻异步消息循环（不阻塞调用者）
+   * 
+   * 【委托】委托给 RuntimeMessaging 处理
+   * 
+   * @returns {Promise<void>}
    */
-  onComputeStatusChange(listener) {
-    this._events.onComputeStatusChange(listener);
+  async startProcessing() {
+    return await this._messaging.startProcessing();
   }
 
   /**
-   * 获取智能体状态锁（用于原子性操作）。
-   * 使用 Promise 队列实现简单的互斥锁机制。
+   * 运行消息循环直到消息耗尽或达到步数上限
+   * 
+   * 【委托】委托给 RuntimeMessaging 处理
+   * 
+   * @returns {Promise<void>}
+   */
+  async run() {
+    return await this._messaging.run();
+  }
+
+  // ==================== 状态管理接口 ====================
+  // 以下方法委托给 RuntimeState 子模块处理
+
+  /**
+   * 获取智能体状态锁（用于原子性操作）
+   * 
+   * 【委托】委托给 RuntimeState 处理
+   * 【实现】使用 Promise 队列实现简单的互斥锁机制
+   * 
    * @param {string} agentId - 智能体ID
    * @returns {Promise<Function>} 返回释放锁的函数
    */
@@ -255,7 +340,10 @@ export class Runtime {
   }
 
   /**
-   * 释放智能体状态锁。
+   * 释放智能体状态锁
+   * 
+   * 【委托】委托给 RuntimeState 处理
+   * 
    * @param {Function} releaseFn - 释放函数
    */
   _releaseLock(releaseFn) {
@@ -263,7 +351,50 @@ export class Runtime {
   }
 
   /**
-   * 初始化平台能力组件。
+   * 设置智能体的运算状态
+   * 
+   * 【委托】委托给 RuntimeState 处理
+   * 
+   * @param {string} agentId - 智能体ID
+   * @param {'idle'|'waiting_llm'|'processing'|'stopping'|'stopped'|'terminating'} status - 新状态
+   */
+  setAgentComputeStatus(agentId, status) {
+    this._state.setAgentComputeStatus(agentId, status);
+  }
+
+  /**
+   * 获取智能体的运算状态
+   * 
+   * 【委托】委托给 RuntimeState 处理
+   * 
+   * @param {string} agentId - 智能体ID
+   * @returns {'idle'|'waiting_llm'|'processing'|'stopping'|'stopped'|'terminating'|null}
+   */
+  getAgentComputeStatus(agentId) {
+    return this._state.getAgentComputeStatus(agentId);
+  }
+
+  // ==================== 初始化方法 ====================
+  // Runtime 核心协调器的主要职责：初始化和配置管理
+
+  /**
+   * 初始化平台能力组件
+   * 
+   * 【初始化流程】
+   * 1. 加载配置文件
+   * 2. 初始化日志系统
+   * 3. 初始化核心服务（MessageBus、OrgPrimitives、ArtifactStore、PromptLoader、LlmClient）
+   * 4. 加载系统提示词
+   * 5. 初始化辅助服务（HttpClient、WorkspaceManager、CommandExecutor、ContactManager）
+   * 6. 初始化工具组管理器
+   * 7. 初始化模块加载器并加载模块
+   * 8. 初始化 LLM 服务注册表和模型选择器
+   * 9. 初始化内容适配器和内容路由器
+   * 10. 配置对话历史管理
+   * 11. 恢复智能体实例
+   * 12. 加载对话历史
+   * 13. 初始化浏览器 JavaScript 执行器
+   * 
    * @returns {Promise<void>}
    */
   async init() {
