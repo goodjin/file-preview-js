@@ -175,7 +175,7 @@
     - 运行测试验证
     - _需求：8.1, 9.2_
   
-  - [ ] 6.2 移动内容工具文件到 utils/content/
+  - [x] 6.2 移动内容工具文件到 utils/content/
     - 移动 content_adapter.js
     - 移动 capability_router.js
     - 更新导入路径

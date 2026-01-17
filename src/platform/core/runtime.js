@@ -19,8 +19,8 @@ import { ModuleLoader } from "../module_loader.js";
 import { LlmServiceRegistry } from "../llm_service_registry.js";
 import { ModelSelector } from "../model_selector.js";
 import { ToolGroupManager } from "../tool_group_manager.js";
-import { CapabilityRouter } from "../capability_router.js";
-import { ContentAdapter } from "../content_adapter.js";
+import { CapabilityRouter } from "../utils/content/capability_router.js";
+import { ContentAdapter } from "../utils/content/content_adapter.js";
 import { ArtifactContentRouter } from "../artifact_content_router.js";
 
 // 导入子模块

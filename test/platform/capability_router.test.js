@@ -7,8 +7,8 @@
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
-import { CapabilityRouter } from '../../src/platform/capability_router.js';
-import { ContentAdapter } from '../../src/platform/content_adapter.js';
+import { CapabilityRouter } from '../../src/platform/utils/content/capability_router.js';
+import { ContentAdapter } from '../../src/platform/utils/content/content_adapter.js';
 
 // 模拟 LlmServiceRegistry
 function createMockRegistry(services = {}) {

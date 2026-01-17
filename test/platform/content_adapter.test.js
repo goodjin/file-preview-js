@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import fc from "fast-check";
-import { ContentAdapter, formatFileSize, CONTENT_TYPE_TO_CAPABILITY, CONTENT_TYPE_LABELS } from "../../src/platform/content_adapter.js";
+import { ContentAdapter, formatFileSize, CONTENT_TYPE_TO_CAPABILITY, CONTENT_TYPE_LABELS } from "../../src/platform/utils/content/content_adapter.js";
 
 // 生成有效的附件信息
 const validAttachmentArb = fc.record({
