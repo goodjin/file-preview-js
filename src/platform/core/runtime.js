@@ -1,4 +1,4 @@
-import path from "node:path";
+﻿import path from "node:path";
 import { Config } from "../utils/config/config.js";
 import { ArtifactStore } from "../services/artifact/artifact_store.js";
 import { MessageBus } from "./message_bus.js";
@@ -35,6 +35,7 @@ import { RuntimeState } from "../runtime/runtime_state.js";
 import { RuntimeEvents } from "../runtime/runtime_events.js";
 import { RuntimeLifecycle } from "../runtime/runtime_lifecycle.js";
 import { RuntimeMessaging } from "../runtime/runtime_messaging.js";
+import { RuntimeTools } from "../runtime/runtime_tools.js";
 
 /**
  * 运行时：将平台能力（org/message/artifact/prompt）与智能体行为连接起来。
@@ -45,6 +46,7 @@ import { RuntimeMessaging } from "../runtime/runtime_messaging.js";
  * - RuntimeEvents: 事件系统（工具调用、错误、LLM 重试等事件）
  * - RuntimeLifecycle: 生命周期管理（智能体创建、恢复、注册、查询、中断等）
  * - RuntimeMessaging: 消息处理循环（消息调度、处理、插话、并发控制）
+ * - RuntimeTools: 工具管理（工具定义、工具执行、工具组管理、工具权限检查）
  * - JavaScriptExecutor: JavaScript 代码执行
  * - ContextBuilder: 上下文构建
  * - AgentManager: 智能体生命周期管理
@@ -151,6 +153,8 @@ export class Runtime {
     this._messageProcessor = new MessageProcessor(this);
     /** @type {ToolExecutor} 工具执行器 */
     this._toolExecutor = new ToolExecutor(this);
+    /** @type {RuntimeTools} 工具管理器 */
+    this._tools = new RuntimeTools(this);
     /** @type {LlmHandler} LLM 处理器 */
     this._llmHandler = new LlmHandler(this);
     /** @type {ShutdownManager} 关闭管理器 */
@@ -564,68 +568,7 @@ export class Runtime {
    * @private
    */
   _registerBuiltinToolGroups() {
-    // 获取所有内置工具定义
-    const allTools = this.getToolDefinitions();
-    
-    // 工具名到工具组的映射
-    const toolGroupMapping = {
-      find_role_by_name: "org_management",
-      create_role: "org_management",
-      spawn_agent: "org_management",
-      spawn_agent_with_task: "org_management",
-      terminate_agent: "org_management",
-      send_message: "org_management",
-      put_artifact: "artifact",
-      get_artifact: "artifact",
-      read_file: "workspace",
-      write_file: "workspace",
-      list_files: "workspace",
-      get_workspace_info: "workspace",
-      run_command: "command",
-      run_javascript: "command",
-      http_request: "network",
-      compress_context: "context",
-      get_context_status: "context",
-      console_print: "console"
-    };
-    
-    // 按工具组分类
-    const toolsByGroup = {
-      org_management: [],
-      artifact: [],
-      workspace: [],
-      command: [],
-      network: [],
-      context: [],
-      console: []
-    };
-    
-    // 分类工具定义（去重）
-    const seenTools = new Set();
-    for (const tool of allTools) {
-      const toolName = tool?.function?.name;
-      if (!toolName || seenTools.has(toolName)) continue;
-      
-      const groupId = toolGroupMapping[toolName];
-      if (groupId && toolsByGroup[groupId]) {
-        toolsByGroup[groupId].push(tool);
-        seenTools.add(toolName);
-      }
-    }
-    
-    // 更新每个内置工具组的工具定义
-    for (const [groupId, tools] of Object.entries(toolsByGroup)) {
-      if (tools.length > 0) {
-        this.toolGroupManager.updateGroupTools(groupId, tools);
-      }
-    }
-    
-    void this.log.debug("内置工具组工具定义已更新", {
-      groups: Object.keys(toolsByGroup),
-      toolCounts: Object.fromEntries(
-        Object.entries(toolsByGroup).map(([k, v]) => [k, v.length])
-      )
-    });
+    this._tools.registerBuiltinToolGroups();
   }
 
   /**
@@ -635,31 +578,7 @@ export class Runtime {
    * @returns {any[]} 工具定义列表
    */
   getToolDefinitionsForAgent(agentId) {
-    // root 岗位硬编码只有 org_management
-    if (agentId === "root") {
-      return this.toolGroupManager.getToolDefinitions(["org_management"]);
-    }
-    
-    // 获取智能体元数据
-    const meta = this._agentMetaById.get(agentId);
-    if (!meta) {
-      // 智能体不存在，返回所有工具（向后兼容）
-      return this.getToolDefinitions();
-    }
-    
-    // 获取岗位信息
-    const role = this.org.getRole(meta.roleId);
-    if (!role) {
-      // 岗位不存在，返回所有工具（向后兼容）
-      return this.getToolDefinitions();
-    }
-    
-    // 获取岗位配置的工具组，未配置则使用全部工具组
-    const toolGroups = role.toolGroups ?? this.toolGroupManager.getAllGroupIds();
-    const builtinTools = this.toolGroupManager.getToolDefinitions(toolGroups);
-    
-    // 合并模块提供的工具定义（模块工具暂时对所有非 root 岗位可用）
-    return [...builtinTools, ...this.moduleLoader.getToolDefinitions()];
+    return this._tools.getToolDefinitionsForAgent(agentId);
   }
 
   /**
@@ -669,33 +588,7 @@ export class Runtime {
    * @returns {boolean}
    */
   isToolAvailableForAgent(agentId, toolName) {
-    // 检查是否是模块工具（模块工具对所有非 root 岗位可用）
-    if (this.moduleLoader.hasToolName(toolName)) {
-      return agentId !== "root";
-    }
-    
-    // root 岗位硬编码只有 org_management
-    if (agentId === "root") {
-      return this.toolGroupManager.isToolInGroups(toolName, ["org_management"]);
-    }
-    
-    // 获取智能体元数据
-    const meta = this._agentMetaById.get(agentId);
-    if (!meta) {
-      // 智能体不存在，允许所有工具（向后兼容）
-      return true;
-    }
-    
-    // 获取岗位信息
-    const role = this.org.getRole(meta.roleId);
-    if (!role) {
-      // 岗位不存在，允许所有工具（向后兼容）
-      return true;
-    }
-    
-    // 获取岗位配置的工具组，未配置则使用全部工具组
-    const toolGroups = role.toolGroups ?? this.toolGroupManager.getAllGroupIds();
-    return this.toolGroupManager.isToolInGroups(toolName, toolGroups);
+    return this._tools.isToolAvailableForAgent(agentId, toolName);
   }
 
   /**
@@ -708,404 +601,19 @@ export class Runtime {
    * @returns {string}
    */
   _generateToolGroupsDescription() {
-    const groups = this.toolGroupManager.listGroups();
-    if (groups.length === 0) {
-      return "工具组标识符列表，限制该岗位可用的工具函数。不指定则使用全部工具组。";
-    }
-    
-    const groupDescriptions = groups
-      .map(g => `${g.id}（${g.description}）`)
-      .join("、");
-    
-    return `工具组标识符列表，限制该岗位可用的工具函数。可选值：${groupDescriptions}。不指定则使用全部工具组。`;
+    return this._tools.generateToolGroupsDescription();
   }
 
   getToolDefinitions() {
-    // 动态生成工具组描述
-    const toolGroupsDescription = this._generateToolGroupsDescription();
-    
-    return [
-      {
-        type: "function",
-        function: {
-          name: "find_role_by_name",
-          description: "按岗位名查找岗位，返回 role 或 null。",
-          parameters: {
-            type: "object",
-            properties: { name: { type: "string" } },
-            required: ["name"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "create_role",
-          description: "创建岗位（Role），定义智能体的职责和行为规范。必须提供岗位名与岗位提示词。可通过 toolGroups 参数限制该岗位可用的工具函数，实现对大模型上下文长度的压缩。",
-          parameters: {
-            type: "object",
-            properties: {
-              name: { type: "string", description: "岗位名称，如 task_executor、web_crawler 等" },
-              rolePrompt: { type: "string", description: "岗位提示词，描述该岗位的职责、行为规范和工作边界" },
-              toolGroups: { 
-                type: "array", 
-                items: { type: "string" },
-                description: toolGroupsDescription
-              }
-            },
-            required: ["name", "rolePrompt"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "spawn_agent",
-          description: "在指定岗位上创建智能体实例（Agent Instance），必须提供任务委托书（Task Brief）。注意：spawn_agent 只创建智能体，不会自动发送任务消息！创建后必须用 send_message 向新智能体发送具体任务。如需创建并立即发送任务，请使用 spawn_agent_with_task。",
-          parameters: {
-            type: "object",
-            properties: {
-              roleId: { type: "string", description: "岗位ID" },
-              taskBrief: {
-                type: "object",
-                description: "任务委托书，包含任务的完整说明",
-                properties: {
-                  objective: { type: "string", description: "目标描述" },
-                  constraints: { 
-                    type: "array", 
-                    items: { type: "string" },
-                    description: "技术约束（如：使用HTML+JS、Python等）" 
-                  },
-                  inputs: { type: "string", description: "输入说明" },
-                  outputs: { type: "string", description: "输出要求" },
-                  completion_criteria: { type: "string", description: "完成标准" },
-                  collaborators: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        agentId: { type: "string", description: "协作者智能体ID" },
-                        role: { type: "string", description: "协作者角色" },
-                        description: { type: "string", description: "协作说明" }
-                      },
-                      required: ["agentId", "role"]
-                    },
-                    description: "预设协作联系人"
-                  },
-                  references: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "参考资料"
-                  },
-                  priority: { type: "string", description: "优先级" }
-                },
-                required: ["objective", "constraints", "inputs", "outputs", "completion_criteria"]
-              }
-            },
-            required: ["roleId", "taskBrief"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "spawn_agent_with_task",
-          description: "创建智能体实例并立即发送任务消息（二合一接口）。相当于 spawn_agent + send_message，省去一次工具调用。推荐在需要立即分配任务时使用。",
-          parameters: {
-            type: "object",
-            properties: {
-              roleId: { type: "string", description: "岗位ID" },
-              taskBrief: {
-                type: "object",
-                description: "任务委托书，包含任务的完整说明",
-                properties: {
-                  objective: { type: "string", description: "目标描述" },
-                  constraints: { 
-                    type: "array", 
-                    items: { type: "string" },
-                    description: "技术约束（如：使用HTML+JS、Python等）" 
-                  },
-                  inputs: { type: "string", description: "输入说明" },
-                  outputs: { type: "string", description: "输出要求" },
-                  completion_criteria: { type: "string", description: "完成标准" },
-                  collaborators: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        agentId: { type: "string", description: "协作者智能体ID" },
-                        role: { type: "string", description: "协作者角色" },
-                        description: { type: "string", description: "协作说明" }
-                      },
-                      required: ["agentId", "role"]
-                    },
-                    description: "预设协作联系人"
-                  },
-                  references: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "参考资料"
-                  },
-                  priority: { type: "string", description: "优先级" }
-                },
-                required: ["objective", "constraints", "inputs", "outputs", "completion_criteria"]
-              },
-              initialMessage: {
-                type: "object",
-                description: "创建后立即发送给新智能体的任务消息内容（payload）",
-                properties: {
-                  message_type: { type: "string", description: "消息类型，默认 task_assignment" },
-                  task: { type: "string", description: "具体任务描述" },
-                  interfaces: { type: "object", description: "接口定义" },
-                  deliverable: { type: "string", description: "交付物说明" },
-                  dependencies: { type: "array", items: { type: "string" }, description: "依赖模块" }
-                }
-              }
-            },
-            required: ["roleId", "taskBrief", "initialMessage"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "send_message",
-          description: "发送异步消息。from 默认使用当前智能体 id。taskId 由系统自动处理，无需传入。",
-          parameters: {
-            type: "object",
-            properties: {
-              to: { type: "string" },
-              payload: { type: "object" }
-            },
-            required: ["to", "payload"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "put_artifact",
-          description: "写入工件并返回 artifactRef。",
-          parameters: {
-            type: "object",
-            properties: {
-              type: { type: "string" },
-              content: {},
-              meta: { type: "object" }
-            },
-            required: ["type", "content"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "get_artifact",
-          description: "读取工件引用并返回工件内容。",
-          parameters: {
-            type: "object",
-            properties: { ref: { type: "string" } },
-            required: ["ref"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "console_print",
-          description: "向控制台输出文本。",
-          parameters: {
-            type: "object",
-            properties: { text: { type: "string" } },
-            required: ["text"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "terminate_agent",
-          description: "终止指定的子智能体实例并回收资源。只能终止自己创建的子智能体。",
-          parameters: {
-            type: "object",
-            properties: {
-              agentId: { type: "string", description: "要终止的智能体ID" },
-              reason: { type: "string", description: "终止原因（可选）" }
-            },
-            required: ["agentId"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "run_javascript",
-          description:
-            "运行一段 JavaScript 代码（在 new Function 中执行）。涉及严格计算/精确数值/统计/日期时间/格式转换等必须可复现的结果时，优先调用本工具用代码计算，不要靠大模型猜测。每次调用都是全新执行环境：不带任何上下文、不保留任何状态、不支持跨调用变量引用。参数 input 会作为变量 input 传入代码。code 必须是“函数体”形式的代码（可包含多行语句），需要显式 return 一个可 JSON 序列化的值；如果返回 Promise，会等待其 resolve 后再作为工具结果返回。为降低风险：本工具不会注入/提供文件系统、进程、OS、网络等能力，也不会传入 require/process/fs/os 等对象；但这不是安全沙箱，请不要尝试任何带副作用或越权的代码。【Canvas 绘图】本工具支持 Canvas 绘图功能。调用 getCanvas(width, height) 获取 Canvas 对象（默认尺寸 800x600），然后使用 getContext('2d') 进行绘图。脚本执行完成后，Canvas 内容会自动导出为 PNG 图像并保存到工件库，返回结果中包含 images 数组。示例：const canvas = getCanvas(400, 300); const ctx = canvas.getContext('2d'); ctx.fillStyle = 'red'; ctx.fillRect(50, 50, 100, 100); return 'done';【中文字体】绘制中文文本时必须指定中文字体，否则会显示方块。可用字体：'Microsoft YaHei'（微软雅黑）、'SimHei'（黑体）、'SimSun'（宋体）、'KaiTi'（楷体）、'DengXian'（等线）。示例：ctx.font = '24px Microsoft YaHei'; ctx.fillText('你好', 50, 50);",
-          parameters: {
-            type: "object",
-            properties: {
-              code: { type: "string" },
-              input: {}
-            },
-            required: ["code"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "compress_context",
-          description: "【强制要求】压缩会话历史，保留系统提示词、最近消息和指定的重要内容摘要。当上下文使用率达到警告阈值(70%)或更高时必须调用。上下文超过硬性限制(95%)将导致后续 LLM 调用失败。",
-          parameters: {
-            type: "object",
-            properties: {
-              summary: { 
-                type: "string", 
-                description: "对被压缩历史的重要内容摘要" 
-              },
-              keepRecentCount: { 
-                type: "number", 
-                description: "保留最近多少条消息，默认10" 
-              }
-            },
-            required: ["summary"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "get_context_status",
-          description: "查询当前智能体的上下文使用状态，包括已使用 token 数、最大限制、使用百分比和状态级别。",
-          parameters: {
-            type: "object",
-            properties: {}
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "http_request",
-          description: "发起 HTTP/HTTPS 请求调用已知的、确定的 API 接口。【适用场景】调用 REST API、JSON API、GraphQL 等有明确接口规范的服务；获取结构化数据（JSON、XML 等）；与后端服务进行程序化交互。【不适用场景】如需模拟人类浏览网页、访问需要 JavaScript 渲染的动态页面、执行点击/输入等页面交互、处理登录/验证码等复杂流程，请使用 chrome 工具组（chrome_launch、chrome_navigate、chrome_screenshot 等）。",
-          parameters: {
-            type: "object",
-            properties: {
-              url: { 
-                type: "string", 
-                description: "请求 URL，必须是 HTTPS 协议" 
-              },
-              method: { 
-                type: "string", 
-                enum: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
-                description: "HTTP 方法，默认 GET" 
-              },
-              headers: { 
-                type: "object", 
-                description: "请求头（键值对）" 
-              },
-              body: { 
-                description: "请求体，POST/PUT/PATCH 时使用。对象会自动 JSON 序列化" 
-              },
-              timeoutMs: { 
-                type: "number", 
-                description: "超时时间（毫秒），默认 30000" 
-              }
-            },
-            required: ["url"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "read_file",
-          description: "读取工作空间内的文件内容。只能访问当前任务绑定的工作空间内的文件。",
-          parameters: {
-            type: "object",
-            properties: {
-              path: { 
-                type: "string", 
-                description: "文件的相对路径（相对于工作空间根目录）" 
-              }
-            },
-            required: ["path"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "write_file",
-          description: "在工作空间内创建或修改文件。只能在当前任务绑定的工作空间内写入。",
-          parameters: {
-            type: "object",
-            properties: {
-              path: { 
-                type: "string", 
-                description: "文件的相对路径（相对于工作空间根目录）" 
-              },
-              content: { 
-                type: "string", 
-                description: "文件内容" 
-              }
-            },
-            required: ["path", "content"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "list_files",
-          description: "列出工作空间内指定目录的文件和子目录。",
-          parameters: {
-            type: "object",
-            properties: {
-              path: { 
-                type: "string", 
-                description: "目录的相对路径，默认为根目录" 
-              }
-            }
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "get_workspace_info",
-          description: "获取当前工作空间的状态信息，包括文件数量、目录数量、总大小、最近修改时间。",
-          parameters: {
-            type: "object",
-            properties: {}
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "run_command",
-          description: "在工作空间内执行终端命令。命令将在工作空间目录下执行。危险命令（如 sudo、rm -rf / 等）会被拦截。",
-          parameters: {
-            type: "object",
-            properties: {
-              command: { 
-                type: "string", 
-                description: "要执行的命令" 
-              },
-              timeoutMs: { 
-                type: "number", 
-                description: "超时时间（毫秒），默认60000" 
-              }
-            },
-            required: ["command"]
-          }
-        }
-      },
-      // 合并模块提供的工具定义
-      ...this.moduleLoader.getToolDefinitions()
-    ];
+    return this._tools.getToolDefinitions();
+  }
+
+  /**
+   * 执行一次工具调用并返回可序列化结果。
+   * 
+   * 本方法将工具执行委托给 ToolExecutor 子模块，避免代码重复。
+   * 
+   * @param {any} ctx - 智能体上下文
   }
 
   /**
@@ -1119,20 +627,7 @@ export class Runtime {
    * @returns {Promise<any>} 执行结果
    */
   async executeToolCall(ctx, toolName, args) {
-    try {
-      void this.log.debug("执行工具调用", {
-        agentId: ctx.agent?.id ?? null,
-        toolName,
-        args: args ?? null
-      });
-      
-      // 委托给 ToolExecutor 处理所有工具调用
-      return await this._toolExecutor.executeToolCall(ctx, toolName, args);
-    } catch (err) {
-      const message = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
-      void this.log.error("工具调用执行失败", { toolName, message });
-      return { error: "tool_execution_failed", toolName, message };
-    }
+    return await this._tools.executeToolCall(ctx, toolName, args);
   }
 
   /**

@@ -333,7 +333,7 @@
     - 更新 Runtime 导入和使用
     - _需求：3.2, 7.1, 7.2_
   
-  - [ ] 13.5 提取工具管理模块
+  - [x] 13.5 提取工具管理模块
     - 创建 runtime/runtime_tools.js
     - 移动工具管理相关代码：
       - 工具定义 (getToolDefinitions, getToolDefinitionsForAgent)
