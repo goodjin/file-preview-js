@@ -34,6 +34,7 @@ import { ShutdownManager } from "../runtime/shutdown_manager.js";
 import { RuntimeState } from "../runtime/runtime_state.js";
 import { RuntimeEvents } from "../runtime/runtime_events.js";
 import { RuntimeLifecycle } from "../runtime/runtime_lifecycle.js";
+import { RuntimeMessaging } from "../runtime/runtime_messaging.js";
 
 /**
  * 运行时：将平台能力（org/message/artifact/prompt）与智能体行为连接起来。
@@ -43,6 +44,7 @@ import { RuntimeLifecycle } from "../runtime/runtime_lifecycle.js";
  * - RuntimeState: 状态管理（智能体注册表、运算状态、插话队列等）
  * - RuntimeEvents: 事件系统（工具调用、错误、LLM 重试等事件）
  * - RuntimeLifecycle: 生命周期管理（智能体创建、恢复、注册、查询、中断等）
+ * - RuntimeMessaging: 消息处理循环（消息调度、处理、插话、并发控制）
  * - JavaScriptExecutor: JavaScript 代码执行
  * - ContextBuilder: 上下文构建
  * - AgentManager: 智能体生命周期管理
@@ -143,6 +145,8 @@ export class Runtime {
     this._agentManager = new AgentManager(this);
     /** @type {RuntimeLifecycle} 生命周期管理器 */
     this._lifecycle = new RuntimeLifecycle(this);
+    /** @type {RuntimeMessaging} 消息处理循环管理器 */
+    this._messaging = new RuntimeMessaging(this);
     /** @type {MessageProcessor} 消息处理器 */
     this._messageProcessor = new MessageProcessor(this);
     /** @type {ToolExecutor} 工具执行器 */
@@ -221,45 +225,8 @@ export class Runtime {
    * Requirements: 1.1, 1.4, 5.1
    */
   handleMessageInterruption(agentId, newMessage) {
-    // 异步处理中断，不阻塞消息发送
-    // 中断处理将在后台执行，消息已经被加入队列
-    void this._processInterruption(agentId, newMessage);
-  }
-
-  /**
-   * 异步处理中断逻辑。
-   * @param {string} agentId - 智能体ID
-   * @param {object} newMessage - 新到达的消息
-   * @private
-   */
-  async _processInterruption(agentId, newMessage) {
-    try {
-      void this.log.info("开始处理消息中断", {
-        agentId,
-        messageFrom: newMessage.from,
-        messageId: newMessage.id ?? 'unknown'
-      });
-
-      // 检查智能体是否仍在活跃处理中
-      if (!this._state.isAgentActivelyProcessing(agentId)) {
-        void this.log.info("智能体已不在活跃处理中，跳过中断", { agentId });
-        return;
-      }
-
-      // 将消息添加到插话队列
-      this._state.addInterruption(agentId, newMessage);
-      
-      void this.log.info("插话消息已添加到队列，将在下次检查点处理", {
-        agentId,
-        messageId: newMessage.id ?? 'unknown'
-      });
-    } catch (err) {
-      void this.log.error("处理消息中断时发生错误", {
-        agentId,
-        error: err?.message ?? String(err),
-        stack: err?.stack
-      });
-    }
+    // 委托给 RuntimeMessaging 处理
+    return this._messaging.handleMessageInterruption(agentId, newMessage);
   }
 
   /**
@@ -578,312 +545,17 @@ export class Runtime {
    * @returns {Promise<void>}
    */
   async startProcessing() {
-    if (this._processingLoopPromise) return this._processingLoopPromise;
-    this._stopRequested = false;
-    this._processingLoopPromise = this._processingLoop().finally(() => {
-      this._processingLoopPromise = null;
-    });
-    return this._processingLoopPromise;
-  }
-
-  async _processingLoop() {
-    void this.log.info("运行时常驻消息循环开始（生产者-消费者模式）");
-    
-    // 获取最大并发数（从LLM客户端配置）
-    const maxConcurrent = this.llm?.concurrencyController?.maxConcurrentRequests ?? 3;
-    
-    while (!this._stopRequested) {
-      // 检查并投递到期的延迟消息
-      this.bus.deliverDueMessages();
-      
-      // 尝试调度新的消息处理
-      const scheduled = await this._scheduleMessageProcessing(maxConcurrent);
-      
-      if (!scheduled && !this.bus.hasPending()) {
-        // 没有调度成功且没有待处理消息，等待新消息
-        await this.bus.waitForMessage({ timeoutMs: 100 });
-      } else if (!scheduled) {
-        // 有待处理消息但无法调度（可能是并发已满或智能体正在处理）
-        // 短暂等待后重试
-        await new Promise((r) => setTimeout(r, 10));
-      }
-      
-      // 让出事件循环
-      await new Promise((r) => setImmediate(r));
-    }
-    
-    if (this._forceExit) {
-      // 强制退出时记录未投递的延迟消息
-      const remainingDelayed = this.bus.getDelayedCount();
-      if (remainingDelayed > 0) {
-        void this.log.warn("强制退出，丢弃延迟消息", { count: remainingDelayed });
-      }
-      void this.log.info("强制退出，跳过等待活跃消息");
-      process.exit(1);
-    }
-    
-    // 优雅关闭时强制投递所有延迟消息
-    const forcedCount = this.bus.forceDeliverAllDelayed();
-    if (forcedCount > 0) {
-      void this.log.info("关闭时强制投递延迟消息", { count: forcedCount });
-    }
-    
-    // 等待所有正在处理的消息完成（除非强制退出）
-    while (this._activeProcessingAgents.size > 0 && !this._forceExit) {
-      void this.log.info("等待活跃消息处理完成", { 
-        activeCount: this._activeProcessingAgents.size,
-        activeAgents: [...this._activeProcessingAgents]
-      });
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    
-    
-    void this.log.info("运行时常驻消息循环结束", { stopRequested: this._stopRequested });
-  }
-
-  /**
-   * 调度消息处理（生产者-消费者模式的调度器）
-   * @param {number} maxConcurrent 最大并发数
-   * @returns {Promise<boolean>} 是否成功调度了新的消息处理
-   */
-  async _scheduleMessageProcessing(maxConcurrent) {
-    // 检查是否还有并发槽位
-    if (this._activeProcessingAgents.size >= maxConcurrent) {
-      return false;
-    }
-    
-    // 遍历所有智能体，找到有待处理消息且当前未在处理中的智能体
-    for (const agentId of this._agents.keys()) {
-      if (this._stopRequested) break;
-      
-      // 跳过正在处理消息的智能体（单智能体串行约束）
-      if (this._activeProcessingAgents.has(agentId)) {
-        continue;
-      }
-      
-      // 检查是否有待处理消息
-      const msg = this.bus.receiveNext(agentId);
-      if (!msg) continue;
-      
-      // 标记智能体为处理中
-      this._activeProcessingAgents.add(agentId);
-      
-      // 异步处理消息（不等待完成）
-      this._processAgentMessage(agentId, msg).finally(() => {
-        this._activeProcessingAgents.delete(agentId);
-      });
-      
-      void this.log.debug("调度消息处理", {
-        agentId,
-        messageId: msg.id,
-        activeCount: this._activeProcessingAgents.size,
-        maxConcurrent
-      });
-      
-      return true; // 成功调度了一个
-    }
-    
-    return false;
-  }
-
-  /**
-   * 处理单个智能体的消息
-   * @param {string} agentId 智能体ID
-   * @param {object} msg 消息对象
-   */
-  async _processAgentMessage(agentId, msg) {
-    const agent = this._agents.get(agentId);
-    if (!agent) {
-      void this.log.warn("智能体不存在，跳过消息处理", { agentId, messageId: msg.id });
-      return;
-    }
-    
-    // 检查智能体状态：如果已停止或正在停止，跳过处理
-    const status = this._state.getAgentComputeStatus(agentId);
-    if (status === 'stopped' || status === 'stopping' || status === 'terminating') {
-      void this.log.info("智能体已停止，跳过消息处理", {
-        agentId,
-        status,
-        messageId: msg.id,
-        from: msg.from
-      });
-      return;
-    }
-    
-    // 更新智能体最后活动时间
-    this._updateAgentActivity(agentId);
-    
-    void this.log.debug("开始处理消息", {
-      agentId,
-      from: msg.from,
-      taskId: msg.taskId ?? null,
-      messageId: msg.id ?? null
-    });
-    
-    // 记录智能体收到消息的生命周期事件
-    void this.loggerRoot.logAgentLifecycleEvent("agent_message_received", {
-      agentId,
-      messageId: msg.id ?? null,
-      from: msg.from,
-      taskId: msg.taskId ?? null
-    });
-    
-    try {
-      await agent.onMessage(this._buildAgentContext(agent), msg);
-    } catch (err) {
-      const errorMessage = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
-      const errorType = err?.name ?? "UnknownError";
-      
-      void this.log.error("智能体消息处理异常（已隔离）", {
-        agentId,
-        messageId: msg.id ?? null,
-        from: msg.from,
-        taskId: msg.taskId ?? null,
-        errorType,
-        error: errorMessage,
-        stack: err?.stack ?? null,
-        willContinueProcessing: true
-      });
-      
-      // 确保智能体状态重置为空闲
-      this._state.setAgentComputeStatus(agentId, 'idle');
-      
-      // 向父智能体发送错误通知
-      try {
-        await this._sendErrorNotificationToParent(agentId, msg, {
-          errorType: "agent_message_processing_failed",
-          message: `智能体 ${agentId} 消息处理异常: ${errorMessage}`,
-          originalError: errorMessage,
-          errorName: errorType
-        });
-      } catch (notifyErr) {
-        void this.log.error("发送异常通知失败", {
-          agentId,
-          notifyError: notifyErr?.message ?? String(notifyErr)
-        });
-      }
-    }
-  }
-
-  async _deliverOneRound() {
-    if (this._stopRequested) return false;
-    
-    // 获取最大并发数
-    const maxConcurrent = this.llm?.concurrencyController?.maxConcurrentRequests ?? 3;
-    
-    // 收集可以处理的消息（不超过并发限制）
-    const pendingDeliveries = [];
-    for (const agentId of this._agents.keys()) {
-      if (pendingDeliveries.length >= maxConcurrent) break;
-      if (this._activeProcessingAgents.has(agentId)) continue;
-      
-      const msg = this.bus.receiveNext(agentId);
-      if (!msg) continue;
-      
-      const agent = this._agents.get(agentId);
-      pendingDeliveries.push({ agentId, agent, msg });
-      this._activeProcessingAgents.add(agentId);
-    }
-    
-    if (pendingDeliveries.length === 0) {
-      return false;
-    }
-    
-    void this.log.debug("并发投递消息", {
-      count: pendingDeliveries.length,
-      agents: pendingDeliveries.map(d => d.agentId)
-    });
-    
-    // 并发处理所有消息
-    const deliveryPromises = pendingDeliveries.map(async ({ agentId, msg }) => {
-      try {
-        await this._processAgentMessage(agentId, msg);
-      } finally {
-        this._activeProcessingAgents.delete(agentId);
-      }
-    });
-    
-    await Promise.all(deliveryPromises);
-    
-    return true;
+    // 委托给 RuntimeMessaging 处理
+    return await this._messaging.startProcessing();
   }
 
   /**
    * 运行消息循环直到消息耗尽或达到步数上限。
-   * 
-   * 【退出条件】
-   * 1. 请求停止（_stopRequested = true）
-   * 2. 达到最大步数限制
-   * 3. 没有待处理消息且没有活跃处理的智能体（完全空闲）
-   * 4. 连续多轮无法投递消息且无活跃处理
-   * 
-   * 【处理流程】
-   * 1. 检查是否完全空闲（无待处理消息且无活跃处理）
-   * 2. 尝试投递一轮消息
-   * 3. 如果投递成功，重置空闲计数并继续
-   * 4. 如果投递失败但有活跃处理，等待后继续
-   * 5. 如果投递失败且无活跃处理，增加空闲计数
-   * 6. 空闲计数达到上限时退出
-   * 
    * @returns {Promise<void>}
    */
   async run() {
-    this._stopRequested = false;
-    let steps = 0;
-    let idleRounds = 0;
-    const maxIdleRounds = 10; // 连续10轮完全空闲则认为完成
-    
-    void this.log.info("运行时消息循环开始", { maxSteps: this.maxSteps });
-    
-    while (!this._stopRequested && steps < this.maxSteps) {
-      const hasPending = this.bus.hasPending();
-      const hasActive = this._activeProcessingAgents.size > 0;
-      
-      // 完全空闲检查：没有待处理消息且没有活跃处理
-      if (!hasPending && !hasActive) {
-        idleRounds += 1;
-        
-        if (idleRounds >= maxIdleRounds) {
-          void this.log.debug("连续完全空闲轮次达到上限，退出循环", { 
-            idleRounds,
-            hasPending,
-            hasActive
-          });
-          break;
-        }
-        
-        // 短暂等待，防止过早退出
-        await new Promise(r => setTimeout(r, 5));
-        continue;
-      }
-      
-      // 重置空闲计数（有待处理消息或有活跃处理）
-      idleRounds = 0;
-      
-      // 尝试投递一轮消息
-      const delivered = await this._deliverOneRound();
-      
-      if (delivered) {
-        // 成功投递消息
-        steps += 1;
-      } else if (hasActive) {
-        // 没有投递但有活跃处理，等待活跃处理完成
-        await new Promise(r => setTimeout(r, 10));
-      } else if (hasPending) {
-        // 有待处理消息但无法投递（可能所有智能体都在处理中）
-        await new Promise(r => setTimeout(r, 10));
-      }
-    }
-    
-    void this.log.info("运行时消息循环结束", {
-      steps,
-      stopRequested: this._stopRequested,
-      hasPending: this.bus.hasPending(),
-      activeProcessing: this._activeProcessingAgents.size,
-      reason: this._stopRequested ? "stop_requested" : 
-              steps >= this.maxSteps ? "max_steps_reached" : 
-              "idle_complete"
-    });
+    // 委托给 RuntimeMessaging 处理
+    return await this._messaging.run();
   }
 
   /**
