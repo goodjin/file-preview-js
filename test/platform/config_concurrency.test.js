@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fc from "fast-check";
-import { loadConfig } from "../../src/platform/config.js";
+import { loadConfig } from "../../src/platform/utils/config/config_loader.js";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fc from "fast-check";
-import { ConfigService } from "../../src/platform/config_service.js";
+import { ConfigService } from "../../src/platform/utils/config/config_service.js";
 import { mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";

@@ -1,5 +1,5 @@
 import path from "node:path";
-import { loadConfig } from "../config.js";
+import { loadConfig } from "../utils/config/config_loader.js";
 import { ArtifactStore } from "../services/artifact/artifact_store.js";
 import { MessageBus } from "./message_bus.js";
 import { OrgPrimitives } from "./org_primitives.js";

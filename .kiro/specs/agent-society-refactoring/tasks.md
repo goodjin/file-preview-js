@@ -183,7 +183,7 @@
     - 运行测试验证
     - _需求：8.1, 9.2_
   
-  - [ ] 6.3 移动配置工具文件到 utils/config/
+  - [x] 6.3 移动配置工具文件到 utils/config/
     - 重命名 config.js 为 config_loader.js 并移动
     - 移动 config_service.js
     - 更新导入路径

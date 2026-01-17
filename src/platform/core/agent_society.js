@@ -3,7 +3,7 @@ import path from "node:path";
 import { Agent } from "../../agents/agent.js";
 import { Runtime } from "./runtime.js";
 import { HTTPServer } from "../http_server.js";
-import { ConfigService } from "../config_service.js";
+import { ConfigService } from "../utils/config/config_service.js";
 import { createNoopModuleLogger } from "../logger.js";
 
 /**
@@ -240,6 +240,7 @@ export class AgentSociety {
 
   /**
    * 启动HTTP服务器。
+   * 如果启动失败，抛出异常（由调用者决定是否退出程序）。
    * @returns {Promise<{ok:boolean, port?:number, error?:string}>}
    */
   async _startHttpServer() {
@@ -283,17 +284,19 @@ export class AgentSociety {
       
       if (result.ok) {
         void this.log.info("HTTP服务器启动成功", { port: result.port });
+        return result;
       } else {
-        void this.log.error("HTTP服务器启动失败，继续以控制台模式运行", { error: result.error });
+        // HTTP服务器启动失败，抛出异常
+        void this.log.error("HTTP服务器启动失败", { error: result.error, port: this._httpPort });
         this._httpServer = null;
+        throw new Error(`HTTP服务器启动失败: ${result.error}`);
       }
-      
-      return result;
     } catch (err) {
       const message = err && typeof err.message === "string" ? err.message : String(err);
-      void this.log.error("HTTP服务器启动异常，继续以控制台模式运行", { error: message });
+      void this.log.error("HTTP服务器启动异常", { error: message, stack: err?.stack });
       this._httpServer = null;
-      return { ok: false, error: message };
+      // 重新抛出异常，让调用者处理
+      throw err;
     }
   }
 

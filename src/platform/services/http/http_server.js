@@ -631,13 +631,17 @@ export class HTTPServer {
               error: err?.message ?? String(err),
               stack: err?.stack ?? null
             });
-            this._sendJson(res, 500, { error: "internal_error", message: err?.message ?? String(err) });
+            try {
+              this._sendJson(res, 500, { error: "internal_error", message: err?.message ?? String(err) });
+            } catch (sendErr) {
+              void this.log.error("发送错误响应失败", { error: sendErr?.message ?? String(sendErr) });
+            }
           });
         });
 
         this._server.on("error", (err) => {
           const message = err && typeof err.message === "string" ? err.message : String(err);
-          void this.log.error("HTTP服务器错误", { error: message });
+          void this.log.error("HTTP服务器错误", { error: message, stack: err?.stack });
           resolve({ ok: false, error: message });
         });
 
@@ -648,7 +652,7 @@ export class HTTPServer {
         });
       } catch (err) {
         const message = err && typeof err.message === "string" ? err.message : String(err);
-        void this.log.error("HTTP服务器启动失败", { error: message });
+        void this.log.error("HTTP服务器启动失败", { error: message, stack: err?.stack });
         resolve({ ok: false, error: message });
       }
     });
@@ -697,7 +701,7 @@ export class HTTPServer {
       const method = req.method?.toUpperCase() ?? "GET";
       const pathname = url.pathname;
 
-      void this.log.debug("收到HTTP请求", { method, pathname });
+      void this.log.info("收到HTTP请求", { method, pathname, url: req.url });
 
       // 设置CORS头
       res.setHeader("Access-Control-Allow-Origin", "*");
@@ -2251,6 +2255,7 @@ export class HTTPServer {
     const webDir = path.join(process.cwd(), "web");
     const resolvedPath = path.resolve(filePath);
     if (!resolvedPath.startsWith(webDir)) {
+      void this.log.warn("路径访问被拒绝", { resolvedPath, webDir });
       this._sendJson(res, 403, { error: "forbidden", message: "路径访问被拒绝" });
       return;
     }
@@ -2258,6 +2263,7 @@ export class HTTPServer {
     try {
       // 检查文件是否存在
       if (!existsSync(resolvedPath)) {
+        void this.log.warn("静态文件不存在", { path: pathname, resolvedPath });
         this._sendJson(res, 404, { error: "not_found", path: pathname });
         return;
       }
@@ -2287,7 +2293,12 @@ export class HTTPServer {
 
       void this.log.debug("HTTP静态文件", { path: relativePath });
     } catch (err) {
-      void this.log.error("读取静态文件失败", { path: relativePath, error: err.message });
+      void this.log.error("读取静态文件失败", { 
+        path: relativePath, 
+        resolvedPath,
+        error: err.message,
+        stack: err.stack 
+      });
       this._sendJson(res, 500, { error: "read_file_failed", message: err.message });
     }
   }

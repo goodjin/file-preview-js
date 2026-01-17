@@ -18,7 +18,7 @@
  */
 
 import { AgentSociety } from "./src/platform/agent_society.js";
-import { loadConfig } from "./src/platform/config.js";
+import { loadConfig } from "./src/platform/utils/config/config_loader.js";
 import { exec } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -151,13 +151,17 @@ async function main() {
     const message = error?.message ?? String(error);
     
     // 检查是否是端口占用错误
-    if (message.includes("EADDRINUSE") || message.includes("address already in use")) {
-      console.error(`错误: 端口 ${port} 已被占用`);
-      console.error(`请尝试使用其他端口: bun start.js --port <其他端口>`);
+    if (message.includes("EADDRINUSE") || message.includes("address already in use") || message.includes("HTTP服务器启动失败")) {
+      console.error(`错误: 端口 ${port} 已被占用或HTTP服务器启动失败`);
+      console.error(`请尝试使用其他端口: node start.js --port <其他端口>`);
+      console.error(`详细错误: ${message}`);
       process.exit(1);
     }
     
     console.error(`启动失败: ${message}`);
+    if (error?.stack) {
+      console.error(`堆栈跟踪:\n${error.stack}`);
+    }
     process.exit(1);
   }
 }

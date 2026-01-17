@@ -54,9 +54,9 @@ describe("start.js", () => {
    * Validates: Requirements 4.2
    */
   describe("Property 2: 端口参数解析正确性", () => {
-    it("should use default port when no port argument provided", () => {
+    it("should use null as default port when no port argument provided", () => {
       const result = parseArgs([]);
-      expect(result.port).toBe(3000);
+      expect(result.port).toBe(null);
     });
 
     it("should correctly parse --port argument with valid port numbers", () => {
@@ -85,15 +85,15 @@ describe("start.js", () => {
       );
     });
 
-    it("should use default port for invalid port numbers", () => {
+    it("should use null for invalid port numbers", () => {
       const result1 = parseArgs(["--port", "invalid"]);
-      expect(result1.port).toBe(3000);
+      expect(result1.port).toBe(null);
 
       const result2 = parseArgs(["--port", "0"]);
-      expect(result2.port).toBe(3000);
+      expect(result2.port).toBe(null);
 
       const result3 = parseArgs(["--port", "70000"]);
-      expect(result3.port).toBe(3000);
+      expect(result3.port).toBe(null);
     });
   });
 
