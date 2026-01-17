@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import fc from "fast-check";
-import { ToolGroupManager, BUILTIN_TOOL_GROUPS } from "../../src/platform/tool_group_manager.js";
+import { ToolGroupManager, BUILTIN_TOOL_GROUPS } from "../../src/platform/extensions/tool_group_manager.js";
 
 // ==================== 辅助函数 ====================
 

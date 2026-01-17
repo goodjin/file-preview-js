@@ -198,8 +198,8 @@
     - 运行测试验证
     - _需求：8.1, 9.2_
 
-- [ ] 7. 移动扩展模块文件
-  - [ ] 7.1 移动模块加载器到 extensions/
+- [x] 7. 移动扩展模块文件
+  - [x] 7.1 移动模块加载器到 extensions/
     - 移动 module_loader.js
     - 移动 tool_group_manager.js
     - 更新导入路径

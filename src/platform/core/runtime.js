@@ -15,10 +15,10 @@ import { validateTaskBrief, formatTaskBrief } from "../utils/message/task_brief.
 import { ContactManager } from "../contact_manager.js";
 import { formatMessageForAgent } from "../utils/message/message_formatter.js";
 import { validateMessageFormat } from "../utils/message/message_validator.js";
-import { ModuleLoader } from "../module_loader.js";
+import { ModuleLoader } from "../extensions/module_loader.js";
 import { LlmServiceRegistry } from "../llm_service_registry.js";
 import { ModelSelector } from "../model_selector.js";
-import { ToolGroupManager } from "../tool_group_manager.js";
+import { ToolGroupManager } from "../extensions/tool_group_manager.js";
 import { CapabilityRouter } from "../utils/content/capability_router.js";
 import { ContentAdapter } from "../utils/content/content_adapter.js";
 import { ArtifactContentRouter } from "../artifact_content_router.js";

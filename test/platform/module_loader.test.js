@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "vitest";
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { ModuleLoader } from "../../src/platform/module_loader.js";
+import { ModuleLoader } from "../../src/platform/extensions/module_loader.js";
 
 const TEST_MODULES_DIR = path.resolve(process.cwd(), "test/.tmp/test_modules");
 
