@@ -1,11 +1,11 @@
-﻿# scripts
+# scripts
 
 ## 综述
-该目录用于集中存放构建、打包、校验等脚本，并按平台或用途划分子目录。
+该目录存放工程相关的脚本工具，主要用于质量校验与平台打包。
 
 ## 文件列表
-- check-coverage.js: 功能：实现模块逻辑。责任：为上层提供可复用能力或入口。内部结构：头部说明“!/usr/bin/env bun”，导出符号：（未匹配到明显的导出符号）。
-- scripts.md: 功能：本目录说明文档。责任：描述目录综述、文件列表与子目录列表。内部结构：包含“综述 / 文件列表 / 子目录列表”三部分。
+- check-coverage.js: 功能：测试覆盖率检查脚本。责任：解析 LCOV 报告并按阈值判断通过/失败，输出覆盖率摘要并以进程退出码反馈结果。内部结构：使用 bun 运行；包含 parseArgs（解析 --threshold/--lcov-file）、parseLcov（读取并汇总 LF/LH/FNF/FNH/BRF/BRH）、calculateOverallCoverage（加权计算总体覆盖率）、generateReport（输出报告并 exit）、main（串联流程）。
+- scripts.md: 功能：本目录说明文档。责任：描述本目录的综述、文件列表与子目录列表。内部结构：包含“综述 / 文件列表 / 子目录列表”。
 
 ## 子目录列表
-- win: 该目录包含 2 个文件与 0 个子目录，直接文件类型以 .cmd、.md 为主，用于承载本层级的实现与配置。（详见 win/win.md）。
+- win: 功能：Windows 平台脚本目录。责任：提供 Windows 环境下的打包与运行辅助脚本。内部结构：包含 pack.cmd 与目录说明文档。（详见 win/win.md）
