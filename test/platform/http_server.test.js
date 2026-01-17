@@ -591,17 +591,17 @@ describe("HTTPServer - Config API", () => {
     const { existsSync } = await import("node:fs");
     const path = await import("node:path");
     const { randomUUID } = await import("node:crypto");
-    const { ConfigService } = await import("../../src/platform/config_service.js");
+    const { Config } = await import("../../src/platform/utils/config/config.js");
 
     // 创建唯一的测试目录
     testDir = path.join("test/.tmp/http_server_config_test", randomUUID());
     await mkdir(testDir, { recursive: true });
     
-    // 创建 ConfigService 实例
-    configService = new ConfigService(testDir);
+    // 创建 Config 实例
+    const config = new Config(testDir);
     
     port = 30000 + Math.floor(Math.random() * 10000);
-    server = new HTTPServer({ port, configService });
+    server = new HTTPServer({ port, configService: config });
   });
 
   afterEach(async () => {

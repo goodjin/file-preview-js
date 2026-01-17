@@ -222,13 +222,13 @@
 
 ### 阶段 3：模块合并和拆分
 
-- [ ] 10. 合并配置模块
-  - [ ] 10.1 分析 config_loader.js 和 config_service.js 的职责
+- [x] 10. 合并配置模块
+  - [x] 10.1 分析 config_loader.js 和 config_service.js 的职责
     - 识别重叠功能
     - 确定合并策略
     - _需求：5.1, 5.4_
   
-  - [ ] 10.2 整合配置加载逻辑
+  - [x] 10.2 整合配置加载逻辑
     - 保留 config_loader.js 的配置文件加载功能
     - 保留 config_service.js 的配置服务接口
     - 确保两者职责清晰

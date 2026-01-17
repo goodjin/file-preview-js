@@ -3215,7 +3215,7 @@ export class HTTPServer {
    */
   _handleGetConfigStatus(res) {
     try {
-      const hasLocalConfig = this._configService ? this._configService.hasLocalConfig() : false;
+      const hasLocalConfig = this._configService ? this._configService.hasLocalApp() : false;
       
       this._sendJson(res, 200, {
         hasLocalConfig,
@@ -3239,7 +3239,7 @@ export class HTTPServer {
     }
 
     try {
-      const result = await this._configService.getLlmConfig();
+      const result = await this._configService.getLlm();
       
       // 掩码 API Key
       const maskedLlm = {
@@ -3276,14 +3276,14 @@ export class HTTPServer {
 
       try {
         // 验证配置
-        const validation = this._configService.validateLlmConfig(body);
+        const validation = this._configService.validateLlm(body);
         if (!validation.valid) {
           this._sendJson(res, 400, { error: "validation_error", details: validation.errors });
           return;
         }
 
         // 保存配置
-        await this._configService.saveLlmConfig(body);
+        await this._configService.saveLlm(body);
 
         // 触发 LLM Client 重新加载
         await this._reloadLlmClient();
@@ -3316,7 +3316,7 @@ export class HTTPServer {
     }
 
     try {
-      const result = await this._configService.getLlmServices();
+      const result = await this._configService.getServices();
       
       // 掩码所有服务的 API Key
       const maskedServices = result.services.map(s => ({
@@ -3353,14 +3353,14 @@ export class HTTPServer {
 
       try {
         // 验证服务配置
-        const validation = this._configService.validateLlmService(body);
+        const validation = this._configService.validateService(body);
         if (!validation.valid) {
           this._sendJson(res, 400, { error: "validation_error", details: validation.errors });
           return;
         }
 
         // 添加服务
-        const service = await this._configService.addLlmService(body);
+        const service = await this._configService.addService(body);
 
         // 触发 LLM Service Registry 重新加载
         await this._reloadLlmServiceRegistry();
@@ -3399,14 +3399,14 @@ export class HTTPServer {
 
       try {
         // 验证服务配置
-        const validation = this._configService.validateLlmService(body);
+        const validation = this._configService.validateService(body);
         if (!validation.valid) {
           this._sendJson(res, 400, { error: "validation_error", details: validation.errors });
           return;
         }
 
         // 更新服务
-        const service = await this._configService.updateLlmService(serviceId, body);
+        const service = await this._configService.updateService(serviceId, body);
 
         // 触发 LLM Service Registry 重新加载
         await this._reloadLlmServiceRegistry();
@@ -3438,7 +3438,7 @@ export class HTTPServer {
 
     try {
       // 删除服务
-      await this._configService.deleteLlmService(serviceId);
+      await this._configService.deleteService(serviceId);
 
       // 触发 LLM Service Registry 重新加载
       await this._reloadLlmServiceRegistry();

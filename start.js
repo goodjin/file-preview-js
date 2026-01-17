@@ -18,7 +18,7 @@
  */
 
 import { AgentSociety } from "./src/platform/agent_society.js";
-import { loadConfig } from "./src/platform/utils/config/config_loader.js";
+import { Config } from "./src/platform/utils/config/config.js";
 import { exec } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -105,7 +105,8 @@ async function main() {
   const absoluteDataDir = path.resolve(dataDir);
 
   // 1. 先读配置文件
-  const config = await loadConfig("config/app.json", { dataDir: absoluteDataDir });
+  const configManager = new Config("config");
+  const config = await configManager.loadApp({ dataDir: absoluteDataDir });
   
   // 2. 命令行参数覆盖配置文件
   const port = cliPort ?? config.httpPort;

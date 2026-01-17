@@ -1,5 +1,5 @@
 import path from "node:path";
-import { loadConfig } from "../utils/config/config_loader.js";
+import { Config } from "../utils/config/config.js";
 import { ArtifactStore } from "../services/artifact/artifact_store.js";
 import { MessageBus } from "./message_bus.js";
 import { OrgPrimitives } from "./org_primitives.js";
@@ -500,7 +500,12 @@ export class Runtime {
    */
   async init() {
     // 优先使用外部传入的配置，否则自己读取
-    this.config = this._passedConfig ?? await loadConfig(this.configPath, { dataDir: this.dataDir });
+    if (!this._passedConfig) {
+      const configManager = new Config(path.dirname(this.configPath));
+      this.config = await configManager.loadApp({ dataDir: this.dataDir });
+    } else {
+      this.config = this._passedConfig;
+    }
     this.maxSteps = this.config.maxSteps ?? this.maxSteps;
     this.maxToolRounds = this.config.maxToolRounds ?? this.maxToolRounds;
     this.idleWarningMs = this.config.idleWarningMs ?? this.idleWarningMs;
@@ -2512,7 +2517,8 @@ export class Runtime {
   async reloadLlmClient() {
     try {
       // 重新加载配置
-      const newConfig = await loadConfig(this.configPath, { dataDir: this.dataDir });
+      const configManager = new Config(path.dirname(this.configPath));
+      const newConfig = await configManager.loadApp({ dataDir: this.dataDir });
       
       if (!newConfig.llm) {
         void this.log.warn("配置文件中没有 LLM 配置");

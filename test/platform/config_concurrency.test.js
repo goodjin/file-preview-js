@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fc from "fast-check";
-import { loadConfig } from "../../src/platform/utils/config/config_loader.js";
+import { Config } from "../../src/platform/utils/config/config.js";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
@@ -39,8 +39,6 @@ describe("Config Concurrency Support", () => {
           fc.boolean() // 无效值（布尔值）
         ),
         async (maxConcurrentRequests) => {
-          const configPath = path.join(testConfigDir, "test-config.json");
-          
           // 创建测试配置
           const config = {
             promptsDir: "config/prompts",
@@ -58,13 +56,15 @@ describe("Config Concurrency Support", () => {
             config.llm.maxConcurrentRequests = maxConcurrentRequests;
           }
           
+          const configPath = path.join(testConfigDir, "app.json");
           await writeFile(configPath, JSON.stringify(config, null, 2));
           
           // 重置console.warn mock
           console.warn.mockClear();
           
           // 加载配置
-          const loadedConfig = await loadConfig(configPath);
+          const configManager = new Config(testConfigDir);
+          const loadedConfig = await configManager.loadApp();
           
           // 验证结果
           expect(loadedConfig.llm).toBeDefined();
@@ -99,8 +99,6 @@ describe("Config Concurrency Support", () => {
         fc.integer({ min: 1, max: 10 }),
         fc.integer({ min: 1, max: 10 }),
         async (initialValue, newValue) => {
-          const configPath = path.join(testConfigDir, "dynamic-config.json");
-          
           // 创建初始配置
           const initialConfig = {
             promptsDir: "config/prompts",
@@ -114,10 +112,12 @@ describe("Config Concurrency Support", () => {
             }
           };
           
+          const configPath = path.join(testConfigDir, "app.json");
           await writeFile(configPath, JSON.stringify(initialConfig, null, 2));
           
           // 加载初始配置
-          const loadedConfig1 = await loadConfig(configPath);
+          const configManager1 = new Config(testConfigDir);
+          const loadedConfig1 = await configManager1.loadApp();
           expect(loadedConfig1.llm.maxConcurrentRequests).toBe(initialValue);
           
           // 更新配置
@@ -132,7 +132,8 @@ describe("Config Concurrency Support", () => {
           await writeFile(configPath, JSON.stringify(updatedConfig, null, 2));
           
           // 重新加载配置
-          const loadedConfig2 = await loadConfig(configPath);
+          const configManager2 = new Config(testConfigDir);
+          const loadedConfig2 = await configManager2.loadApp();
           expect(loadedConfig2.llm.maxConcurrentRequests).toBe(newValue);
         }
       ), { numRuns: 50 });
@@ -141,7 +142,6 @@ describe("Config Concurrency Support", () => {
 
   describe("单元测试", () => {
     it("应正确处理完整的配置文件", async () => {
-      const configPath = path.join(testConfigDir, "complete-config.json");
       const config = {
         promptsDir: "config/prompts",
         artifactsDir: "data/runtime/artifacts",
@@ -154,15 +154,16 @@ describe("Config Concurrency Support", () => {
         }
       };
       
+      const configPath = path.join(testConfigDir, "app.json");
       await writeFile(configPath, JSON.stringify(config, null, 2));
       
-      const loadedConfig = await loadConfig(configPath);
+      const configManager = new Config(testConfigDir);
+      const loadedConfig = await configManager.loadApp();
       
       expect(loadedConfig.llm.maxConcurrentRequests).toBe(5);
     });
 
     it("应在缺少maxConcurrentRequests时使用默认值", async () => {
-      const configPath = path.join(testConfigDir, "no-concurrent-config.json");
       const config = {
         promptsDir: "config/prompts",
         artifactsDir: "data/runtime/artifacts",
@@ -175,9 +176,11 @@ describe("Config Concurrency Support", () => {
         }
       };
       
+      const configPath = path.join(testConfigDir, "app.json");
       await writeFile(configPath, JSON.stringify(config, null, 2));
       
-      const loadedConfig = await loadConfig(configPath);
+      const configManager = new Config(testConfigDir);
+      const loadedConfig = await configManager.loadApp();
       
       expect(loadedConfig.llm.maxConcurrentRequests).toBe(3);
       expect(console.warn).not.toHaveBeenCalled();
@@ -195,7 +198,6 @@ describe("Config Concurrency Support", () => {
       ];
 
       for (const testCase of testCases) {
-        const configPath = path.join(testConfigDir, `invalid-${testCase.description}-config.json`);
         const config = {
           promptsDir: "config/prompts",
           artifactsDir: "data/runtime/artifacts",
@@ -208,11 +210,13 @@ describe("Config Concurrency Support", () => {
           }
         };
         
+        const configPath = path.join(testConfigDir, "app.json");
         await writeFile(configPath, JSON.stringify(config, null, 2));
         
         console.warn.mockClear();
         
-        const loadedConfig = await loadConfig(configPath);
+        const configManager = new Config(testConfigDir);
+        const loadedConfig = await configManager.loadApp();
         
         expect(loadedConfig.llm.maxConcurrentRequests).toBe(3);
         expect(console.warn).toHaveBeenCalledWith(
@@ -222,7 +226,6 @@ describe("Config Concurrency Support", () => {
     });
 
     it("应正确处理null值", async () => {
-      const configPath = path.join(testConfigDir, "null-config.json");
       const config = {
         promptsDir: "config/prompts",
         artifactsDir: "data/runtime/artifacts",
@@ -235,9 +238,11 @@ describe("Config Concurrency Support", () => {
         }
       };
       
+      const configPath = path.join(testConfigDir, "app.json");
       await writeFile(configPath, JSON.stringify(config, null, 2));
       
-      const loadedConfig = await loadConfig(configPath);
+      const configManager = new Config(testConfigDir);
+      const loadedConfig = await configManager.loadApp();
       
       expect(loadedConfig.llm.maxConcurrentRequests).toBe(3);
       expect(console.warn).not.toHaveBeenCalled();
@@ -247,7 +252,6 @@ describe("Config Concurrency Support", () => {
       const testCases = [1, 100, 1000];
 
       for (const value of testCases) {
-        const configPath = path.join(testConfigDir, `boundary-${value}-config.json`);
         const config = {
           promptsDir: "config/prompts",
           artifactsDir: "data/runtime/artifacts",
@@ -260,11 +264,13 @@ describe("Config Concurrency Support", () => {
           }
         };
         
+        const configPath = path.join(testConfigDir, "app.json");
         await writeFile(configPath, JSON.stringify(config, null, 2));
         
         console.warn.mockClear();
         
-        const loadedConfig = await loadConfig(configPath);
+        const configManager = new Config(testConfigDir);
+        const loadedConfig = await configManager.loadApp();
         
         expect(loadedConfig.llm.maxConcurrentRequests).toBe(value);
         expect(console.warn).not.toHaveBeenCalled();
