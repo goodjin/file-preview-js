@@ -67,51 +67,144 @@ export class ArtifactStore {
   /**
    * 写入工件并返回引用。
    * 工件文件只保存原始内容（content），元信息保存在独立的 .meta 文件中。
+   * 
+   * 【文件扩展名规则】
+   * - 根据 type 参数确定文件扩展名
+   * - text/html, text/xml, text/css, text/javascript 等使用对应扩展名
+   * - text/plain, text/* 使用 .txt
+   * - application/json, *\/json 使用 .json
+   * - 未指定 type 时，根据 content 类型判断：对象/数组默认 .json，字符串默认 .txt
+   * 
+   * 【内容保存规则】
+   * - 字符串类型：直接保存原始字符串内容（不进行 JSON 序列化）
+   * - 对象/数组类型：序列化为标准 JSON 格式保存
+   * - Buffer/Blob/ArrayBuffer：保存为二进制文件
+   * 
    * @param {{type:string, content:any, meta?:object, messageId?:string}} artifact
    * @returns {Promise<string>} artifact_ref
    */
   async putArtifact(artifact) {
     await this.ensureReady();
     const id = randomUUID();
-    const extension = ".json";
-    const filePath = path.resolve(this.artifactsDir, `${id}${extension}`);
     const createdAt = new Date().toISOString();
     
-    // 工件文件只保存原始内容，避免双重编码
-    // 如果content已经是字符串且是有效的JSON，直接保存
-    // 否则序列化为JSON
-    let contentToWrite;
-    if (typeof artifact.content === "string") {
-      // 检查是否已经是有效的JSON字符串
-      try {
-        JSON.parse(artifact.content);
-        // 是有效的JSON字符串，直接保存（避免双重编码）
-        contentToWrite = artifact.content;
-        void this.log.debug("工件内容已是JSON字符串，直接保存", { id });
-      } catch {
-        // 不是有效的JSON，作为普通字符串序列化
-        contentToWrite = JSON.stringify(artifact.content, null, 2);
-      }
+    // 检测内容类型
+    const isBinaryContent = Buffer.isBuffer(artifact.content) || 
+                           artifact.content instanceof ArrayBuffer ||
+                           (typeof Blob !== 'undefined' && artifact.content instanceof Blob);
+    const isObjectContent = !isBinaryContent && 
+                           typeof artifact.content === 'object' && 
+                           artifact.content !== null;
+    const isStringContent = typeof artifact.content === 'string';
+    
+    // 根据 type 和 content 类型确定文件扩展名
+    let extension;
+    if (artifact.type) {
+      extension = this._getExtensionFromType(artifact.type);
     } else {
-      // 对象或其他类型，序列化为JSON
-      contentToWrite = JSON.stringify(artifact.content, null, 2);
+      // 未指定 type 时，根据 content 类型判断
+      if (isObjectContent) {
+        extension = ".json";
+      } else if (isStringContent) {
+        extension = ".txt";
+      } else if (isBinaryContent) {
+        extension = ".bin";
+      } else {
+        extension = ".json"; // 默认 JSON
+      }
     }
     
-    await writeFile(filePath, contentToWrite, "utf8");
+    const filePath = path.resolve(this.artifactsDir, `${id}${extension}`);
+    
+    // 根据内容类型决定如何保存
+    let contentToWrite;
+    let encoding = "utf8";
+    
+    if (isBinaryContent) {
+      // 二进制内容：直接保存
+      contentToWrite = Buffer.isBuffer(artifact.content) 
+        ? artifact.content 
+        : Buffer.from(artifact.content);
+      encoding = null; // 二进制模式
+      void this.log.debug("工件内容为二进制，直接保存", { id, type: artifact.type });
+    } else if (isStringContent) {
+      // 字符串类型：直接保存原始内容（不进行 JSON 序列化）
+      contentToWrite = artifact.content;
+      void this.log.debug("工件内容为字符串，直接保存", { id, type: artifact.type });
+    } else {
+      // 对象或数组类型：序列化为标准 JSON 格式
+      contentToWrite = JSON.stringify(artifact.content, null, 2);
+      void this.log.debug("工件内容为对象，序列化为JSON", { id, type: artifact.type });
+    }
+    
+    // 写入文件
+    if (encoding) {
+      await writeFile(filePath, contentToWrite, encoding);
+    } else {
+      await writeFile(filePath, contentToWrite);
+    }
     
     // 元信息保存到独立的 .meta 文件
     const metadata = {
       id,
       extension,
-      type: artifact.type,
+      type: artifact.type || (isObjectContent ? "application/json" : isStringContent ? "text/plain" : "application/octet-stream"),
       createdAt,
       messageId: artifact.messageId || null,
       meta: artifact.meta || null
     };
     await this._writeMetadata(id, metadata);
     
-    void this.log.info("写入工件", { id, type: artifact.type, ref: `artifact:${id}`, messageId: artifact.messageId || null });
+    void this.log.info("写入工件", { id, type: metadata.type, extension, ref: `artifact:${id}`, messageId: artifact.messageId || null });
     return `artifact:${id}`;
+  }
+
+  /**
+   * 根据 type 参数确定文件扩展名。
+   * 
+   * @param {string} type - 工件类型（MIME 类型或自定义类型）
+   * @returns {string} 文件扩展名（包含点号）
+   * @private
+   */
+  _getExtensionFromType(type) {
+    if (!type) return ".json"; // 默认 JSON
+    
+    const typeLower = type.toLowerCase();
+    
+    // 精确匹配常见 MIME 类型
+    const typeToExt = {
+      "text/html": ".html",
+      "text/xml": ".xml",
+      "text/css": ".css",
+      "text/javascript": ".js",
+      "text/plain": ".txt",
+      "text/markdown": ".md",
+      "application/json": ".json",
+      "application/xml": ".xml",
+      "application/javascript": ".js",
+      "image/jpeg": ".jpg",
+      "image/png": ".png",
+      "image/gif": ".gif",
+      "image/webp": ".webp",
+      "image/svg+xml": ".svg",
+      "application/pdf": ".pdf"
+    };
+    
+    if (typeToExt[typeLower]) {
+      return typeToExt[typeLower];
+    }
+    
+    // 模糊匹配
+    if (typeLower.includes("json")) return ".json";
+    if (typeLower.includes("html")) return ".html";
+    if (typeLower.includes("xml")) return ".xml";
+    if (typeLower.includes("javascript") || typeLower.includes("js")) return ".js";
+    if (typeLower.includes("css")) return ".css";
+    if (typeLower.startsWith("text/")) return ".txt";
+    if (typeLower.startsWith("image/")) return ".bin";
+    
+    // 默认使用 JSON
+    return ".json";
   }
 
   /**
