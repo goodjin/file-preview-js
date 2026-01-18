@@ -701,7 +701,7 @@ export class HTTPServer {
       const method = req.method?.toUpperCase() ?? "GET";
       const pathname = url.pathname;
 
-      void this.log.info("收到HTTP请求", { method, pathname, url: req.url });
+      void this.log.debug("收到HTTP请求", { method, pathname, url: req.url });
 
       // 设置CORS头
       res.setHeader("Access-Control-Allow-Origin", "*");
