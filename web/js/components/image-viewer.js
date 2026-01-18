@@ -19,19 +19,21 @@ class ImageViewer {
 
     const wrapper = document.createElement("div");
     wrapper.className = "image-viewer";
-    wrapper.style.display = "flex";
-    wrapper.style.flexDirection = "column";
-    wrapper.style.height = "100%";
-    wrapper.style.overflow = "auto";
-    wrapper.style.padding = "20px";
-    wrapper.style.backgroundColor = "#1e1e1e";
+    // 移除内联样式，使用 CSS 类
+    // wrapper.style.display = "flex";
+    // wrapper.style.flexDirection = "column";
+    // wrapper.style.height = "100%";
+    // wrapper.style.overflow = "auto";
+    // wrapper.style.padding = "20px";
+    // wrapper.style.backgroundColor = "#1e1e1e";
 
     // 图片信息
     const infoDiv = document.createElement("div");
     infoDiv.className = "image-info";
-    infoDiv.style.marginBottom = "20px";
-    infoDiv.style.color = "#d4d4d4";
-    infoDiv.style.fontSize = "13px";
+    // 移除内联样式，使用 CSS 类
+    // infoDiv.style.marginBottom = "20px";
+    // infoDiv.style.color = "#d4d4d4";
+    // infoDiv.style.fontSize = "13px";
 
     // 尝试从imageData中提取信息
     let width = "未知";
@@ -59,15 +61,17 @@ class ImageViewer {
     // 缩略图容器
     const thumbnailDiv = document.createElement("div");
     thumbnailDiv.className = "image-thumbnail";
-    thumbnailDiv.style.textAlign = "center";
-    thumbnailDiv.style.marginBottom = "20px";
+    // 移除内联样式，使用 CSS 类
+    // thumbnailDiv.style.textAlign = "center";
+    // thumbnailDiv.style.marginBottom = "20px";
 
     const img = document.createElement("img");
-    img.style.maxWidth = "100%";
-    img.style.maxHeight = "300px";
-    img.style.cursor = "pointer";
-    img.style.border = "1px solid #3e3e42";
-    img.style.borderRadius = "4px";
+    // 移除内联样式，完全使用CSS控制
+    // img.style.maxWidth = "100%";
+    // img.style.maxHeight = "calc(100vh - 300px)";
+    // img.style.cursor = "pointer";
+    // img.style.border = "1px solid #3e3e42";
+    // img.style.borderRadius = "4px";
 
     // 设置图片源
     const imgSrc = this._getImageSrc(imageData);

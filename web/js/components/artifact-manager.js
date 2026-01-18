@@ -27,6 +27,11 @@ class ArtifactManager {
     this.workspaceFiles = [];
     this.filteredWorkspaceFiles = [];
     
+    // 图片导航相关状态
+    this.currentImageIndex = -1;        // 当前图片在列表中的索引
+    this.imageList = [];                 // 过滤后的图片列表
+    this.thumbnailNavigator = null;      // 缩略图导航器实例
+    
     // UI组件
     this.listPanel = null;
     this.viewerPanel = null;
@@ -335,6 +340,9 @@ class ArtifactManager {
           this.hide();
         }
       }
+      
+      // 图片导航键盘事件（左右方向键）
+      this._handleImageNavigationKeys(e);
     });
   }
 
@@ -546,6 +554,16 @@ class ArtifactManager {
     this.currentTextContent = null;
     this.currentJsonContent = null;
     this.currentJsonRaw = null;
+    
+    // 销毁缩略图导航器
+    if (this.thumbnailNavigator) {
+      this.thumbnailNavigator.destroy();
+      this.thumbnailNavigator = null;
+    }
+    
+    // 重置图片导航状态
+    this.currentImageIndex = -1;
+    this.imageList = [];
     
     // 如果是全屏状态，先移回原位置
     if (this.isViewerMaximized) {
@@ -934,6 +952,11 @@ class ArtifactManager {
     }
 
     this._renderList();
+    
+    // 如果查看器打开且正在查看图片，更新图片导航
+    if (this.isViewerOpen && this.selectedArtifact && this._isImageType(this.selectedArtifact.type)) {
+      this._updateImageNavigation();
+    }
   }
 
   /**
@@ -1211,6 +1234,9 @@ class ArtifactManager {
         this.viewSourceBtn.style.display = "none";
       }
 
+      // 更新图片导航状态
+      this._updateImageNavigation();
+
       // 选择合适的查看器（基于 type 和 content）
       const viewerType = this._getViewerType(fullArtifact.type, fullArtifact.content);
       this._displayArtifact(fullArtifact, viewerType);
@@ -1227,6 +1253,12 @@ class ArtifactManager {
    */
   _displayArtifact(artifact, viewerType) {
     this.viewerPanel.innerHTML = "";
+    
+    // 重置 viewerPanel 的样式
+    this.viewerPanel.style.display = "";
+    this.viewerPanel.style.flexDirection = "";
+    this.viewerPanel.style.height = "";
+    
     this.textModeToggle.style.display = "none";
     this.jsonModeToggle.style.display = "none";
     this.currentTextContent = null;
@@ -1269,9 +1301,53 @@ class ArtifactManager {
         : JSON.stringify(artifact.content, null, 2);
       this._renderTextContent(this.currentTextContent);
     } else if (viewerType === "image") {
-      const viewer = new ImageViewer({ container: this.viewerPanel });
+      // 设置 viewerPanel 为 flex 容器（垂直布局）
+      this.viewerPanel.style.display = "flex";
+      this.viewerPanel.style.flexDirection = "column";
+      this.viewerPanel.style.height = "100%";
+      
+      // 创建图片查看器容器
+      const imageContainer = document.createElement("div");
+      imageContainer.className = "image-viewer-container";
+      imageContainer.style.position = "relative";
+      imageContainer.style.flex = "1";
+      imageContainer.style.overflow = "hidden";
+      imageContainer.style.minHeight = "0";  // 重要：允许 flex 子元素缩小
+      imageContainer.style.padding = "0";    // 移除 padding，避免影响布局
+      
+      // 渲染图片
+      const viewer = new ImageViewer({ 
+        container: imageContainer,
+        showNavigation: false  // 不使用 ImageViewer 自带的导航
+      });
       viewer.render(artifact.content);
       this.currentViewer = viewer;
+      
+      // 添加左右箭头按钮（只在多张图片时显示）
+      if (this.imageList.length > 1) {
+        const arrows = this._createNavigationArrows();
+        imageContainer.appendChild(arrows);
+      }
+      
+      this.viewerPanel.appendChild(imageContainer);
+      
+      // 添加缩略图导航栏（只在多张图片时显示）
+      if (this.imageList.length > 1) {
+        const thumbnailContainer = document.createElement("div");
+        thumbnailContainer.className = "thumbnail-navigator-container";
+        this.viewerPanel.appendChild(thumbnailContainer);
+        
+        this.thumbnailNavigator = new ThumbnailNavigator({
+          container: thumbnailContainer,
+          images: this.imageList,
+          currentIndex: this.currentImageIndex,
+          thumbnailHeight: 80,
+          onSelect: (index) => {
+            this._navigateToImage(index);
+          }
+        });
+        this.thumbnailNavigator.render();
+      }
     } else if (viewerType === "html") {
       // HTML 文件：支持文本/HTML切换
       // 保存HTML源码
@@ -1488,6 +1564,225 @@ class ArtifactManager {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  // ========== 图片导航相关方法 ==========
+
+  /**
+   * 获取过滤后的图片列表
+   * 根据当前模式（工件/工作空间）和过滤条件获取所有图片
+   * @returns {Array} 图片列表
+   */
+  _getFilteredImages() {
+    // 根据当前模式选择数据源
+    const sourceData = this.sidebarMode === "workspace" 
+      ? this.filteredWorkspaceFiles 
+      : this.filteredArtifacts;
+    
+    // 只保留图片类型
+    return sourceData.filter(item => {
+      const type = (item.type || "").toLowerCase();
+      return this._isImageType(type);
+    });
+  }
+
+  /**
+   * 更新图片导航状态
+   * 在图片列表或过滤条件变化后调用
+   */
+  _updateImageNavigation() {
+    // 获取最新的图片列表
+    this.imageList = this._getFilteredImages();
+    
+    // 如果当前工件是图片，找到它的索引
+    if (this.selectedArtifact && this._isImageType(this.selectedArtifact.type)) {
+      this.currentImageIndex = this.imageList.findIndex(
+        img => img.id === this.selectedArtifact.id
+      );
+    } else {
+      this.currentImageIndex = -1;
+    }
+    
+    // 更新缩略图导航器
+    if (this.thumbnailNavigator && this.imageList.length > 0) {
+      this.thumbnailNavigator.setImages(this.imageList);
+      if (this.currentImageIndex >= 0) {
+        this.thumbnailNavigator.setCurrentIndex(this.currentImageIndex);
+      }
+    }
+  }
+
+  /**
+   * 切换到指定索引的图片
+   * @param {number} index - 目标图片索引
+   */
+  async _navigateToImage(index) {
+    // 边界检查
+    if (index < 0 || index >= this.imageList.length) {
+      return;
+    }
+    
+    // 获取目标图片
+    const targetImage = this.imageList[index];
+    if (!targetImage) return;
+    
+    // 更新当前索引
+    this.currentImageIndex = index;
+    
+    // 更新选中的工件
+    this.selectedArtifact = targetImage;
+    
+    // 更新查看器标题
+    const displayName = targetImage.actualFilename || targetImage.filename || targetImage.name;
+    this.artifactNameSpan.textContent = displayName;
+    
+    // 加载并显示图片
+    try {
+      let fullArtifact;
+      let metadata = {};
+      
+      if (targetImage.isWorkspaceFile) {
+        // 工作空间文件
+        const response = await this.api.get(
+          `/workspaces/${targetImage.workspaceId}/file?path=${encodeURIComponent(targetImage.path)}`
+        );
+        fullArtifact = {
+          id: targetImage.id,
+          type: targetImage.type,
+          content: response.content,
+          meta: response.meta
+        };
+        metadata = {
+          messageId: response.messageId,
+          agentId: response.agentId
+        };
+      } else {
+        // 普通工件
+        fullArtifact = {
+          id: targetImage.id,
+          type: targetImage.type,
+          content: targetImage.filename,
+          extension: targetImage.extension
+        };
+        metadata = await this.api.get(`/artifacts/${targetImage.id}/metadata`);
+      }
+      
+      // 更新元数据
+      this.selectedArtifact.messageId = metadata.messageId;
+      this.selectedArtifact.agentId = metadata.agentId;
+      
+      // 更新"查看来源"按钮
+      if (metadata.messageId) {
+        this.viewSourceBtn.style.display = "inline-block";
+      } else {
+        this.viewSourceBtn.style.display = "none";
+      }
+      
+      // 重新渲染图片查看器
+      this._displayArtifact(fullArtifact, "image");
+      
+      // 更新缩略图导航器
+      if (this.thumbnailNavigator) {
+        this.thumbnailNavigator.setCurrentIndex(index);
+        this.thumbnailNavigator.scrollToCurrent();
+      }
+      
+    } catch (err) {
+      this.logger.error("切换图片失败", err);
+      if (window.Toast) {
+        window.Toast.error("切换图片失败");
+      }
+    }
+  }
+
+  /**
+   * 切换到上一张图片
+   * 支持循环切换（第一张 → 最后一张）
+   */
+  _navigateToPreviousImage() {
+    if (this.imageList.length === 0) return;
+    
+    // 循环：第一张 → 最后一张
+    const newIndex = this.currentImageIndex === 0 
+      ? this.imageList.length - 1 
+      : this.currentImageIndex - 1;
+    
+    this._navigateToImage(newIndex);
+  }
+
+  /**
+   * 切换到下一张图片
+   * 支持循环切换（最后一张 → 第一张）
+   */
+  _navigateToNextImage() {
+    if (this.imageList.length === 0) return;
+    
+    // 循环：最后一张 → 第一张
+    const newIndex = this.currentImageIndex === this.imageList.length - 1 
+      ? 0 
+      : this.currentImageIndex + 1;
+    
+    this._navigateToImage(newIndex);
+  }
+
+  /**
+   * 处理图片导航键盘事件
+   * @param {KeyboardEvent} event - 键盘事件
+   */
+  _handleImageNavigationKeys(event) {
+    // 只在查看器打开且查看图片时响应
+    if (!this.isViewerOpen || !this.selectedArtifact) {
+      return;
+    }
+    
+    // 检查是否为图片类型
+    if (!this._isImageType(this.selectedArtifact.type)) {
+      return;
+    }
+    
+    // 检查是否有多张图片
+    if (this.imageList.length <= 1) {
+      return;
+    }
+    
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      this._navigateToPreviousImage();
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      this._navigateToNextImage();
+    }
+  }
+
+  /**
+   * 创建导航箭头按钮
+   * @returns {HTMLElement} 箭头容器元素
+   */
+  _createNavigationArrows() {
+    const arrows = document.createElement("div");
+    arrows.className = "image-navigation-arrows";
+    arrows.innerHTML = `
+      <button class="nav-arrow nav-arrow-left" title="上一张 (←)">
+        <span>‹</span>
+      </button>
+      <button class="nav-arrow nav-arrow-right" title="下一张 (→)">
+        <span>›</span>
+      </button>
+    `;
+    
+    // 绑定事件
+    const leftArrow = arrows.querySelector(".nav-arrow-left");
+    const rightArrow = arrows.querySelector(".nav-arrow-right");
+    
+    leftArrow.addEventListener("click", () => {
+      this._navigateToPreviousImage();
+    });
+    
+    rightArrow.addEventListener("click", () => {
+      this._navigateToNextImage();
+    });
+    
+    return arrows;
   }
 }
 

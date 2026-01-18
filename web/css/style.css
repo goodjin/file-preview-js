@@ -2335,10 +2335,6 @@ body {
 }
 
 .image-viewer-container {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3742,29 +3738,48 @@ body {
 .image-viewer {
   display: flex;
   flex-direction: column;
+  align-items: center;  /* 水平居中 */
+  justify-content: center;  /* 垂直居中 */
   height: 100%;
-  overflow: auto;
-  padding: 20px;
+  width: 100%;
+  overflow: hidden;  /* 防止滚动条 */
+  padding: 0;  /* 移除 padding，让图片充满空间 */
   background-color: #1e1e1e;
+  position: relative;
 }
 
 .image-info {
-  margin-bottom: 20px;
+  display: none;  /* 隐藏图片信息，节省空间 */
+  margin-bottom: 8px;
   color: #d4d4d4;
   font-size: 13px;
+  text-align: center;
+  flex-shrink: 0;  /* 不压缩 */
 }
 
 .image-thumbnail {
   text-align: center;
-  margin-bottom: 20px;
+  flex: 1;  /* 占据剩余空间 */
+  display: flex;
+  align-items: center;  /* 垂直居中图片 */
+  justify-content: center;  /* 水平居中图片 */
+  min-height: 0;  /* 允许缩小 */
+  width: 100%;
+  height: 100%;  /* 占满高度 */
+  overflow: hidden;  /* 防止溢出 */
+  position: relative;  /* 为绝对定位的子元素提供参考 */
 }
 
 .image-thumbnail img {
   max-width: 100%;
-  max-height: 300px;
+  max-height: 100%;  /* 在容器内自适应 */
+  width: auto;  /* 保持宽高比 */
+  height: auto;  /* 保持宽高比 */
   cursor: pointer;
-  border: 1px solid #3e3e42;
-  border-radius: 4px;
+  border: none;  /* 移除边框，节省空间 */
+  border-radius: 0;  /* 移除圆角 */
+  object-fit: contain;  /* 保持图片比例 */
+  display: block;  /* 移除 inline 元素的额外空间 */
 }
 
 .image-lightbox {
@@ -4777,3 +4792,124 @@ body {
   color: #52c41a;
 }
 
+
+/* ========== 图片导航相关样式 ========== */
+
+/* CSS 变量定义 */
+:root {
+  --thumbnail-height: 80px;
+  --thumbnail-gap: 8px;
+  --thumbnail-border-radius: 4px;
+  --thumbnail-active-border-color: #007acc;
+  --thumbnail-active-border-width: 3px;
+}
+
+/* 缩略图导航器容器 */
+.thumbnail-navigator {
+  width: 100%;
+  padding: 12px;
+  background-color: rgba(30, 30, 30, 0.95);
+  border-top: 1px solid #3e3e42;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;  /* 防止被压缩 */
+  position: relative;  /* 确保 z-index 生效 */
+  z-index: 100;  /* 显示在图片查看器之上 */
+}
+
+/* 缩略图列表 - 单行横向布局 */
+.thumbnail-list {
+  display: flex;
+  gap: var(--thumbnail-gap);
+  min-height: var(--thumbnail-height);
+}
+
+/* 单个缩略图项 */
+.thumbnail-item {
+  flex-shrink: 0;
+  height: var(--thumbnail-height);
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: var(--thumbnail-border-radius);
+  overflow: hidden;
+  transition: border-color 0.2s, opacity 0.2s;
+}
+
+/* 缩略图悬停效果 */
+.thumbnail-item:hover {
+  opacity: 0.8;
+  border-color: #555;
+}
+
+/* 当前选中的缩略图 */
+.thumbnail-item.active {
+  border-color: var(--thumbnail-active-border-color);
+  border-width: var(--thumbnail-active-border-width);
+}
+
+/* 缩略图图片 */
+.thumbnail-item img {
+  height: 100%;
+  width: auto;
+  display: block;
+  object-fit: cover;
+}
+
+/* 图片导航箭头容器 */
+.image-navigation-arrows {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 导航箭头按钮 */
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 50px;
+  height: 50px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 30px;
+  pointer-events: auto;
+  transition: background-color 0.2s, opacity 0.2s;
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 箭头按钮悬停效果 */
+.nav-arrow:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  opacity: 1;
+}
+
+/* 左箭头位置 */
+.nav-arrow-left {
+  left: 20px;
+}
+
+/* 右箭头位置 */
+.nav-arrow-right {
+  right: 20px;
+}
+
+/* 只有一张图片时隐藏箭头 */
+.single-image .nav-arrow {
+  display: none;
+}
+
+/* 缩略图导航器容器 */
+.thumbnail-navigator-container {
+  width: 100%;
+  flex-shrink: 0;
+}
