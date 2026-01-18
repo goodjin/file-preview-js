@@ -1327,6 +1327,18 @@ class ArtifactManager {
       if (this.imageList.length > 1) {
         const arrows = this._createNavigationArrows();
         imageContainer.appendChild(arrows);
+        
+        // 添加滚轮事件监听，用于切换图片
+        imageContainer.addEventListener("wheel", (e) => {
+          e.preventDefault();
+          if (e.deltaY > 0) {
+            // 向下滚动，显示下一张
+            this._navigateToNextImage();
+          } else {
+            // 向上滚动，显示上一张
+            this._navigateToPreviousImage();
+          }
+        }, { passive: false });
       }
       
       this.viewerPanel.appendChild(imageContainer);
