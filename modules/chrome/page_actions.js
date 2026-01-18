@@ -801,105 +801,154 @@ export class PageActions {
 
   /**
    * 保存页面资源到工件
-   * @param {string} tabId
-   * @param {string} resourceUrl - 资源URL
-   * @param {{ctx?: any, filename?: string, type?: string}} options
-   * @returns {Promise<{ok: boolean, artifactId?: string, error?: string}>}
+   * 支持单个或多个资源URL，返回工件ID数组
+   * 
+   * @param {string} tabId - 标签页ID
+   * @param {string|string[]} resourceUrls - 资源URL或URL数组
+   * @param {{ctx?: any, filename?: string, type?: string}} options - 选项
+   * @returns {Promise<{ok: boolean, artifactIds?: string[], errors?: Array, error?: string}>}
    */
-  async saveResource(tabId, resourceUrl, options = {}) {
+  async saveResource(tabId, resourceUrls, options = {}) {
     const result = this._getPage(tabId);
     if ("error" in result) return result;
     
     const { page } = result;
     const { ctx, filename, type = 'image' } = options;
 
-    this.log.info?.("保存页面资源", { tabId, resourceUrl, type });
-
     // 检查是否有上下文和 saveImage 方法
     if (!ctx || !ctx.tools || typeof ctx.tools.saveImage !== 'function') {
       return { error: "context_required", message: "需要运行时上下文才能保存资源" };
     }
 
-    try {
-      // 获取资源内容
-      let buffer;
-      
-      if (resourceUrl.startsWith('data:')) {
-        // 处理 data URL
-        const matches = resourceUrl.match(/^data:([^;]+);base64,(.+)$/);
-        if (!matches) {
-          return { error: "invalid_data_url", resourceUrl };
-        }
-        buffer = Buffer.from(matches[2], 'base64');
-      } else {
-        // 通过页面上下文获取资源
-        const resourceData = await page.evaluate(async (url) => {
-          try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            const arrayBuffer = await blob.arrayBuffer();
-            const bytes = Array.from(new Uint8Array(arrayBuffer));
-            return {
-              ok: true,
-              data: bytes,
-              contentType: response.headers.get('content-type')
-            };
-          } catch (err) {
-            return {
-              ok: false,
-              error: err.message
-            };
-          }
-        }, resourceUrl);
-
-        if (!resourceData.ok) {
-          return { error: "fetch_resource_failed", message: resourceData.error };
-        }
-
-        buffer = Buffer.from(resourceData.data);
-      }
-
-      // 确定文件格式
-      let format = 'png';
-      if (resourceUrl.includes('.jpg') || resourceUrl.includes('.jpeg')) {
-        format = 'jpg';
-      } else if (resourceUrl.includes('.gif')) {
-        format = 'gif';
-      } else if (resourceUrl.includes('.webp')) {
-        format = 'webp';
-      }
-
-      // 保存到工件
-      const pageUrl = page.url();
-      const pageTitle = await page.title();
-      const messageId = ctx.currentMessage?.id ?? null;
-      const agentId = ctx.agent?.id ?? null;
-
-      const filePath = await ctx.tools.saveImage(buffer, {
-        format,
-        messageId,
-        agentId,
-        tabId,
-        url: pageUrl,
-        title: pageTitle,
-        resourceUrl,
-        originalFilename: filename || null
-      });
-
-      // 从文件路径中提取工件ID（去掉扩展名）
-      const artifactId = filePath.replace(/\.[^.]+$/, '');
-
-      return {
-        ok: true,
-        artifactId,
-        filename: filePath,
-        resourceUrl,
-        format
-      };
-    } catch (err) {
-      const message = err?.message ?? String(err);
-      return { error: "save_resource_failed", resourceUrl, message };
+    // 统一处理为数组
+    const urlArray = Array.isArray(resourceUrls) ? resourceUrls : [resourceUrls];
+    
+    if (urlArray.length === 0) {
+      return { error: "empty_urls", message: "资源URL数组不能为空" };
     }
+
+    this.log.info?.("保存页面资源", { tabId, count: urlArray.length, type });
+
+    // 保存结果
+    const artifactIds = [];
+    const errors = [];
+
+    // 获取页面信息（所有资源共享）
+    const pageUrl = page.url();
+    const pageTitle = await page.title();
+    const messageId = ctx.currentMessage?.id ?? null;
+    const agentId = ctx.agent?.id ?? null;
+
+    // 逐个处理资源
+    for (let i = 0; i < urlArray.length; i++) {
+      const resourceUrl = urlArray[i];
+      
+      try {
+        // 获取资源内容
+        let buffer;
+        
+        if (resourceUrl.startsWith('data:')) {
+          // 处理 data URL
+          const matches = resourceUrl.match(/^data:([^;]+);base64,(.+)$/);
+          if (!matches) {
+            errors.push({ 
+              index: i, 
+              resourceUrl, 
+              error: "invalid_data_url" 
+            });
+            artifactIds.push(null);
+            continue;
+          }
+          buffer = Buffer.from(matches[2], 'base64');
+        } else {
+          // 通过页面上下文获取资源
+          const resourceData = await page.evaluate(async (url) => {
+            try {
+              const response = await fetch(url);
+              const blob = await response.blob();
+              const arrayBuffer = await blob.arrayBuffer();
+              const bytes = Array.from(new Uint8Array(arrayBuffer));
+              return {
+                ok: true,
+                data: bytes,
+                contentType: response.headers.get('content-type')
+              };
+            } catch (err) {
+              return {
+                ok: false,
+                error: err.message
+              };
+            }
+          }, resourceUrl);
+
+          if (!resourceData.ok) {
+            errors.push({ 
+              index: i, 
+              resourceUrl, 
+              error: "fetch_resource_failed", 
+              message: resourceData.error 
+            });
+            artifactIds.push(null);
+            continue;
+          }
+
+          buffer = Buffer.from(resourceData.data);
+        }
+
+        // 确定文件格式
+        let format = 'png';
+        if (resourceUrl.includes('.jpg') || resourceUrl.includes('.jpeg')) {
+          format = 'jpg';
+        } else if (resourceUrl.includes('.gif')) {
+          format = 'gif';
+        } else if (resourceUrl.includes('.webp')) {
+          format = 'webp';
+        }
+
+        // 保存到工件
+        // 只有在保存单个资源时才使用自定义文件名
+        const useFilename = urlArray.length === 1 ? filename : null;
+        
+        const filePath = await ctx.tools.saveImage(buffer, {
+          format,
+          messageId,
+          agentId,
+          tabId,
+          url: pageUrl,
+          title: pageTitle,
+          resourceUrl,
+          originalFilename: useFilename
+        });
+
+        // 从文件路径中提取工件ID（去掉扩展名）
+        const artifactId = filePath.replace(/\.[^.]+$/, '');
+        artifactIds.push(artifactId);
+
+      } catch (err) {
+        const message = err?.message ?? String(err);
+        this.log.error?.("保存资源失败", { index: i, resourceUrl, error: message });
+        errors.push({ 
+          index: i, 
+          resourceUrl, 
+          error: "save_resource_failed", 
+          message 
+        });
+        artifactIds.push(null);
+      }
+    }
+
+    // 统计成功和失败数量
+    const successCount = artifactIds.filter(id => id !== null).length;
+    const failureCount = errors.length;
+
+    return {
+      ok: true,
+      artifactIds,
+      successCount,
+      failureCount,
+      errors: errors.length > 0 ? errors : undefined,
+      totalCount: urlArray.length
+    };
   }
 
   // ==================== 页面交互 ====================
