@@ -1,5 +1,5 @@
-import readline from "node:readline";
-import { AgentSociety } from "../src/platform/agent_society.js";
+﻿import readline from "node:readline";
+import { AgentSociety } from "../src/platform/core/agent_society.js";
 
 /**
  * 架构师岗位提示词模板

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MessageProcessor 单元测试
  * 
  * 测试 MessageProcessor 的核心功能：
@@ -11,7 +11,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 import { Agent } from "../../src/agents/agent.js";
 
 describe("MessageProcessor", () => {

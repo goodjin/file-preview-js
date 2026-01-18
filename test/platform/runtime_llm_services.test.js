@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { Runtime } from "../../src/platform/runtime.js";
-import { LlmClient } from "../../src/platform/llm_client.js";
+﻿import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { Runtime } from "../src/platform/core/runtime.js";
+import { LlmClient } from "../src/platform/services/llm/llm_client.js";
 import { writeFile, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";

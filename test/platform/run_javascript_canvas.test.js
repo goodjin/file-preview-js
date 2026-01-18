@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
-import { Runtime } from "../../src/platform/runtime.js";
+﻿import { test, expect, describe, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
+import { Runtime } from "../src/platform/core/runtime.js";
 import { mkdir, rm, readdir, readFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";

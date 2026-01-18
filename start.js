@@ -17,7 +17,7 @@
  *   bun start.js ./my-data -p 3001 --no-browser
  */
 
-import { AgentSociety } from "./src/platform/agent_society.js";
+import { AgentSociety } from "./src/platform/core/agent_society.js";
 import { Config } from "./src/platform/utils/config/config.js";
 import { exec } from "node:child_process";
 import { mkdir } from "node:fs/promises";

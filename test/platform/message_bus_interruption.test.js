@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MessageBus 插话检测单元测试
  * 
  * 测试 MessageBus 的插话检测功能：
@@ -10,7 +10,7 @@
  */
 
 import { describe, test, expect, beforeEach } from "bun:test";
-import { MessageBus } from "../../src/platform/message_bus.js";
+import { MessageBus } from "../src/platform/core/message_bus.js";
 
 describe("MessageBus 插话检测", () => {
   let bus;

@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+﻿import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
-import { OrgPrimitives } from "../../src/platform/org_primitives.js";
+import { OrgPrimitives } from "../src/platform/core/org_primitives.js";
 import path from "node:path";
 import { rm, readFile } from "node:fs/promises";
 

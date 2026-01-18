@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { Runtime } from "../../src/platform/runtime.js";
+﻿import { describe, expect, test } from "bun:test";
+import { Runtime } from "../src/platform/core/runtime.js";
 
 describe("Runtime - Message Interruption Integration", () => {
   

@@ -1,7 +1,7 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+﻿import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import path from "node:path";
 import { rm } from "node:fs/promises";
-import { ArtifactStore } from "../../src/platform/artifact_store.js";
+import { ArtifactStore } from "../src/platform/services/artifact/artifact_store.js";
 
 describe("ArtifactStore", () => {
   let store;

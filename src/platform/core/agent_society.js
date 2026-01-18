@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
+﻿import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Agent } from "../../agents/agent.js";
 import { Runtime } from "./runtime.js";
-import { HTTPServer } from "../http_server.js";
+import { HTTPServer } from "../services/http/http_server.js";
 import { Config } from "../utils/config/config.js";
 import { createNoopModuleLogger } from "../utils/logger/logger.js";
 

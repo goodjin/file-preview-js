@@ -1,7 +1,7 @@
-import { describe, expect, test, mock } from "bun:test";
+﻿import { describe, expect, test, mock } from "bun:test";
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 
 describe("Runtime Tool Delegation", () => {
   test("executeToolCall delegates to ToolExecutor", async () => {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * RuntimeMessaging 单元测试
  * 
  * 测试 RuntimeMessaging 类的消息处理功能，包括：
@@ -10,7 +10,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 import { RuntimeMessaging } from "../../src/platform/runtime/runtime_messaging.js";
 import { Agent } from "../../src/agents/agent.js";
 

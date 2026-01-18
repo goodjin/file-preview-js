@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Runtime 插话队列管理单元测试
  * 
  * 测试 Runtime 的插话队列管理功能：
@@ -11,7 +11,7 @@
  */
 
 import { describe, test, expect, beforeEach } from "bun:test";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 
 describe("Runtime 插话队列管理", () => {
   let runtime;

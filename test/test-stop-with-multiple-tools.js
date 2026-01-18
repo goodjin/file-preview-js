@@ -8,8 +8,8 @@
  * 4. 验证后续的工具调用不会被执行
  */
 
-import { Runtime } from "../src/platform/runtime.js";
-import { AgentSociety } from "../src/platform/agent_society.js";
+import { Runtime } from "../src/platform/core/runtime.js";
+import { AgentSociety } from "../src/platform/core/agent_society.js";
 import { Config } from "../src/platform/utils/config/config.js";
 
 async function testStopWithMultipleTools() {

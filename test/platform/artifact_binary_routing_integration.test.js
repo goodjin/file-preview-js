@@ -1,11 +1,11 @@
-/**
+﻿/**
  * Integration tests for Artifact Binary Content Routing
  * 
  * Tests the complete flow from artifact storage to content routing
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { Runtime } from '../../src/platform/runtime.js';
+import { Runtime } from '../src/platform/core/runtime.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 

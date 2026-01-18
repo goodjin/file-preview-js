@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 消息附件属性测试
  * Property 6: Message Attachment References Integrity
  * 
@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import fc from "fast-check";
-import { HTTPServer } from "../../src/platform/http_server.js";
+import { HTTPServer } from "../src/platform/services/http/http_server.js";
 
 describe("Message Attachment Properties", () => {
   let server;

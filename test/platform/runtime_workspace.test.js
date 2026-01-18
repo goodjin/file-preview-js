@@ -1,8 +1,8 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+﻿import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import fc from "fast-check";
 import path from "node:path";
 import { rm, mkdir, readdir } from "node:fs/promises";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 
 describe("Runtime Workspace", () => {
   let runtime;

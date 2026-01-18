@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+﻿import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 import { formatTaskBrief } from "../../src/platform/utils/message/task_brief.js";
 
 /**

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { HttpClient, createHttpClient } from "../../src/platform/http_client.js";
-import { createNoopModuleLogger } from "../../src/platform/logger.js";
+﻿import { describe, it, expect, beforeEach } from "vitest";
+import { HttpClient, createHttpClient } from "../src/platform/services/http/http_client.js";
+import { createNoopModuleLogger } from "../src/platform/utils/logger/logger.js";
 
 describe("HttpClient", () => {
   let client;

@@ -1,8 +1,8 @@
-import { describe, expect, test, beforeEach, afterEach } from "vitest";
+﻿import { describe, expect, test, beforeEach, afterEach } from "vitest";
 import fc from "fast-check";
-import { HTTPServer } from "../../src/platform/http_server.js";
-import { AgentSociety } from "../../src/platform/agent_society.js";
-import { MessageBus } from "../../src/platform/message_bus.js";
+import { HTTPServer } from "../src/platform/services/http/http_server.js";
+import { AgentSociety } from "../src/platform/core/agent_society.js";
+import { MessageBus } from "../src/platform/core/message_bus.js";
 import { Config } from "../../src/platform/utils/config/config.js";
 
 describe("HTTPServer", () => {

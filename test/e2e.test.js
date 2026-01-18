@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 端到端测试：Agent Society 完整业务流程
  * 
  * 测试从需求提交到任务完成的完整流程，以及多智能体协作场景
@@ -9,7 +9,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { AgentSociety } from "../src/platform/agent_society.js";
+import { AgentSociety } from "../src/platform/core/agent_society.js";
 import { Config } from "../src/platform/utils/config/config.js";
 
 describe("端到端测试 - 需求提交到任务完成的完整流程", () => {

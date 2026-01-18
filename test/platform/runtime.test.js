@@ -1,11 +1,11 @@
-import { describe, expect, test } from "bun:test";
+﻿import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 import { Agent } from "../../src/agents/agent.js";
 import { createWriterBehavior } from "../../src/agents/behaviors.js";
-import { Logger, normalizeLoggingConfig } from "../../src/platform/logger.js";
-import { LlmClient } from "../../src/platform/llm_client.js";
+import { Logger, normalizeLoggingConfig } from "../src/platform/utils/logger/logger.js";
+import { LlmClient } from "../src/platform/services/llm/llm_client.js";
 
 describe("Runtime", () => {
   test("dispatches message to agent behavior and writes artifact", async () => {

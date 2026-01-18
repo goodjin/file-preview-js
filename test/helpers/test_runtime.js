@@ -2,8 +2,8 @@
  * 测试辅助函数：创建测试用的 Runtime 和 AgentSociety 实例
  */
 
-import { Runtime } from "../../src/platform/runtime.js";
-import { AgentSociety } from "../../src/platform/agent_society.js";
+import { Runtime } from "../../src/platform/core/runtime.js";
+import { AgentSociety } from "../../src/platform/core/agent_society.js";
 import { Config } from "../../src/platform/utils/config/config.js";
 import path from "node:path";
 

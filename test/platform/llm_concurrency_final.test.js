@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LLM并发控制最终测试套件
  * 
  * 特点：
@@ -13,8 +13,8 @@
 import { describe, it, expect, beforeEach, afterEach, mock, beforeAll, afterAll } from "bun:test";
 import fc from "fast-check";
 import { ConcurrencyController, RequestInfo, ConcurrencyStats } from "../../src/platform/concurrency_controller.js";
-import { LlmClient } from "../../src/platform/llm_client.js";
-import { createNoopModuleLogger } from "../../src/platform/logger.js";
+import { LlmClient } from "../src/platform/services/llm/llm_client.js";
+import { createNoopModuleLogger } from "../src/platform/utils/logger/logger.js";
 
 // ============================================================================
 // 测试配置和工具函数

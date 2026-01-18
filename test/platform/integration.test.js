@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 集成测试：Agent Society 核心流程
  * 
  * 测试智能体创建和终止、消息发送和接收、工件存储和检索、LLM 调用和重试等关键业务流程
@@ -9,7 +9,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 import { Agent } from "../../src/agents/agent.js";
 
 describe("集成测试 - 智能体创建和终止流程", () => {

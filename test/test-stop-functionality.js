@@ -9,8 +9,8 @@
  * 5. 删除操作先执行停止流程
  */
 
-import { Runtime } from "../src/platform/runtime.js";
-import { AgentSociety } from "../src/platform/agent_society.js";
+import { Runtime } from "../src/platform/core/runtime.js";
+import { AgentSociety } from "../src/platform/core/agent_society.js";
 import { Config } from "../src/platform/utils/config/config.js";
 
 async function testStopFunctionality() {

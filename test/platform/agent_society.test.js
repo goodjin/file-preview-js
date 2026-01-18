@@ -1,10 +1,10 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+﻿import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import fc from "fast-check";
 import path from "node:path";
 import { rm, mkdir, writeFile, readdir, stat } from "node:fs/promises";
-import { AgentSociety } from "../../src/platform/agent_society.js";
-import { MessageBus } from "../../src/platform/message_bus.js";
-import { WorkspaceManager } from "../../src/platform/workspace_manager.js";
+import { AgentSociety } from "../src/platform/core/agent_society.js";
+import { MessageBus } from "../src/platform/core/message_bus.js";
+import { WorkspaceManager } from "../src/platform/services/workspace/workspace_manager.js";
 import { Config } from "../../src/platform/utils/config/config.js";
 
 describe("AgentSociety", () => {

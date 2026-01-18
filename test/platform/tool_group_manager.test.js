@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+﻿import { describe, it, expect, beforeEach } from "vitest";
 import fc from "fast-check";
 import { ToolGroupManager, BUILTIN_TOOL_GROUPS } from "../../src/platform/extensions/tool_group_manager.js";
 
@@ -596,7 +596,7 @@ describe("属性 5: 未授权工具调用拒绝", () => {
 // 验证: 需求 3.4
 // 注意: 此属性测试 OrgPrimitives 的 toolGroups 持久化功能
 
-import { OrgPrimitives } from "../../src/platform/org_primitives.js";
+import { OrgPrimitives } from "../src/platform/core/org_primitives.js";
 import path from "node:path";
 import { rm, readFile as fsReadFile } from "node:fs/promises";
 

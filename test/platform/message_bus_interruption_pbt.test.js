@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+﻿import { describe, expect, test } from "bun:test";
 import * as fc from "fast-check";
-import { MessageBus } from "../../src/platform/message_bus.js";
+import { MessageBus } from "../src/platform/core/message_bus.js";
 
 describe("MessageBus - Property-Based Tests for Active Agent Detection", () => {
   

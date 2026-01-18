@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+﻿import { describe, it, expect, beforeEach, vi } from "vitest";
 import fc from "fast-check";
 import { ConcurrencyController, ConcurrencyStats } from "../../src/platform/concurrency_controller.js";
-import { createNoopModuleLogger } from "../../src/platform/logger.js";
+import { createNoopModuleLogger } from "../src/platform/utils/logger/logger.js";
 
 describe("Statistics and Monitoring", () => {
   let controller;

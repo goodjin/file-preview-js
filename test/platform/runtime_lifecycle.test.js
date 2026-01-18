@@ -1,4 +1,4 @@
-/**
+﻿/**
  * RuntimeLifecycle 单元测试
  * 
  * 测试 RuntimeLifecycle 类的生命周期管理功能，包括：
@@ -13,7 +13,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 import { RuntimeLifecycle } from "../../src/platform/runtime/runtime_lifecycle.js";
 import { Config } from "../../src/platform/utils/config/config.js";
 

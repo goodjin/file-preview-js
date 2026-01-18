@@ -1,4 +1,4 @@
-/**
+﻿/**
  * RuntimeLlm 单元测试
  * 
  * 测试 RuntimeLlm 类的 LLM 交互功能，包括：
@@ -12,7 +12,7 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import path from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { Runtime } from "../../src/platform/runtime.js";
+import { Runtime } from "../src/platform/core/runtime.js";
 import { RuntimeLlm } from "../../src/platform/runtime/runtime_llm.js";
 
 describe("RuntimeLlm", () => {

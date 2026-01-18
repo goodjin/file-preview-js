@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { LlmClient } from "../../src/platform/llm_client.js";
-import { createNoopModuleLogger } from "../../src/platform/logger.js";
+﻿import { describe, it, expect, beforeEach, vi } from "vitest";
+import { LlmClient } from "../src/platform/services/llm/llm_client.js";
+import { createNoopModuleLogger } from "../src/platform/utils/logger/logger.js";
 
 describe("LlmClient", () => {
   let client;

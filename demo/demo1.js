@@ -1,4 +1,4 @@
-import { AgentSociety } from "../src/platform/agent_society.js";
+﻿import { AgentSociety } from "../src/platform/core/agent_society.js";
 
 /**
  * 用户视角 Demo：只提交需求给根智能体，然后等待输出。

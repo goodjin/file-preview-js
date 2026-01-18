@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test";
+﻿import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import path from "node:path";
 import { rm, mkdir, writeFile, readdir } from "node:fs/promises";
-import { WorkspaceManager } from "../../src/platform/workspace_manager.js";
+import { WorkspaceManager } from "../src/platform/services/workspace/workspace_manager.js";
 
 describe("WorkspaceManager", () => {
   /**

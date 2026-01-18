@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+﻿import { describe, it, expect, beforeEach, vi } from "vitest";
 import fc from "fast-check";
-import { LlmClient } from "../../src/platform/llm_client.js";
-import { createNoopModuleLogger } from "../../src/platform/logger.js";
+import { LlmClient } from "../src/platform/services/llm/llm_client.js";
+import { createNoopModuleLogger } from "../src/platform/utils/logger/logger.js";
 
 describe("LLM Client Integration Tests", () => {
   let mockLogger;

@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+﻿import { describe, it, expect, beforeEach, vi } from "vitest";
 import fc from "fast-check";
-import { LlmClient } from "../../src/platform/llm_client.js";
+import { LlmClient } from "../src/platform/services/llm/llm_client.js";
 import { ConcurrencyController } from "../../src/platform/concurrency_controller.js";
-import { createNoopModuleLogger } from "../../src/platform/logger.js";
+import { createNoopModuleLogger } from "../src/platform/utils/logger/logger.js";
 
 describe("LLM Concurrency Control - 100 Comprehensive Tests", () => {
   let mockLogger;

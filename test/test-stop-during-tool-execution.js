@@ -6,8 +6,8 @@
  * 2. 如果工具调用已经开始执行，停止操作应该阻止后续的工具调用
  */
 
-import { Runtime } from "../src/platform/runtime.js";
-import { AgentSociety } from "../src/platform/agent_society.js";
+import { Runtime } from "../src/platform/core/runtime.js";
+import { AgentSociety } from "../src/platform/core/agent_society.js";
 import { Config } from "../src/platform/utils/config/config.js";
 
 async function testStopDuringToolExecution() {

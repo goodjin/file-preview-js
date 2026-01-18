@@ -1,7 +1,7 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+﻿import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { rm, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { ConversationManager } from "../../src/platform/conversation_manager.js";
+import { ConversationManager } from "../src/platform/services/conversation/conversation_manager.js";
 
 describe("ConversationManager", () => {
   let manager;

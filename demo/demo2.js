@@ -1,5 +1,5 @@
 ﻿import readline from "node:readline";
-import { AgentSociety } from "../src/platform/agent_society.js";
+import { AgentSociety } from "../src/platform/core/agent_society.js";
 
 const helpText = [
   "本 Demo 演示：用本项目的 AgentSociety 跑一个“饭店”多智能体协作场景。",
