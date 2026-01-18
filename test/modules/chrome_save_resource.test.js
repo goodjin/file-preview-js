@@ -80,6 +80,8 @@ describe('chrome_save_resource 批量保存功能', () => {
     expect(result.ok).toBe(true);
     expect(result.artifactIds).toHaveLength(1);
     expect(result.artifactIds[0]).toBe('artifact-0');
+    expect(result.images).toHaveLength(1);
+    expect(result.images[0]).toBe('artifact-0.jpg');
     expect(result.successCount).toBe(1);
     expect(result.failureCount).toBe(0);
     expect(savedImages).toHaveLength(1);
@@ -99,6 +101,9 @@ describe('chrome_save_resource 批量保存功能', () => {
 
     expect(result.ok).toBe(true);
     expect(result.artifactIds).toHaveLength(2);
+    expect(result.images).toHaveLength(2);
+    expect(result.images[0]).toBe('artifact-0.jpg');
+    expect(result.images[1]).toBe('artifact-1.png');
     expect(result.successCount).toBe(2);
     expect(result.failureCount).toBe(0);
     expect(savedImages).toHaveLength(2);
@@ -119,6 +124,7 @@ describe('chrome_save_resource 批量保存功能', () => {
 
     expect(result.ok).toBe(true);
     expect(result.artifactIds).toHaveLength(3);
+    expect(result.images).toHaveLength(2);  // 只有成功的
     expect(result.successCount).toBe(2);
     expect(result.failureCount).toBe(1);
     expect(result.errors).toHaveLength(1);
@@ -138,6 +144,7 @@ describe('chrome_save_resource 批量保存功能', () => {
 
     expect(result.ok).toBe(true);
     expect(result.artifactIds).toHaveLength(1);
+    expect(result.images).toHaveLength(1);
     expect(result.successCount).toBe(1);
   });
 

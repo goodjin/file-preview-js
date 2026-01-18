@@ -43,3 +43,5 @@
 
 ### 相关文档
 - SAVE_RESOURCE_USAGE.md: 详细的使用说明和示例
+- CHANGELOG.md: 变更历史和迁移指南
+- FRONTEND_INTEGRATION.md: 前端集成说明，解释如何在聊天界面显示工件缩略图

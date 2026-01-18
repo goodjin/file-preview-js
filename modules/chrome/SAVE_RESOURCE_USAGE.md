@@ -19,6 +19,7 @@
 {
   ok: true,
   artifactIds: ['artifact-id-1', 'artifact-id-2', null],  // 工件ID数组，失败的为null
+  images: ['artifact-id-1.jpg', 'artifact-id-2.png'],     // 成功保存的图片文件名数组（用于前端显示）
   successCount: 2,      // 成功保存的数量
   failureCount: 1,      // 失败的数量
   totalCount: 3,        // 总数量
@@ -32,6 +33,14 @@
   ]
 }
 ```
+
+**字段说明**：
+- `artifactIds`: 所有资源对应的工件ID数组，失败的位置为 `null`
+- `images`: 成功保存的图片文件名数组（包含扩展名），用于前端显示缩略图
+- `successCount`: 成功保存的资源数量
+- `failureCount`: 保存失败的资源数量
+- `totalCount`: 总资源数量
+- `errors`: 失败资源的详细错误信息（可选）
 
 ## 使用示例
 

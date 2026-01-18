@@ -831,6 +831,7 @@ export class PageActions {
 
     // 保存结果
     const artifactIds = [];
+    const filePaths = [];  // 保存完整的文件路径
     const errors = [];
 
     // 获取页面信息（所有资源共享）
@@ -857,6 +858,7 @@ export class PageActions {
               error: "invalid_data_url" 
             });
             artifactIds.push(null);
+            filePaths.push(null);
             continue;
           }
           buffer = Buffer.from(matches[2], 'base64');
@@ -889,6 +891,7 @@ export class PageActions {
               message: resourceData.error 
             });
             artifactIds.push(null);
+            filePaths.push(null);
             continue;
           }
 
@@ -923,6 +926,7 @@ export class PageActions {
         // 从文件路径中提取工件ID（去掉扩展名）
         const artifactId = filePath.replace(/\.[^.]+$/, '');
         artifactIds.push(artifactId);
+        filePaths.push(filePath);
 
       } catch (err) {
         const message = err?.message ?? String(err);
@@ -934,6 +938,7 @@ export class PageActions {
           message 
         });
         artifactIds.push(null);
+        filePaths.push(null);
       }
     }
 
@@ -941,9 +946,14 @@ export class PageActions {
     const successCount = artifactIds.filter(id => id !== null).length;
     const failureCount = errors.length;
 
+    // 构建 images 数组（用于前端显示缩略图）
+    // 只包含成功保存的工件文件名
+    const images = filePaths.filter(path => path !== null);
+
     return {
       ok: true,
       artifactIds,
+      images,  // 添加 images 数组用于前端显示
       successCount,
       failureCount,
       errors: errors.length > 0 ? errors : undefined,

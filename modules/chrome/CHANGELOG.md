@@ -25,6 +25,7 @@
   {
     ok: true,
     artifactIds: ['artifact-123', 'artifact-456', null],
+    images: ['artifact-123.jpg', 'artifact-456.png'],  // 新增：用于前端显示
     successCount: 2,
     failureCount: 1,
     totalCount: 3,
@@ -44,6 +45,7 @@
 - 部分失败不影响其他资源的保存
 - 返回详细的成功/失败统计
 - 提供每个失败资源的错误详情
+- **新增 `images` 字段**：包含成功保存的图片文件名数组，用于前端聊天界面显示缩略图
 
 #### 4. 向后兼容性
 - 仍然支持传入单个URL（作为数组的唯一元素）
