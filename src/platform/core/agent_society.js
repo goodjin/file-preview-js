@@ -17,7 +17,20 @@ export class AgentSociety {
    * @param {{config?:object, configPath?:string, maxSteps?:number, httpPort?:number, enableHttp?:boolean, shutdownTimeoutMs?:number, dataDir?:string}} [options]
    */
   constructor(options = {}) {
-    this.runtime = new Runtime(options);
+    // 创建 Config 服务实例（如果未提供配置对象）
+    if (!options.config && options.configPath) {
+      const configDir = path.dirname(options.configPath);
+      this._configService = new Config(configDir);
+    } else {
+      this._configService = null;
+    }
+    
+    // 将 Config 服务传递给 Runtime
+    this.runtime = new Runtime({
+      ...options,
+      configService: this._configService
+    });
+    
     this._dataDir = options.dataDir ?? null;
     this._userInbox = [];
     this._userMessageListeners = new Set();
@@ -251,17 +264,12 @@ export class AgentSociety {
       });
       this._httpServer.setSociety(this);
       
-      // 设置配置服务，用于配置管理 API
-      if (this.runtime.configPath) {
-        const configDir = path.dirname(this.runtime.configPath);
-        const config = new Config(
-          configDir,
-          this.runtime.loggerRoot.forModule("config")
-        );
-        this._httpServer.setConfigService(config);
-        void this.log.info("HTTP服务器配置服务已设置", { configDir });
+      // 设置配置服务（使用同一个实例）
+      if (this._configService) {
+        this._httpServer.setConfigService(this._configService);
+        void this.log.info("HTTP服务器配置服务已设置");
       } else {
-        void this.log.warn("HTTP服务器配置服务未设置，配置目录未知");
+        void this.log.warn("HTTP服务器配置服务未设置");
       }
       
       // 设置运行时目录，用于消息持久化

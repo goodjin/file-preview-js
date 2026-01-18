@@ -84,13 +84,13 @@ export class Runtime {
    * 6. 初始化临时服务实例
    * 7. 初始化所有子模块
    * 
-   * @param {{config?:object, maxSteps?:number, configPath?:string, maxToolRounds?:number, idleWarningMs?:number, dataDir?:string}} options
+   * @param {{config?:object, configService?:Config, maxSteps?:number, configPath?:string, maxToolRounds?:number, idleWarningMs?:number, dataDir?:string}} options
    */
   constructor(options = {}) {
     // ==================== 配置参数 ====================
-    this._passedConfig = options.config ?? null; // 外部传入的配置
+    this._passedConfig = options.config ?? null; // 外部传入的配置对象
+    this._configService = options.configService ?? null; // 外部传入的配置服务
     this.maxSteps = options.maxSteps ?? 200;
-    this.configPath = options.configPath ?? "config/app.json";
     this.maxToolRounds = options.maxToolRounds ?? 200;
     this.maxContextMessages = options.maxContextMessages ?? 50;
     this.idleWarningMs = options.idleWarningMs ?? 300000; // 默认5分钟
@@ -398,10 +398,12 @@ export class Runtime {
    * @returns {Promise<void>}
    */
   async init() {
-    // 优先使用外部传入的配置，否则自己读取
+    // 优先使用外部传入的配置对象，否则使用配置服务加载
     if (!this._passedConfig) {
-      const configManager = new Config(path.dirname(this.configPath));
-      this.config = await configManager.loadApp({ dataDir: this.dataDir });
+      if (!this._configService) {
+        throw new Error("必须提供 config 对象或 configService 实例");
+      }
+      this.config = await this._configService.loadApp({ dataDir: this.dataDir });
     } else {
       this.config = this._passedConfig;
     }
@@ -418,7 +420,6 @@ export class Runtime {
     this._events.log = this.log;
 
     void this.log.info("运行时初始化开始", {
-      configPath: this.configPath,
       maxSteps: this.maxSteps,
       maxToolRounds: this.maxToolRounds,
       idleWarningMs: this.idleWarningMs
@@ -480,8 +481,10 @@ export class Runtime {
     }
 
     // 初始化 LLM 服务注册表和模型选择器
+    // 获取配置目录：优先使用配置服务的目录，否则使用默认目录
+    const configDir = this._configService?.configDir ?? "config";
     this.serviceRegistry = new LlmServiceRegistry({
-      configDir: path.dirname(this.configPath),
+      configDir: configDir,
       logger: this.loggerRoot.forModule("llm_service_registry")
     });
     await this.serviceRegistry.load();
@@ -985,9 +988,12 @@ export class Runtime {
    */
   async reloadLlmClient() {
     try {
-      // 重新加载配置
-      const configManager = new Config(path.dirname(this.configPath));
-      const newConfig = await configManager.loadApp({ dataDir: this.dataDir });
+      // 使用配置服务重新加载配置
+      if (!this._configService) {
+        throw new Error("配置服务未初始化，无法重新加载");
+      }
+      
+      const newConfig = await this._configService.loadApp({ dataDir: this.dataDir });
       
       if (!newConfig.llm) {
         void this.log.warn("配置文件中没有 LLM 配置");
