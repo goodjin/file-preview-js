@@ -867,7 +867,8 @@ class ArtifactManager {
               return {
                 ...artifact,
                 content: isImage ? artifact.filename : null,
-                actualFilename: artifact.filename,
+                // 优先使用元数据中的名称，然后是文件名
+                actualFilename: artifact.name || artifact.filename,
                 isWorkspaceFile: false
               };
             }
@@ -889,14 +890,16 @@ class ArtifactManager {
               ...artifact,
               type: extType || "file",
               content: artifact.filename, // 文件名作为内容引用
-              actualFilename: artifact.filename,
+              // 优先使用元数据中的名称，然后是文件名
+              actualFilename: artifact.name || artifact.filename,
               isWorkspaceFile: false
             };
           } catch (e) {
             return {
               ...artifact,
               type: artifact.extension?.replace(".", "") || "unknown",
-              actualFilename: artifact.filename,
+              // 优先使用元数据中的名称，然后是文件名
+              actualFilename: artifact.name || artifact.filename,
               isWorkspaceFile: false
             };
           }

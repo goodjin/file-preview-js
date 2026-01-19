@@ -2667,7 +2667,10 @@ export class HTTPServer {
           createdAt: metadata?.createdAt || stat.birthtime?.toISOString() || stat.mtime?.toISOString(),
           extension: metadata?.extension || extension,
           type: metadata?.type || null,
-          messageId: metadata?.messageId || null
+          messageId: metadata?.messageId || null,
+          // 添加元数据中的名称信息
+          meta: metadata?.meta || null,
+          name: metadata?.meta?.name || null
         };
       }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
