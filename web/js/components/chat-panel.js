@@ -764,46 +764,283 @@ const ChatPanel = {
    * @returns {string} HTML 字符串
    */
   renderToolCallGroupArtifacts(toolCallMessages) {
-    // 收集所有工具调用中创建的图片工件
-    const allImages = [];
+    // 收集所有工具调用中创建的工件
+    const allArtifacts = this._collectAllArtifacts(toolCallMessages);
+    
+    if (allArtifacts.length === 0) return '';
+    
+    // 分离图片和非图片工件
+    const imageArtifacts = [];
+    const nonImageArtifacts = [];
+    
+    for (const artifact of allArtifacts) {
+      if (this._isImageArtifact(artifact)) {
+        imageArtifacts.push(artifact);
+      } else {
+        nonImageArtifacts.push(artifact);
+      }
+    }
+    
+    let html = '';
+    
+    // 渲染图片工件（保持现有缩略图格式）
+    if (imageArtifacts.length > 0) {
+      html += this._renderImageArtifacts(imageArtifacts);
+    }
+    
+    // 渲染非图片工件（显示为简单链接列表）
+    if (nonImageArtifacts.length > 0) {
+      html += this._renderNonImageArtifacts(nonImageArtifacts);
+    }
+    
+    return html ? `<div class="tool-call-group-artifacts">${html}</div>` : '';
+  },
+
+  /**
+   * 从工具调用消息中收集所有工件
+   * @param {Array} toolCallMessages - 工具调用消息数组
+   * @returns {Array} 工件对象数组
+   * @private
+   */
+  _collectAllArtifacts(toolCallMessages) {
+    const allArtifacts = [];
     
     for (const message of toolCallMessages) {
-      // 从 payload 或 result 中获取 images 数组
-      let images = [];
+      if (!message.payload) continue;
       
-      if (message.payload) {
-        if (Array.isArray(message.payload.images)) {
-          images = message.payload.images;
-        } else if (message.payload.result && Array.isArray(message.payload.result.images)) {
-          images = message.payload.result.images;
+      // 处理 payload.result.artifactRef 格式（新格式）
+      if (message.payload.result && message.payload.result.artifactRef) {
+        const artifact = this._createArtifactFromRef(message.payload.result.artifactRef, message);
+        if (artifact) {
+          allArtifacts.push(artifact);
         }
       }
       
-      allImages.push(...images);
+      // 处理传统的 images 数组格式（向后兼容）
+      if (Array.isArray(message.payload.images)) {
+        message.payload.images.forEach((img, index) => {
+          const artifact = this._createArtifactFromImage(img, message, index);
+          if (artifact) {
+            allArtifacts.push(artifact);
+          }
+        });
+      }
+      
+      // 处理 payload.result.images 数组格式（向后兼容）
+      if (message.payload.result && Array.isArray(message.payload.result.images)) {
+        message.payload.result.images.forEach((img, index) => {
+          const artifact = this._createArtifactFromImage(img, message, index);
+          if (artifact) {
+            allArtifacts.push(artifact);
+          }
+        });
+      }
     }
     
-    if (allImages.length === 0) return '';
+    return allArtifacts;
+  },
+
+  /**
+   * 从 artifactRef 创建工件对象
+   * @param {string} artifactRef - 工件引用，格式如 "artifact:xxx"
+   * @param {object} message - 来源消息
+   * @returns {object|null} 工件对象
+   * @private
+   */
+  _createArtifactFromRef(artifactRef, message) {
+    if (!artifactRef || typeof artifactRef !== 'string') return null;
+    
+    // 提取工件ID
+    const artifactId = artifactRef.replace(/^artifact:/, '');
+    if (!artifactId) return null;
+    
+    // 从工具调用参数中获取工件信息
+    const args = message.payload.args || {};
+    const artifactType = this._inferTypeFromArgs(args) || 'file';
+    const artifactName = this._getArtifactNameFromArgs(args) || artifactId;
+    
+    return {
+      id: `${message.id}_artifact_${artifactId}`,
+      type: artifactType,
+      name: artifactName,
+      content: artifactId, // 用于构建 /artifacts/ URL
+      source: message,
+      artifactRef: artifactRef
+    };
+  },
+
+  /**
+   * 从图片文件名创建工件对象（向后兼容）
+   * @param {string} imageName - 图片文件名
+   * @param {object} message - 来源消息
+   * @param {number} index - 索引
+   * @returns {object|null} 工件对象
+   * @private
+   */
+  _createArtifactFromImage(imageName, message, index) {
+    if (!imageName || typeof imageName !== 'string') return null;
+    
+    return {
+      id: `${message.id}_image_${index}`,
+      type: 'image',
+      name: imageName,
+      content: imageName,
+      source: message
+    };
+  },
+
+  /**
+   * 从工具调用参数推断工件类型
+   * @param {object} args - 工具调用参数
+   * @returns {string|null} 推断的类型
+   * @private
+   */
+  _inferTypeFromArgs(args) {
+    // 从参数中的 type 字段获取
+    if (args.type) {
+      return args.type;
+    }
+    
+    // 从参数中的 name 或 filename 推断
+    const name = args.name || args.filename || args.content;
+    if (name) {
+      return this._inferTypeFromFilename(name);
+    }
+    
+    return null;
+  },
+
+  /**
+   * 从工具调用参数获取工件名称
+   * @param {object} args - 工具调用参数
+   * @returns {string|null} 工件名称
+   * @private
+   */
+  _getArtifactNameFromArgs(args) {
+    return args.name || args.filename || args.title || null;
+  },
+
+  /**
+   * 从文件名推断工件类型
+   * @param {string} filename - 文件名
+   * @returns {string|null} 推断的类型
+   * @private
+   */
+  _inferTypeFromFilename(filename) {
+    if (!filename || typeof filename !== 'string') return null;
+    
+    const ext = filename.toLowerCase().split('.').pop();
+    if (!ext) return null;
+    
+    // 图片类型
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
+      return 'image';
+    }
+    
+    // JSON 类型
+    if (['json'].includes(ext)) {
+      return 'json';
+    }
+    
+    // 文本类型
+    if (['txt', 'md', 'markdown'].includes(ext)) {
+      return 'text';
+    }
+    
+    // HTML 类型
+    if (['html', 'htm'].includes(ext)) {
+      return 'html';
+    }
+    
+    // CSS 类型
+    if (['css'].includes(ext)) {
+      return 'css';
+    }
+    
+    // 代码类型
+    if (['js', 'ts', 'py', 'java', 'c', 'cpp', 'go', 'rust', 'rb', 'php'].includes(ext)) {
+      return 'code';
+    }
+    
+    return null;
+  },
+
+  /**
+   * 判断工件是否为图片类型
+   * @param {object} artifact - 工件对象
+   * @returns {boolean} 是否为图片类型
+   * @private
+   */
+  _isImageArtifact(artifact) {
+    // 复用 ArtifactManager 的类型判断逻辑
+    if (window.ArtifactManager && typeof window.ArtifactManager._isImageType === 'function') {
+      return window.ArtifactManager._isImageType(artifact.type);
+    }
+    
+    // 后备判断逻辑
+    const imageTypes = ['image', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'screenshot', 'svg'];
+    return imageTypes.includes((artifact.type || '').toLowerCase());
+  },
+
+  /**
+   * 渲染图片工件（保持现有缩略图格式）
+   * @param {Array} imageArtifacts - 图片工件数组
+   * @returns {string} HTML 字符串
+   * @private
+   */
+  _renderImageArtifacts(imageArtifacts) {
+    // 提取图片文件名用于现有的图片查看器
+    const imageNames = imageArtifacts.map(artifact => artifact.content);
     
     // 生成唯一 ID 用于存储图片数组
     const imagesId = `group_images_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     // 将图片数组存储到全局，供点击时使用
     window._chatPanelImages = window._chatPanelImages || {};
-    window._chatPanelImages[imagesId] = allImages;
+    window._chatPanelImages[imagesId] = imageNames;
     
     return `
-      <div class="tool-call-group-artifacts">
-        <div class="tool-call-group-artifacts-label">创建的工件:</div>
-        <div class="message-images">
-          ${allImages.map((img, idx) => `
-            <img 
-              class="message-thumbnail" 
-              src="/artifacts/${this.escapeHtml(img)}" 
-              alt="工件 ${idx + 1}"
-              onclick="ImageViewer.show(window._chatPanelImages['${imagesId}'], ${idx})"
-              onerror="this.classList.add('error'); this.alt='加载失败'"
-            />
-          `).join('')}
-        </div>
+      <div class="tool-call-group-artifacts-label">创建的工件:</div>
+      <div class="message-images">
+        ${imageNames.map((img, idx) => `
+          <img 
+            class="message-thumbnail" 
+            src="/artifacts/${this.escapeHtml(img)}" 
+            alt="工件 ${idx + 1}"
+            onclick="ImageViewer.show(window._chatPanelImages['${imagesId}'], ${idx})"
+            onerror="this.classList.add('error'); this.alt='加载失败'"
+          />
+        `).join('')}
+      </div>
+    `;
+  },
+
+  /**
+   * 渲染非图片工件（显示为简单链接列表）
+   * @param {Array} nonImageArtifacts - 非图片工件数组
+   * @returns {string} HTML 字符串
+   * @private
+   */
+  _renderNonImageArtifacts(nonImageArtifacts) {
+    const links = nonImageArtifacts.map(artifact => {
+      const displayName = artifact.name || '未知工件';
+      const artifactUrl = `/artifacts/${this.escapeHtml(artifact.content)}`;
+      
+      return `
+        <a 
+          class="artifact-link" 
+          href="${artifactUrl}" 
+          target="_blank" 
+          title="${this.escapeHtml(displayName)}"
+        >
+          ${this.escapeHtml(displayName)}
+        </a>
+      `;
+    }).join('');
+    
+    return `
+      <div class="tool-call-group-artifacts-label">其他工件:</div>
+      <div class="artifact-links">
+        ${links}
       </div>
     `;
   },

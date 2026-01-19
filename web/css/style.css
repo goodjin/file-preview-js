@@ -1834,6 +1834,40 @@ body {
   gap: 8px;
 }
 
+/* 工件链接样式 */
+.artifact-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.artifact-link {
+  display: inline-block;
+  padding: 4px 8px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: #1976d2;
+  text-decoration: none;
+  font-size: 12px;
+  transition: all 0.2s ease;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-link:hover {
+  background-color: #e3f2fd;
+  border-color: #1976d2;
+  text-decoration: none;
+}
+
+.artifact-link:active {
+  background-color: #bbdefb;
+}
+
 .tool-call-item {
   background-color: #fafafa;
   border: 1px solid #e0e0e0;
