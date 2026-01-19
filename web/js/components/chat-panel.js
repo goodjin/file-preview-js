@@ -769,28 +769,20 @@ const ChatPanel = {
     
     if (allArtifacts.length === 0) return '';
     
-    // 分离图片和非图片工件
-    const imageArtifacts = [];
-    const nonImageArtifacts = [];
-    
-    for (const artifact of allArtifacts) {
-      if (this._isImageArtifact(artifact)) {
-        imageArtifacts.push(artifact);
-      } else {
-        nonImageArtifacts.push(artifact);
-      }
-    }
+    // 按类型分组工件
+    const groupedArtifacts = this._groupArtifactsByType(allArtifacts);
     
     let html = '';
     
-    // 渲染图片工件（保持现有缩略图格式）
-    if (imageArtifacts.length > 0) {
-      html += this._renderImageArtifacts(imageArtifacts);
-    }
-    
-    // 渲染非图片工件（显示为简单链接列表）
-    if (nonImageArtifacts.length > 0) {
-      html += this._renderNonImageArtifacts(nonImageArtifacts);
+    // 渲染每个分组
+    for (const [groupType, artifacts] of groupedArtifacts) {
+      if (groupType === 'image') {
+        // 图片工件保持现有缩略图格式
+        html += this._renderImageArtifacts(artifacts);
+      } else {
+        // 非图片工件按分组显示
+        html += this._renderTypeGroup(groupType, artifacts);
+      }
     }
     
     return html ? `<div class="tool-call-group-artifacts">${html}</div>` : '';
@@ -980,6 +972,189 @@ const ChatPanel = {
     // 后备判断逻辑
     const imageTypes = ['image', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'screenshot', 'svg'];
     return imageTypes.includes((artifact.type || '').toLowerCase());
+  },
+
+  /**
+   * 识别工件的分组类型
+   * @param {object} artifact - 工件对象
+   * @returns {string} 分组类型
+   * @private
+   */
+  _getArtifactGroupType(artifact) {
+    const type = (artifact.type || '').toLowerCase();
+    
+    // 图片类型
+    if (this._isImageArtifact(artifact)) {
+      return 'image';
+    }
+    
+    // JSON 类型
+    const jsonTypes = ['json', 'config', 'settings', 'data'];
+    if (jsonTypes.includes(type)) {
+      return 'json';
+    }
+    
+    // 文本类型
+    const textTypes = ['text', 'txt', 'markdown', 'md', 'book_chapter', 'chapter', 'document', 'article', 'note'];
+    if (textTypes.includes(type)) {
+      return 'text';
+    }
+    
+    // 代码类型
+    const codeTypes = ['javascript', 'js', 'typescript', 'ts', 'python', 'py', 'java', 'c', 'cpp', 'go', 'rust', 'ruby', 'php'];
+    if (codeTypes.includes(type)) {
+      return 'code';
+    }
+    
+    // HTML 类型
+    if (type === 'html' || type === 'text/html') {
+      return 'html';
+    }
+    
+    // CSS 类型
+    if (type === 'css') {
+      return 'css';
+    }
+    
+    // 默认为其他类型
+    return 'other';
+  },
+
+  /**
+   * 获取分组的显示信息（名称和图标）
+   * @param {string} groupType - 分组类型
+   * @returns {object} 包含 name 和 icon 的对象
+   * @private
+   */
+  _getGroupDisplayInfo(groupType) {
+    // 复用 ArtifactManager 的图标逻辑
+    let icon = '📋'; // 默认图标
+    if (window.ArtifactManager && window.ArtifactManager.prototype && 
+        typeof window.ArtifactManager.prototype._getFileIconByType === 'function') {
+      try {
+        // 直接调用原型方法
+        icon = window.ArtifactManager.prototype._getFileIconByType.call({}, groupType);
+      } catch (e) {
+        console.warn('调用 ArtifactManager._getFileIconByType 失败，使用后备图标', e);
+      }
+    }
+    
+    // 如果没有获取到图标或调用失败，使用后备图标映射
+    if (icon === '📋') {
+      const iconMap = {
+        'json': '📄',
+        'text': '📝',
+        'image': '🖼️',
+        'code': '💻',
+        'html': '🌐',
+        'css': '🎨',
+        'other': '📋'
+      };
+      icon = iconMap[groupType] || '📋';
+    }
+    
+    // 分组名称映射
+    const nameMap = {
+      'json': 'JSON文件',
+      'text': '文本文件',
+      'image': '图片文件',
+      'code': '代码文件',
+      'html': 'HTML文件',
+      'css': 'CSS文件',
+      'other': '其他文件'
+    };
+    
+    return {
+      name: nameMap[groupType] || '其他文件',
+      icon: icon
+    };
+  },
+
+  /**
+   * 将工件按类型分组
+   * @param {Array} artifacts - 工件数组
+   * @returns {Map} 分组映射，键为分组类型，值为工件数组
+   * @private
+   */
+  _groupArtifactsByType(artifacts) {
+    const groups = new Map();
+    
+    for (const artifact of artifacts) {
+      const groupType = this._getArtifactGroupType(artifact);
+      
+      if (!groups.has(groupType)) {
+        groups.set(groupType, []);
+      }
+      
+      groups.get(groupType).push(artifact);
+    }
+    
+    // 按预定义顺序排序分组
+    const orderedGroups = new Map();
+    const groupOrder = ['image', 'json', 'text', 'code', 'html', 'css', 'other'];
+    
+    for (const groupType of groupOrder) {
+      if (groups.has(groupType)) {
+        orderedGroups.set(groupType, groups.get(groupType));
+      }
+    }
+    
+    return orderedGroups;
+  },
+
+  /**
+   * 渲染分组标题
+   * @param {string} groupType - 分组类型
+   * @param {number} count - 工件数量
+   * @returns {string} HTML 字符串
+   * @private
+   */
+  _renderGroupHeader(groupType, count) {
+    const displayInfo = this._getGroupDisplayInfo(groupType);
+    
+    return `
+      <div class="artifact-type-header">
+        <span class="artifact-type-icon">${displayInfo.icon}</span>
+        <span class="artifact-type-name">${this.escapeHtml(displayInfo.name)}</span>
+        <span class="artifact-type-count">(${count})</span>
+      </div>
+    `;
+  },
+
+  /**
+   * 渲染类型分组
+   * @param {string} groupType - 分组类型
+   * @param {Array} artifacts - 该类型的工件数组
+   * @returns {string} HTML 字符串
+   * @private
+   */
+  _renderTypeGroup(groupType, artifacts) {
+    const header = this._renderGroupHeader(groupType, artifacts.length);
+    
+    const items = artifacts.map(artifact => {
+      const displayName = artifact.name || '未知工件';
+      const artifactUrl = `/artifacts/${this.escapeHtml(artifact.content)}`;
+      
+      return `
+        <a 
+          class="artifact-link" 
+          href="${artifactUrl}" 
+          target="_blank" 
+          title="${this.escapeHtml(displayName)}"
+        >
+          ${this.escapeHtml(displayName)}
+        </a>
+      `;
+    }).join('');
+    
+    return `
+      <div class="artifact-type-group">
+        ${header}
+        <div class="artifact-type-items">
+          ${items}
+        </div>
+      </div>
+    `;
   },
 
   /**

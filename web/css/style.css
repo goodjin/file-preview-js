@@ -1868,6 +1868,47 @@ body {
   background-color: #bbdefb;
 }
 
+/* 工件类型分组样式 */
+.artifact-type-group {
+  margin-bottom: 16px;
+}
+
+.artifact-type-group:last-child {
+  margin-bottom: 0;
+}
+
+.artifact-type-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.artifact-type-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.artifact-type-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.artifact-type-count {
+  font-size: 11px;
+  color: #666;
+  margin-left: auto;
+}
+
+.artifact-type-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .tool-call-item {
   background-color: #fafafa;
   border: 1px solid #e0e0e0;
