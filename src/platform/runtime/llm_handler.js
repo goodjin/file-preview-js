@@ -169,6 +169,19 @@ export class LlmHandler {
     // 设置初始状态
     runtime.setAgentComputeStatus?.(agentId, 'processing');
 
+    // 执行自动压缩（如果需要）
+    if (agentId && runtime._conversationManager) {
+      try {
+        await runtime._conversationManager.processAutoCompression?.(agentId);
+      } catch (compressionError) {
+        // 自动压缩失败不影响 LLM 调用，只记录日志
+        void runtime.log?.warn?.("自动压缩失败，继续 LLM 调用", {
+          agentId,
+          error: compressionError?.message ?? String(compressionError)
+        });
+      }
+    }
+
     // 检查上下文限制
     if (agentId && runtime._conversationManager?.isContextExceeded?.(agentId)) {
       const status = runtime._conversationManager.getContextStatus(agentId);

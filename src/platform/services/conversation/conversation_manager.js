@@ -9,7 +9,7 @@ import path from "node:path";
  */
 export class ConversationManager {
   /**
-   * @param {{maxContextMessages?:number, conversations?:Map, contextLimit?:{maxTokens:number, warningThreshold:number, criticalThreshold:number, hardLimitThreshold:number}, promptTemplates?:{contextStatus?:string, contextExceeded?:string, contextCritical?:string, contextWarning?:string}, conversationsDir?:string, logger?:object}} options
+   * @param {{maxContextMessages?:number, conversations?:Map, contextLimit?:{maxTokens:number, warningThreshold:number, criticalThreshold:number, hardLimitThreshold:number}, promptTemplates?:{contextStatus?:string, contextExceeded?:string, contextCritical?:string, contextWarning?:string}, conversationsDir?:string, logger?:object, autoCompressionManager?:object}} options
    */
   constructor(options = {}) {
     this.maxContextMessages = options.maxContextMessages ?? 50;
@@ -17,6 +17,9 @@ export class ConversationManager {
     this._conversationsDir = options.conversationsDir ?? null;
     this._logger = options.logger ?? null;
     this._pendingSaves = new Map(); // 防抖保存
+    
+    // 自动压缩管理器（可选）
+    this._autoCompressionManager = options.autoCompressionManager ?? null;
     
     // 上下文 token 限制配置
     this.contextLimit = options.contextLimit ?? {
@@ -52,6 +55,71 @@ export class ConversationManager {
    */
   setLogger(logger) {
     this._logger = logger;
+  }
+
+  /**
+   * 设置自动压缩管理器。
+   * @param {object} manager - AutoCompressionManager 实例
+   */
+  setAutoCompressionManager(manager) {
+    this._autoCompressionManager = manager;
+  }
+
+  /**
+   * 执行自动压缩。
+   * 
+   * 直接传递会话消息数组给压缩管理器处理。
+   * 压缩管理器会自己判断是否需要压缩，需要则直接修改消息数组。
+   * 
+   * @param {string} agentId - 智能体ID
+   * @returns {Promise<void>}
+   */
+  async processAutoCompression(agentId) {
+    // 检查是否有压缩管理器
+    if (!this._autoCompressionManager) {
+      if (this._logger) {
+        this._logger.debug?.('ConversationManager.processAutoCompression: 未设置压缩管理器，跳过自动压缩', { agentId });
+      }
+      return;
+    }
+
+    // 获取会话消息数组
+    const conv = this.conversations.get(agentId);
+    if (!conv) {
+      if (this._logger) {
+        this._logger.debug?.('ConversationManager.processAutoCompression: 会话不存在，跳过自动压缩', { agentId });
+      }
+      return;
+    }
+
+    try {
+      if (this._logger) {
+        this._logger.debug?.('ConversationManager.processAutoCompression: 开始自动压缩', { 
+          agentId, 
+          messageCount: conv.length 
+        });
+      }
+
+      // 调用压缩管理器处理，直接传递会话消息数组
+      await this._autoCompressionManager.process(conv);
+
+      if (this._logger) {
+        this._logger.debug?.('ConversationManager.processAutoCompression: 自动压缩完成', { 
+          agentId, 
+          messageCount: conv.length 
+        });
+      }
+
+    } catch (error) {
+      // 捕获异常，确保不影响业务流程
+      if (this._logger) {
+        this._logger.error?.('ConversationManager.processAutoCompression: 自动压缩异常', {
+          agentId,
+          error: error.message,
+          stack: error.stack
+        });
+      }
+    }
   }
 
   /**
