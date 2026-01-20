@@ -1077,24 +1077,24 @@ const ChatPanel = {
    * @returns {string} HTML 字符串
    */
   renderToolCallGroupArtifacts(toolCallMessages) {
-    // 收集所有工具调用中创建的工件
-    const allArtifacts = this._collectAllArtifacts(toolCallMessages);
+    // 收集所有工具调用中创建的工件ID
+    const allArtifactIds = this._collectAllArtifacts(toolCallMessages);
     
-    if (allArtifacts.length === 0) return '';
+    if (allArtifactIds.length === 0) return '';
     
-    // 渲染工件列表（只显示ID）
-    const items = allArtifacts.map(artifact => {
-      const artifactUrl = `/artifacts/${this.escapeHtml(artifact.id)}`;
+    // 渲染工件列表（直接使用ID字符串）
+    const items = allArtifactIds.map(artifactId => {
+      const artifactUrl = `/artifacts/${this.escapeHtml(artifactId)}`;
       
       return `
         <a 
           class="artifact-link" 
           href="${artifactUrl}" 
           target="_blank" 
-          title="${this.escapeHtml(artifact.id)}"
-          data-artifact-id="${this.escapeHtml(artifact.id)}"
+          title="${this.escapeHtml(artifactId)}"
+          data-artifact-id="${this.escapeHtml(artifactId)}"
         >
-          ${this.escapeHtml(artifact.id)}
+          ${this.escapeHtml(artifactId)}
         </a>
       `;
     }).join('');
@@ -1110,59 +1110,52 @@ const ChatPanel = {
   },
 
   /**
-   * 从工具调用消息中收集所有工件
+   * 从工具调用消息中收集所有工件ID
    * 只支持新格式的 artifactRef 和 artifactRefs
    * @param {Array} toolCallMessages - 工具调用消息数组
-   * @returns {Array} 工件对象数组，每个对象只包含ID
+   * @returns {Array<string>} 工件ID字符串数组
    * @private
    */
   _collectAllArtifacts(toolCallMessages) {
-    const allArtifacts = [];
+    const allArtifactIds = [];
     
     for (const message of toolCallMessages) {
       if (!message.payload) continue;
       
       // 处理 payload.result.artifactRef 格式（单个工件）
       if (message.payload.result && message.payload.result.artifactRef) {
-        const artifact = this._createArtifactFromRef(message.payload.result.artifactRef, message);
-        if (artifact) {
-          allArtifacts.push(artifact);
+        const artifactId = this._extractArtifactId(message.payload.result.artifactRef);
+        if (artifactId) {
+          allArtifactIds.push(artifactId);
         }
       }
       
       // 处理 payload.result.artifactRefs 格式（多个工件）
       if (message.payload.result && Array.isArray(message.payload.result.artifactRefs)) {
         message.payload.result.artifactRefs.forEach(artifactRef => {
-          const artifact = this._createArtifactFromRef(artifactRef, message);
-          if (artifact) {
-            allArtifacts.push(artifact);
+          const artifactId = this._extractArtifactId(artifactRef);
+          if (artifactId) {
+            allArtifactIds.push(artifactId);
           }
         });
       }
     }
     
-    return allArtifacts;
+    return allArtifactIds;
   },
 
   /**
-   * 从 artifactRef 创建工件对象
-   * 只返回工件ID，其他信息由工件管理器通过API获取
+   * 从 artifactRef 提取工件ID
    * @param {string} artifactRef - 工件引用，格式如 "artifact:xxx"
-   * @param {object} message - 来源消息（未使用，保留用于日志）
-   * @returns {object|null} 工件对象，只包含ID
+   * @returns {string|null} 工件ID字符串
    * @private
    */
-  _createArtifactFromRef(artifactRef, message) {
+  _extractArtifactId(artifactRef) {
     if (!artifactRef || typeof artifactRef !== 'string') return null;
     
     // 提取工件ID
     const artifactId = artifactRef.replace(/^artifact:/, '');
-    if (!artifactId) return null;
-    
-    // 只返回ID，其他信息由工件管理器获取
-    return {
-      id: artifactId
-    };
+    return artifactId || null;
   },
 
   /**
