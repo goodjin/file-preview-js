@@ -86,7 +86,7 @@ export class JavaScriptExecutor {
    * // Canvas 绘图
    * const result = await executor.execute({
    *   code: `
-   *     const canvas = getCanvas(400, 300);
+   *     const canvas = getCanvas('my-chart', 400, 300);
    *     const ctx = canvas.getContext('2d');
    *     ctx.fillStyle = 'red';
    *     ctx.fillRect(50, 50, 100, 100);
@@ -128,11 +128,15 @@ export class JavaScriptExecutor {
     }
 
     // 定义 getCanvas 函数（每次调用创建新实例）
-    const getCanvas = (width = 800, height = 600) => {
+    const getCanvas = (filename, width = 800, height = 600) => {
+      if (typeof filename !== 'string' || filename.trim() === '') {
+        throw new Error('getCanvas: filename 参数是必需的，且必须是非空字符串');
+      }
       if (!createCanvasFn) {
         throw new Error("Canvas 功能不可用，请确保 @napi-rs/canvas 包已安装");
       }
       const newCanvas = createCanvasFn(width, height);
+      newCanvas._filename = filename.trim(); // 存储文件名到 canvas 对象
       canvasInstances.push(newCanvas);
       return newCanvas;
     };
@@ -207,10 +211,11 @@ export class JavaScriptExecutor {
         const metadata = {
           id: artifactId,
           extension,
-          type: "image",
+          type: "image/png",
           createdAt,
           messageId: messageId,
           agentId: agentId,
+          name: canvas._filename || 'untitled',
           width: canvas.width,
           height: canvas.height,
           source: "canvas",
@@ -222,6 +227,7 @@ export class JavaScriptExecutor {
         
         void this.runtime.log?.info?.("保存 Canvas 图像", {
           fileName,
+          userFilename: canvas._filename || 'untitled',
           width: canvas.width,
           height: canvas.height,
           index: i,
@@ -280,6 +286,7 @@ export class JavaScriptExecutor {
         createdAt,
         messageId: messageId,
         agentId: agentId,
+        name: canvasInstance._filename || 'untitled',
         width: canvasInstance.width,
         height: canvasInstance.height,
         source: "canvas"
@@ -288,6 +295,7 @@ export class JavaScriptExecutor {
       
       void this.runtime.log?.info?.("保存 Canvas 图像", {
         fileName,
+        userFilename: canvasInstance._filename || 'untitled',
         width: canvasInstance.width,
         height: canvasInstance.height
       });
