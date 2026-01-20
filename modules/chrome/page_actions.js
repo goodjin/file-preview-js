@@ -172,7 +172,7 @@ export class PageActions {
           ? `${pageTitle || 'Page'} - ${cleanedSelector} Screenshot`
           : `${pageTitle || 'Page'} Screenshot`;
         
-        const filePath = await ctx.tools.saveImage(screenshotBuffer, {
+        const artifactId = await ctx.tools.saveImage(screenshotBuffer, {
           name: screenshotName,
           format: "jpg",
           messageId,
@@ -183,9 +183,6 @@ export class PageActions {
           fullPage,
           selector: cleanedSelector || null
         });
-
-        // 从文件路径中提取工件ID（去掉扩展名）
-        const artifactId = filePath.replace(/\.[^.]+$/, '');
 
         return { 
           ok: true, 
@@ -931,8 +928,8 @@ export class PageActions {
           format = 'webp';
         }
 
-        // 保存到工件，使用提供的名称
-        const filePath = await ctx.tools.saveImage(buffer, {
+        // 保存到工件
+        const artifactId = await ctx.tools.saveImage(buffer, {
           name: resourceName,
           format,
           messageId,
@@ -943,10 +940,7 @@ export class PageActions {
           resourceUrl
         });
 
-        // 从文件路径中提取工件ID（去掉扩展名）
-        const artifactId = filePath.replace(/\.[^.]+$/, '');
         artifactIds.push(artifactId);
-        filePaths.push(filePath);
 
       } catch (err) {
         const message = err?.message ?? String(err);
