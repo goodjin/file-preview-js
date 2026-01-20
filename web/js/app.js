@@ -3,6 +3,8 @@
  * 管理全局状态、路由、定时轮询
  */
 
+import ArtifactManager from './components/artifact-manager.mjs';
+
 const App = {
   // 应用状态
   currentView: 'list',      // 当前视图 ('list', 'overview', 'modules')

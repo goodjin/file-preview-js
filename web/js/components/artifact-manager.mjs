@@ -11,14 +11,17 @@ import {
 } from '../utils/mime-types.mjs';
 
 class ArtifactManager {
-  // 私有静态实例 - 立即创建
-  static #instance = new ArtifactManager();
+  // 私有静态实例
+  static #instance = null;
   
   constructor() {
     // 严格检查：如果已有实例，抛出错误
     if (ArtifactManager.#instance) {
       throw new Error('ArtifactManager 是单例模式，请使用 ArtifactManager.getInstance() 获取实例');
     }
+    
+    // 设置实例
+    ArtifactManager.#instance = this;
     
     // 基础属性初始化
     this.container = null;
@@ -75,6 +78,9 @@ class ArtifactManager {
    * @returns {ArtifactManager} 单例实例
    */
   static getInstance() {
+    if (!ArtifactManager.#instance) {
+      new ArtifactManager();
+    }
     return ArtifactManager.#instance;
   }
 
@@ -2244,7 +2250,4 @@ class ArtifactManager {
   }
 }
 
-// 导出
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = ArtifactManager;
-}
+export default ArtifactManager;

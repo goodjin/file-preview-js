@@ -9,6 +9,9 @@ import {
   HTML_MIME_TYPE, CSS_MIME_TYPE, isImageType, getArtifactGroupType, getFileIconByMimeType
 } from '../utils/mime-types.mjs';
 
+// 导入 ArtifactManager
+import ArtifactManager from './artifact-manager.mjs';
+
 const ChatPanel = {
   // 组件状态
   currentAgentId: null,  // 当前智能体 ID
@@ -1446,8 +1449,16 @@ const ChatPanel = {
    * @private
    */
   _getGroupDisplayInfo(groupType) {
-    const manager = ArtifactManager.getInstance();
-    const icon = manager._getFileIconByType(groupType);
+    // 根据分组类型直接返回图标，不依赖ArtifactManager的私有方法
+    const iconMap = {
+      'json': '📄',
+      'text': '📝',
+      'image': '🖼️',
+      'code': '💻',
+      'html': '🌐',
+      'css': '🎨',
+      'other': '📎'
+    };
     
     const nameMap = {
       'json': 'JSON文件',
@@ -1461,7 +1472,7 @@ const ChatPanel = {
     
     return {
       name: nameMap[groupType] || '其他文件',
-      icon: icon
+      icon: iconMap[groupType] || '📎'
     };
   },
 
