@@ -281,7 +281,7 @@ const ChatPanel = {
     this._artifactTypeHandlers.set(CSS_MIME_TYPE, this._handleCssArtifact.bind(this));
     
     // 默认处理器（用于未注册的类型）
-    this._defaultArtifactHandler = this._handleUnknownArtifact.bind(this);
+    this._defaultArtifactHandler = this._openArtifactWithManager.bind(this);
   },
 
   /**
@@ -408,92 +408,29 @@ const ChatPanel = {
   },
 
   /**
-   * 处理未知类型工件点击（默认处理器）
-   * @param {object} artifact - 工件对象
-   * @private
-   */
-  _handleUnknownArtifact(artifact) {
-    try {
-      console.warn('[ChatPanel] 未知工件类型，使用默认处理方式:', artifact.type);
-      
-      // 尝试使用工件管理器，如果失败则在新标签页打开
-      if (window.ArtifactManager) {
-        this._openArtifactWithManager(artifact);
-      } else {
-        this._openArtifactInNewTab(artifact);
-      }
-    } catch (error) {
-      console.error('[ChatPanel] 未知工件处理失败:', error);
-      this._handleArtifactError(artifact, error, '工件查看器打开失败');
-    }
-  },
-
-  /**
    * 使用工件管理器打开工件
    * @param {object} artifact - 工件对象
    * @private
    */
   _openArtifactWithManager(artifact) {
     try {
-      // 检查工件管理器是否可用
-      if (!window.ArtifactManager) {
-        throw new Error('工件管理器不可用');
-      }
+      // 使用单例模式获取实例
+      const manager = ArtifactManager.getInstance();
       
-      // 检查是否有全局的工件管理器实例
-      if (window.App && window.App.artifactManager) {
-        // 使用现有的工件管理器实例
-        const manager = window.App.artifactManager;
-        
-        // 构建符合工件管理器期望的工件对象格式
-        const managerArtifact = {
-          id: artifact.id,
-          type: artifact.type,
-          name: artifact.name,
-          filename: artifact.name,
-          content: artifact.content
-        };
-        
-        // 显示工件管理器窗口
-        manager.show();
-        
-        // 打开工件
-        manager.openArtifact(managerArtifact);
-        
-      } else {
-        // 创建临时的工件管理器实例
-        const tempContainer = document.createElement('div');
-        tempContainer.style.display = 'none';
-        document.body.appendChild(tempContainer);
-        
-        const tempManager = new window.ArtifactManager({
-          container: tempContainer,
-          api: window.API
-        });
-        
-        // 构建符合工件管理器期望的工件对象格式
-        const managerArtifact = {
-          id: artifact.id,
-          type: artifact.type,
-          name: artifact.name,
-          filename: artifact.name,
-          content: artifact.content
-        };
-        
-        // 打开工件
-        tempManager.openArtifact(managerArtifact);
-        
-        // 清理临时容器（延迟清理，确保工件管理器有时间初始化）
-        setTimeout(() => {
-          try {
-            if (tempContainer.parentNode) {
-              tempContainer.parentNode.removeChild(tempContainer);
-            }
-          } catch (cleanupError) {
-            console.warn('[ChatPanel] 清理临时容器失败:', cleanupError);
-          }
-        }, 1000);
-      }
+      // 构建符合工件管理器期望的工件对象格式
+      const managerArtifact = {
+        id: artifact.id,
+        type: artifact.type,
+        name: artifact.name,
+        filename: artifact.name,
+        content: artifact.content
+      };
+      
+      // 显示工件管理器窗口
+      manager.show();
+      
+      // 打开工件
+      manager.openArtifact(managerArtifact);
       
     } catch (error) {
       console.error('[ChatPanel] 使用工件管理器打开工件失败:', error);
@@ -1504,38 +1441,14 @@ const ChatPanel = {
 
   /**
    * 获取分组的显示信息（名称和图标）
-   * @param {string} groupType - 分组类型
+   * @param {string} groupType - 组类型
    * @returns {object} 包含 name 和 icon 的对象
    * @private
    */
   _getGroupDisplayInfo(groupType) {
-    // 复用 ArtifactManager 的图标逻辑
-    let icon = '📋'; // 默认图标
-    if (window.ArtifactManager && window.ArtifactManager.prototype && 
-        typeof window.ArtifactManager.prototype._getFileIconByType === 'function') {
-      try {
-        // 直接调用原型方法
-        icon = window.ArtifactManager.prototype._getFileIconByType.call({}, groupType);
-      } catch (e) {
-        console.warn('调用 ArtifactManager._getFileIconByType 失败，使用后备图标', e);
-      }
-    }
+    const manager = ArtifactManager.getInstance();
+    const icon = manager._getFileIconByType(groupType);
     
-    // 如果没有获取到图标或调用失败，使用后备图标映射
-    if (icon === '📋') {
-      const iconMap = {
-        'json': '📄',
-        'text': '📝',
-        'image': '🖼️',
-        'code': '💻',
-        'html': '🌐',
-        'css': '🎨',
-        'other': '📋'
-      };
-      icon = iconMap[groupType] || '📋';
-    }
-    
-    // 分组名称映射
     const nameMap = {
       'json': 'JSON文件',
       'text': '文本文件',

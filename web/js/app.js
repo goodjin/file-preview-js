@@ -17,7 +17,6 @@ const App = {
   maxBackoffInterval: 30000, // 最大退避间隔（30秒）
   isPollingPaused: false,   // 轮询是否暂停
   _isSelecting: false,      // 是否正在选择智能体（防止递归）
-  artifactManager: null,    // 工件管理器实例
 
   /**
    * 初始化应用
@@ -36,6 +35,15 @@ const App = {
     MessageModal.init();
     AgentDetailModal.init();
     RoleDetailModal.init();
+
+    // 初始化 ArtifactManager
+    const artifactManager = ArtifactManager.getInstance();
+    artifactManager.initialize({
+      container: document.getElementById('artifact-manager'),
+      windowEl: document.getElementById('artifact-manager-window'),
+      api: API,
+      logger: console
+    });
 
     // 绑定视图切换按钮
     this.bindViewToggle();
@@ -127,15 +135,8 @@ const App = {
    * 打开工件管理器窗口
    */
   openArtifactManager() {
-    if (!this.artifactManager) {
-      this.artifactManager = new ArtifactManager({
-        container: document.getElementById('artifact-manager'),
-        windowEl: document.getElementById('artifact-manager-window'),
-        api: API,
-        logger: console
-      });
-    }
-    this.artifactManager.show();
+    const manager = ArtifactManager.getInstance();
+    manager.show();
   },
 
   /**

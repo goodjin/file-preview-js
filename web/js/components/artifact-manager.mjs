@@ -11,11 +11,20 @@ import {
 } from '../utils/mime-types.mjs';
 
 class ArtifactManager {
-  constructor(options = {}) {
-    this.container = options.container || document.getElementById("artifact-manager");
-    this.windowEl = options.windowEl || document.getElementById("artifact-manager-window");
-    this.api = options.api || window.API;
-    this.logger = options.logger || console;
+  // 私有静态实例 - 立即创建
+  static #instance = new ArtifactManager();
+  
+  constructor() {
+    // 严格检查：如果已有实例，抛出错误
+    if (ArtifactManager.#instance) {
+      throw new Error('ArtifactManager 是单例模式，请使用 ArtifactManager.getInstance() 获取实例');
+    }
+    
+    // 基础属性初始化
+    this.container = null;
+    this.windowEl = null;
+    this.api = null;
+    this.logger = null;
     
     // 状态
     this.artifacts = [];
@@ -26,6 +35,7 @@ class ArtifactManager {
     this.viewMode = "icon"; // "icon" 或 "detail"
     this.isMaximized = false;
     this.isViewerOpen = false;
+    this.isInitialized = false;
     
     // 左侧边栏状态
     this.sidebarMode = "artifacts"; // "artifacts" 或 "workspace"
@@ -58,8 +68,63 @@ class ArtifactManager {
     this.resizeStartWidth = 0;
     this.resizeStartHeight = 0;
     this.resizeDirection = null; // 'se', 'sw', 'ne', 'nw', 'n', 's', 'e', 'w'
+  }
 
-    // 初始化
+  /**
+   * 获取单例实例
+   * @returns {ArtifactManager} 单例实例
+   */
+  static getInstance() {
+    return ArtifactManager.#instance;
+  }
+
+  /**
+   * 公共初始化方法 - 由 app.js 调用
+   * @param {Object} options - 初始化选项
+   */
+  initialize(options = {}) {
+    if (this.isInitialized) {
+      console.warn('ArtifactManager 已经初始化，忽略重复初始化');
+      return;
+    }
+    
+    this._initializeInstance(options);
+    this.isInitialized = true;
+  }
+
+  /**
+   * 私有初始化方法
+   * @param {Object} options - 初始化选项
+   * @private
+   */
+  _initializeInstance(options = {}) {
+    // 设置默认选项
+    const defaultOptions = {
+      container: document.getElementById("artifact-manager"),
+      windowEl: document.getElementById("artifact-manager-window"),
+      api: window.API,
+      logger: console
+    };
+    
+    // 合并选项
+    const finalOptions = { ...defaultOptions, ...options };
+    
+    // 验证必需的 DOM 元素
+    if (!finalOptions.container) {
+      throw new Error('ArtifactManager 容器元素不存在');
+    }
+    
+    if (!finalOptions.windowEl) {
+      throw new Error('ArtifactManager 窗口元素不存在');
+    }
+    
+    // 设置实例属性
+    this.container = finalOptions.container;
+    this.windowEl = finalOptions.windowEl;
+    this.api = finalOptions.api;
+    this.logger = finalOptions.logger;
+    
+    // 调用现有的 _init 方法
     this._init();
   }
 
