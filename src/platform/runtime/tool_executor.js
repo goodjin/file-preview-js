@@ -234,7 +234,7 @@ export class ToolExecutor {
         type: "function",
         function: {
           name: "run_javascript",
-          description: "在浏览器环境中运行 JavaScript 代码。支持异步代码（可使用 await 和返回 Promise）。涉及严格计算/精确数值/统计/日期时间/格式转换等必须可复现的结果时，优先调用本工具用代码计算。每次调用都是全新执行环境（新标签页）。参数 input 会作为变量 input 传入代码。code 必须是函数体形式的代码，需要显式 return 一个可 JSON 序列化的值。支持 Canvas 绘图功能：调用 getCanvas(filename, width, height) 获取 Canvas 元素，绘图后图像会自动导出保存为工件，不必再次保存工件。filename 参数必选，用于指定保存的文件名（不含扩展名）。",
+          description: "在浏览器环境中运行 JavaScript 代码。支持异步代码（可使用 await 和返回 Promise）。涉及严格计算/精确数值/统计/日期时间/格式转换等必须可复现的结果时，优先调用本工具用代码计算。每次调用都是全新执行环境（新标签页）。参数 input 会作为变量 input 传入代码。code 必须是函数体形式的代码，需要显式 return 一个可 JSON 序列化的值。支持 Canvas 绘图功能：调用 getCanvas(name, width, height) 获取 Canvas 元素，绘图后图像会自动导出保存为工件，不必再次保存工件。name 参数必选，用于指定工件名称（不是文件名）。",
           parameters: {
             type: "object",
             properties: {

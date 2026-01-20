@@ -154,12 +154,10 @@ export class ArtifactStore {
       id,
       extension,
       type: artifact.type || (isObjectContent ? "application/json" : isStringContent ? "text/plain" : "application/octet-stream"),
+      name: artifact.name.trim(), // 工件名称作为顶级字段
       createdAt,
       messageId: artifact.messageId || null,
-      meta: {
-        ...(artifact.meta || {}),
-        name: artifact.name.trim() // 保存工件名称到meta中
-      }
+      meta: artifact.meta || {}
     };
     await this._writeMetadata(id, metadata);
     
@@ -356,13 +354,11 @@ export class ArtifactStore {
       id,
       extension,
       type: "image",
+      name: name.trim(), // 图片名称作为顶级字段
       createdAt,
       messageId: messageId || null,
-      meta: {
-        name: name.trim(),
-        agentId: agentId || null,
-        ...otherMeta
-      }
+      agentId: agentId || null,
+      meta: otherMeta
     };
     await this._writeMetadata(id, metadata);
     
@@ -394,6 +390,12 @@ export class ArtifactStore {
     await this.ensureReady();
     
     const { type = "file", filename, mimeType, ...otherMeta } = meta;
+    
+    // 验证必需参数
+    if (!filename || typeof filename !== 'string' || filename.trim() === '') {
+      throw new Error('文件名是必需参数，且不能为空');
+    }
+    
     const id = randomUUID();
     
     // 根据 mimeType 确定文件扩展名
@@ -412,10 +414,9 @@ export class ArtifactStore {
     const metadata = {
       id,
       extension,
-      type,
-      filename: filename || fullFilename,
+      type: resolvedMimeType,
+      name: filename.trim(), // 统一使用 name 字段
       size: buffer.length,
-      mimeType: resolvedMimeType,
       createdAt,
       ...otherMeta
     };
@@ -424,7 +425,7 @@ export class ArtifactStore {
     await this._writeMetadata(id, metadata);
     
     const artifactRef = `artifact:${id}`;
-    void this.log.info("保存上传文件", { id, type, filename, size: buffer.length, ref: artifactRef });
+    void this.log.info("保存上传文件", { id, type: resolvedMimeType, name: filename.trim(), size: buffer.length, ref: artifactRef });
     
     return {
       artifactRef,

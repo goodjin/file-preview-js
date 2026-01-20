@@ -203,16 +203,16 @@ export class BrowserJavaScriptExecutor {
       const _canvases = [];
       
       // getCanvas 函数（每次调用创建新实例）
-      window.getCanvas = function(filename, width, height) {
-        if (typeof filename !== 'string' || filename.trim() === '') {
-          throw new Error('getCanvas: filename 参数是必需的，且必须是非空字符串');
+      window.getCanvas = function(name, width, height) {
+        if (typeof name !== 'string' || name.trim() === '') {
+          throw new Error('getCanvas: name 参数是必需的，且必须是非空字符串');
         }
         width = width || 800;
         height = height || 600;
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
-        canvas._filename = filename.trim(); // 存储文件名到 canvas 对象
+        canvas._name = name.trim(); // 存储工件名称到 canvas 对象
         document.getElementById('canvas-container').appendChild(canvas);
         _canvases.push(canvas);
         return canvas;
@@ -233,9 +233,14 @@ export class BrowserJavaScriptExecutor {
         return _canvases.length;
       };
       
-      // 获取所有 Canvas 文件名
-      window.__getAllCanvasFilenames = function() {
-        return _canvases.map(canvas => canvas._filename || 'untitled');
+      // 获取所有 Canvas 名称
+      window.__getAllCanvasNames = function() {
+        return _canvases.map(canvas => {
+          if (!canvas._name) {
+            throw new Error('Canvas 缺少必需的 name 属性');
+          }
+          return canvas._name;
+        });
       };
       
       // 获取所有 Canvas 尺寸
@@ -349,7 +354,7 @@ export class BrowserJavaScriptExecutor {
               hasCanvas: window.__hasCanvas(),
               canvasCount: window.__getCanvasCount(),
               canvasSizes: window.__getAllCanvasSizes(),
-              canvasFilenames: window.__getAllCanvasFilenames()
+              canvasNames: window.__getAllCanvasNames()
             };
           } catch (err) {
             return {
@@ -384,7 +389,7 @@ export class BrowserJavaScriptExecutor {
         const imageResult = await this._saveAllCanvasImages(
           allCanvasData, 
           result.canvasSizes, 
-          result.canvasFilenames,
+          result.canvasNames,
           messageId, 
           agentId
         );
@@ -437,13 +442,13 @@ export class BrowserJavaScriptExecutor {
    * 保存所有 Canvas 图像到工件库
    * @param {string[]} dataUrls - Canvas 数据 URL 数组
    * @param {object[]} canvasSizes - Canvas 尺寸数组
-   * @param {string[]} canvasFilenames - Canvas 文件名数组
+   * @param {string[]} canvasNames - Canvas 工件名称数组
    * @param {string|null} messageId - 关联的消息ID
    * @param {string|null} agentId - 关联的智能体ID
    * @returns {Promise<object>} 保存结果
    * @private
    */
-  async _saveAllCanvasImages(dataUrls, canvasSizes, canvasFilenames, messageId, agentId) {
+  async _saveAllCanvasImages(dataUrls, canvasSizes, canvasNames, messageId, agentId) {
     if (!dataUrls || dataUrls.length === 0) {
       return { error: "no_canvas_data" };
     }
@@ -454,7 +459,13 @@ export class BrowserJavaScriptExecutor {
     for (let i = 0; i < dataUrls.length; i++) {
       const dataUrl = dataUrls[i];
       const canvasSize = canvasSizes[i] || { width: 0, height: 0 };
-      const filename = canvasFilenames[i] || 'untitled';
+      const name = canvasNames[i];
+
+      // 验证 name 必须存在
+      if (!name || typeof name !== 'string' || name.trim() === '') {
+        errors.push({ index: i, error: "Canvas 缺少必需的 name 属性" });
+        continue;
+      }
 
       try {
         // 解析 data URL
@@ -484,7 +495,7 @@ export class BrowserJavaScriptExecutor {
           createdAt,
           messageId: messageId,
           agentId: agentId,
-          name: filename,
+          name: name.trim(),
           width: canvasSize.width,
           height: canvasSize.height,
           source: "browser-canvas",
@@ -496,7 +507,7 @@ export class BrowserJavaScriptExecutor {
         
         this.runtime.log?.info?.("保存浏览器 Canvas 图像", {
           fileName,
-          userFilename: filename,
+          userName: name.trim(),
           width: canvasSize.width,
           height: canvasSize.height,
           index: i,

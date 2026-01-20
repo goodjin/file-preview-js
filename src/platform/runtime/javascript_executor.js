@@ -128,15 +128,15 @@ export class JavaScriptExecutor {
     }
 
     // 定义 getCanvas 函数（每次调用创建新实例）
-    const getCanvas = (filename, width = 800, height = 600) => {
-      if (typeof filename !== 'string' || filename.trim() === '') {
-        throw new Error('getCanvas: filename 参数是必需的，且必须是非空字符串');
+    const getCanvas = (name, width = 800, height = 600) => {
+      if (typeof name !== 'string' || name.trim() === '') {
+        throw new Error('getCanvas: name 参数是必需的，且必须是非空字符串');
       }
       if (!createCanvasFn) {
         throw new Error("Canvas 功能不可用，请确保 @napi-rs/canvas 包已安装");
       }
       const newCanvas = createCanvasFn(width, height);
-      newCanvas._filename = filename.trim(); // 存储文件名到 canvas 对象
+      newCanvas._name = name.trim(); // 存储工件名称到 canvas 对象
       canvasInstances.push(newCanvas);
       return newCanvas;
     };
@@ -194,6 +194,13 @@ export class JavaScriptExecutor {
 
     for (let i = 0; i < canvasInstances.length; i++) {
       const canvas = canvasInstances[i];
+      
+      // 验证 name 必须存在
+      if (!canvas._name || typeof canvas._name !== 'string' || canvas._name.trim() === '') {
+        errors.push({ index: i, error: "Canvas 缺少必需的 name 属性" });
+        continue;
+      }
+      
       try {
         const { randomUUID } = await import("node:crypto");
         const { writeFile } = await import("node:fs/promises");
@@ -215,7 +222,7 @@ export class JavaScriptExecutor {
           createdAt,
           messageId: messageId,
           agentId: agentId,
-          name: canvas._filename || 'untitled',
+          name: canvas._name.trim(),
           width: canvas.width,
           height: canvas.height,
           source: "canvas",
@@ -227,7 +234,7 @@ export class JavaScriptExecutor {
         
         void this.runtime.log?.info?.("保存 Canvas 图像", {
           fileName,
-          userFilename: canvas._filename || 'untitled',
+          userName: canvas._name.trim(),
           width: canvas.width,
           height: canvas.height,
           index: i,
@@ -265,6 +272,11 @@ export class JavaScriptExecutor {
    * @private
    */
   async _saveCanvasImage(canvasInstance, result, messageId, agentId) {
+    // 验证 name 必须存在
+    if (!canvasInstance._name || typeof canvasInstance._name !== 'string' || canvasInstance._name.trim() === '') {
+      return { result, error: "canvas_export_failed", message: "Canvas 缺少必需的 name 属性" };
+    }
+    
     try {
       const { randomUUID } = await import("node:crypto");
       const { writeFile } = await import("node:fs/promises");
@@ -286,7 +298,7 @@ export class JavaScriptExecutor {
         createdAt,
         messageId: messageId,
         agentId: agentId,
-        name: canvasInstance._filename || 'untitled',
+        name: canvasInstance._name.trim(),
         width: canvasInstance.width,
         height: canvasInstance.height,
         source: "canvas"
@@ -295,7 +307,7 @@ export class JavaScriptExecutor {
       
       void this.runtime.log?.info?.("保存 Canvas 图像", {
         fileName,
-        userFilename: canvasInstance._filename || 'untitled',
+        userName: canvasInstance._name.trim(),
         width: canvasInstance.width,
         height: canvasInstance.height
       });
