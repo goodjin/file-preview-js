@@ -126,9 +126,9 @@ describe("BrowserJavaScriptExecutor", () => {
       });
       
       expect(result.result).toBe("drawn");
-      expect(result.images).toBeDefined();
-      expect(result.images.length).toBe(1);
-      expect(result.images[0]).toMatch(/\.png$/);
+      expect(result.artifactIds).toBeDefined();
+      expect(result.artifactIds.length).toBe(1);
+      expect(result.artifactIds[0]).toMatch(/^[0-9a-f-]+$/); // UUID格式
     });
 
     test("Canvas 应该是单例", async () => {
@@ -160,13 +160,13 @@ describe("BrowserJavaScriptExecutor", () => {
         `
       });
       
-      expect(result.images).toBeDefined();
-      const imagePath = path.join(ARTIFACTS_DIR, result.images[0]);
+      expect(result.artifactIds).toBeDefined();
+      const artifactId = result.artifactIds[0];
+      const imagePath = path.join(ARTIFACTS_DIR, `${artifactId}.png`);
       expect(existsSync(imagePath)).toBe(true);
       
       // 验证元数据文件
-      const imageId = result.images[0].replace('.png', '');
-      const metaPath = path.join(ARTIFACTS_DIR, `${imageId}.meta.json`);
+      const metaPath = path.join(ARTIFACTS_DIR, `${artifactId}.meta.json`);
       expect(existsSync(metaPath)).toBe(true);
       
       const metadata = JSON.parse(await readFile(metaPath, 'utf-8'));
@@ -519,12 +519,12 @@ describe("BrowserJavaScriptExecutor", () => {
               `
             });
             
-            expect(result.images).toBeDefined();
-            expect(result.images.length).toBe(1);
+            expect(result.artifactIds).toBeDefined();
+            expect(result.artifactIds.length).toBe(1);
             
             // 验证元数据
-            const imageId = result.images[0].replace('.png', '');
-            const metaPath = path.join(ARTIFACTS_DIR, `${imageId}.meta.json`);
+            const artifactId = result.artifactIds[0];
+            const metaPath = path.join(ARTIFACTS_DIR, `${artifactId}.meta.json`);
             const metadata = JSON.parse(await readFile(metaPath, 'utf-8'));
             
             expect(metadata.width).toBe(width);

@@ -56,8 +56,8 @@ describe("run_javascript Canvas 功能", () => {
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result.result).toEqual({ width: 800, height: 600 });
-      expect(result.images).toBeDefined();
-      expect(result.images.length).toBe(1);
+      expect(result.artifactIds).toBeDefined();
+      expect(result.artifactIds.length).toBe(1);
     });
 
     test("getCanvas 支持自定义尺寸", async () => {
@@ -101,7 +101,7 @@ describe("run_javascript Canvas 功能", () => {
   });
 
   describe("6.2 自动导出测试", () => {
-    test("使用 Canvas 后结果包含 images 数组", async () => {
+    test("使用 Canvas 后结果包含 artifactIds 数组", async () => {
       const code = `
         const canvas = getCanvas(100, 100);
         const ctx = canvas.getContext('2d');
@@ -111,19 +111,19 @@ describe("run_javascript Canvas 功能", () => {
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result).toHaveProperty('result', 'done');
-      expect(result).toHaveProperty('images');
-      expect(Array.isArray(result.images)).toBe(true);
-      expect(result.images.length).toBe(1);
-      expect(result.images[0]).toMatch(/\.png$/);
+      expect(result).toHaveProperty('artifactIds');
+      expect(Array.isArray(result.artifactIds)).toBe(true);
+      expect(result.artifactIds.length).toBe(1);
+      expect(result.artifactIds[0]).toMatch(/^[0-9a-f-]+$/); // UUID格式
     });
 
-    test("不使用 Canvas 时保持原有行为（无 images 字段）", async () => {
+    test("不使用 Canvas 时保持原有行为（无 artifactIds 字段）", async () => {
       const code = `
         return 1 + 2;
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result).toBe(3);
-      expect(result).not.toHaveProperty('images');
+      expect(result).not.toHaveProperty('artifactIds');
     });
 
     test("PNG 文件正确保存到 artifacts 目录", async () => {
@@ -137,7 +137,8 @@ describe("run_javascript Canvas 功能", () => {
       const result = await runtime._runJavaScriptTool({ code });
       
       // 验证文件存在
-      const fileName = result.images[0];
+      const artifactId = result.artifactIds[0];
+      const fileName = `${artifactId}.png`;
       const filePath = path.join(TEST_DIR, fileName);
       expect(existsSync(filePath)).toBe(true);
       
@@ -150,7 +151,7 @@ describe("run_javascript Canvas 功能", () => {
       expect(buffer[3]).toBe(0x47); // G
     });
 
-    test("每次执行生成唯一的文件名", async () => {
+    test("每次执行生成唯一的工件ID", async () => {
       const code = `
         const canvas = getCanvas(10, 10);
         return 'ok';
@@ -159,7 +160,7 @@ describe("run_javascript Canvas 功能", () => {
       const result1 = await runtime._runJavaScriptTool({ code });
       const result2 = await runtime._runJavaScriptTool({ code });
       
-      expect(result1.images[0]).not.toBe(result2.images[0]);
+      expect(result1.artifactIds[0]).not.toBe(result2.artifactIds[0]);
     });
 
     test("多次调用 getCanvas 生成多个工件", async () => {
@@ -184,20 +185,20 @@ describe("run_javascript Canvas 功能", () => {
       
       const result = await runtime._runJavaScriptTool({ code });
       expect(result.result).toBe('three canvases');
-      expect(result.images).toBeDefined();
-      expect(Array.isArray(result.images)).toBe(true);
-      expect(result.images.length).toBe(3); // 应该生成 3 个图像文件
+      expect(result.artifactIds).toBeDefined();
+      expect(Array.isArray(result.artifactIds)).toBe(true);
+      expect(result.artifactIds.length).toBe(3); // 应该生成 3 个图像文件
       
       // 验证所有文件都存在
-      for (const fileName of result.images) {
+      for (const artifactId of result.artifactIds) {
+        const fileName = `${artifactId}.png`;
         const filePath = path.join(TEST_DIR, fileName);
         expect(existsSync(filePath)).toBe(true);
-        expect(fileName).toMatch(/\.png$/);
       }
       
-      // 验证文件名都不相同
-      const uniqueNames = new Set(result.images);
-      expect(uniqueNames.size).toBe(3);
+      // 验证工件ID都不相同
+      const uniqueIds = new Set(result.artifactIds);
+      expect(uniqueIds.size).toBe(3);
     });
   });
 
@@ -212,10 +213,11 @@ describe("run_javascript Canvas 功能", () => {
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result.result).toBe('rect');
-      expect(result.images.length).toBe(1);
+      expect(result.artifactIds.length).toBe(1);
       
       // 验证文件存在且大小合理
-      const filePath = path.join(TEST_DIR, result.images[0]);
+      const fileName = `${result.artifactIds[0]}.png`;
+      const filePath = path.join(TEST_DIR, fileName);
       const buffer = await readFile(filePath);
       expect(buffer.length).toBeGreaterThan(100); // PNG 文件应该有一定大小
     });
@@ -231,7 +233,7 @@ describe("run_javascript Canvas 功能", () => {
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result.result).toBe('strokeRect');
-      expect(result.images.length).toBe(1);
+      expect(result.artifactIds.length).toBe(1);
     });
 
     test("绘制圆形（arc + fill）", async () => {
@@ -246,7 +248,7 @@ describe("run_javascript Canvas 功能", () => {
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result.result).toBe('circle');
-      expect(result.images.length).toBe(1);
+      expect(result.artifactIds.length).toBe(1);
     });
 
     test("绘制文本（fillText）", async () => {
@@ -260,7 +262,7 @@ describe("run_javascript Canvas 功能", () => {
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result.result).toBe('text');
-      expect(result.images.length).toBe(1);
+      expect(result.artifactIds.length).toBe(1);
     });
 
     test("绘制路径（moveTo + lineTo + stroke）", async () => {
@@ -278,7 +280,7 @@ describe("run_javascript Canvas 功能", () => {
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result.result).toBe('path');
-      expect(result.images.length).toBe(1);
+      expect(result.artifactIds.length).toBe(1);
     });
 
     test("复杂图形组合", async () => {
@@ -317,7 +319,7 @@ describe("run_javascript Canvas 功能", () => {
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result.result).toBe('complex');
-      expect(result.images.length).toBe(1);
+      expect(result.artifactIds.length).toBe(1);
     });
 
     test("颜色和样式设置", async () => {
@@ -342,7 +344,7 @@ describe("run_javascript Canvas 功能", () => {
       `;
       const result = await runtime._runJavaScriptTool({ code });
       expect(result.result).toBe('styles');
-      expect(result.images.length).toBe(1);
+      expect(result.artifactIds.length).toBe(1);
     });
   });
 
@@ -461,8 +463,8 @@ describe("run_javascript Canvas 属性测试", () => {
             expect(result.result.height).toBe(height);
             
             // 验证导出成功
-            expect(result.images).toBeDefined();
-            expect(result.images.length).toBe(1);
+            expect(result.artifactIds).toBeDefined();
+            expect(result.artifactIds.length).toBe(1);
           }
         ),
         { numRuns: 20 } // 减少运行次数以加快测试
@@ -488,7 +490,7 @@ describe("run_javascript Canvas 属性测试", () => {
             // 验证所有调用返回不同实例
             expect(result.result.allDifferent).toBe(true);
             // 验证生成了对应数量的图像
-            expect(result.images.length).toBe(callCount);
+            expect(result.artifactIds.length).toBe(callCount);
           }
         ),
         { numRuns: 20 }
@@ -511,12 +513,12 @@ describe("run_javascript Canvas 属性测试", () => {
             `;
             const result = await runtime._runJavaScriptTool({ code });
             
-            // 验证结果包含 images 数组
+            // 验证结果包含 artifactIds 数组
             expect(result).toHaveProperty('result', 'drawn');
-            expect(result).toHaveProperty('images');
-            expect(Array.isArray(result.images)).toBe(true);
-            expect(result.images.length).toBe(1);
-            expect(result.images[0]).toMatch(/\.png$/);
+            expect(result).toHaveProperty('artifactIds');
+            expect(Array.isArray(result.artifactIds)).toBe(true);
+            expect(result.artifactIds.length).toBe(1);
+            expect(result.artifactIds[0]).toMatch(/^[0-9a-f-]+$/); // UUID格式
           }
         ),
         { numRuns: 20 }

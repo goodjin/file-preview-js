@@ -254,7 +254,10 @@ export class JavaScriptExecutor {
       return { result, error: "canvas_export_failed", message: "所有 Canvas 导出均失败", errors };
     }
 
-    const response = { result, images: imageFiles };
+    // 从文件名中提取工件ID（去掉扩展名）
+    const artifactIds = imageFiles.map(fileName => fileName.replace(/\.[^.]+$/, ''));
+    
+    const response = { result, artifactIds };
     if (errors.length > 0) {
       response.partialErrors = errors;
     }
@@ -312,7 +315,7 @@ export class JavaScriptExecutor {
         height: canvasInstance.height
       });
       
-      return { result, images: [fileName] };
+      return { result, artifactIds: [artifactId] };
     } catch (exportErr) {
       const exportMessage = exportErr && typeof exportErr.message === "string" ? exportErr.message : String(exportErr ?? "unknown error");
       return { result, error: "canvas_export_failed", message: exportMessage };

@@ -184,9 +184,12 @@ export class PageActions {
           selector: cleanedSelector || null
         });
 
+        // 从文件路径中提取工件ID（去掉扩展名）
+        const artifactId = filePath.replace(/\.[^.]+$/, '');
+
         return { 
           ok: true, 
-          images: [filePath],    // 使用 images 数组
+          artifactIds: [artifactId],
           url: pageUrl,
           title: pageTitle,
           fullPage,
@@ -964,14 +967,9 @@ export class PageActions {
     const successCount = artifactIds.filter(id => id !== null).length;
     const failureCount = errors.length;
 
-    // 构建 images 数组（用于前端显示缩略图）
-    // 只包含成功保存的工件文件名
-    const images = filePaths.filter(path => path !== null);
-
     return {
       ok: true,
       artifactIds,
-      images,  // 添加 images 数组用于前端显示
       successCount,
       failureCount,
       errors: errors.length > 0 ? errors : undefined,

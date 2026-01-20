@@ -74,14 +74,12 @@ describe('chrome_save_resource 批量保存功能', () => {
     const result = await pageActions.saveResource(
       'valid-tab',
       'https://example.com/image1.jpg',
-      { ctx: mockCtx }
+      { ctx: mockCtx, resourceNames: ['图片1'] }
     );
 
     expect(result.ok).toBe(true);
     expect(result.artifactIds).toHaveLength(1);
     expect(result.artifactIds[0]).toBe('artifact-0');
-    expect(result.images).toHaveLength(1);
-    expect(result.images[0]).toBe('artifact-0.jpg');
     expect(result.successCount).toBe(1);
     expect(result.failureCount).toBe(0);
     expect(savedImages).toHaveLength(1);
@@ -96,14 +94,11 @@ describe('chrome_save_resource 批量保存功能', () => {
         'https://example.com/image1.jpg',
         'https://example.com/image2.png'
       ],
-      { ctx: mockCtx }
+      { ctx: mockCtx, resourceNames: ['图片1', '图片2'] }
     );
 
     expect(result.ok).toBe(true);
     expect(result.artifactIds).toHaveLength(2);
-    expect(result.images).toHaveLength(2);
-    expect(result.images[0]).toBe('artifact-0.jpg');
-    expect(result.images[1]).toBe('artifact-1.png');
     expect(result.successCount).toBe(2);
     expect(result.failureCount).toBe(0);
     expect(savedImages).toHaveLength(2);
@@ -119,12 +114,11 @@ describe('chrome_save_resource 批量保存功能', () => {
         'https://example.com/not-exist.jpg',
         'https://example.com/image2.png'
       ],
-      { ctx: mockCtx }
+      { ctx: mockCtx, resourceNames: ['图片1', '不存在', '图片2'] }
     );
 
     expect(result.ok).toBe(true);
     expect(result.artifactIds).toHaveLength(3);
-    expect(result.images).toHaveLength(2);  // 只有成功的
     expect(result.successCount).toBe(2);
     expect(result.failureCount).toBe(1);
     expect(result.errors).toHaveLength(1);
@@ -139,12 +133,11 @@ describe('chrome_save_resource 批量保存功能', () => {
     const result = await pageActions.saveResource(
       'valid-tab',
       [dataUrl],
-      { ctx: mockCtx }
+      { ctx: mockCtx, resourceNames: ['Data图片'] }
     );
 
     expect(result.ok).toBe(true);
     expect(result.artifactIds).toHaveLength(1);
-    expect(result.images).toHaveLength(1);
     expect(result.successCount).toBe(1);
   });
 
