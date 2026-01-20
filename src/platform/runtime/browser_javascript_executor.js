@@ -393,7 +393,7 @@ export class BrowserJavaScriptExecutor {
           return { result: result.result, error: "canvas_export_failed", message: imageResult.message };
         }
         
-        return { result: result.result, images: imageResult.images };
+        return { result: result.result, artifactRefs: imageResult.artifactRefs };
       }
 
       // 转换为 JSON 安全格式
@@ -516,7 +516,13 @@ export class BrowserJavaScriptExecutor {
       return { error: "canvas_export_failed", message: "所有 Canvas 导出均失败", errors };
     }
 
-    const response = { images: imageFiles };
+    // 返回所有工件的 artifactRef 数组
+    const artifactRefs = imageFiles.map(fileName => {
+      const artifactId = fileName.replace(/\.png$/, '');
+      return `artifact:${artifactId}`;
+    });
+    
+    const response = { artifactRefs };
     if (errors.length > 0) {
       response.partialErrors = errors;
     }
@@ -566,12 +572,12 @@ export class BrowserJavaScriptExecutor {
       await this.runtime.artifacts._writeMetadata(artifactId, metadata);
       
       this.runtime.log?.info?.("保存浏览器 Canvas 图像", {
-        fileName,
+        artifactId,
         width: canvasSize?.width,
         height: canvasSize?.height
       });
       
-      return { images: [fileName] };
+      return { artifactRef: `artifact:${artifactId}` };
     } catch (err) {
       const message = err?.message ?? String(err);
       return { error: "canvas_export_failed", message };

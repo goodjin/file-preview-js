@@ -1277,71 +1277,56 @@ class ArtifactManager {
 
   /**
    * 打开工件
+   * @param {string} artifactId - 工件ID（字符串）
    */
-  async openArtifact(artifact) {
+  async openArtifact(artifactId) {
     try {
-      this.selectedArtifact = artifact;
-      const displayName = artifact.actualFilename || artifact.filename || artifact.name;
-      this.artifactNameSpan.textContent = displayName;
+      // 显示加载状态
       this.isViewerOpen = true;
       this.viewerModal?.classList.remove("hidden");
       this.viewerPanel.innerHTML = '<div class="empty-state">加载中...</div>';
 
-      let fullArtifact;
-      let metadata = {};
+      // 1. 获取元数据
+      const metadata = await this.api.get(`/artifacts/${artifactId}/metadata`);
       
-      if (artifact.isWorkspaceFile) {
-        // 工作空间文件：通过工作空间 API 加载
-        const response = await this.api.get(`/workspaces/${artifact.workspaceId}/file?path=${encodeURIComponent(artifact.path)}`);
-        fullArtifact = {
-          id: artifact.id,
-          type: artifact.type,
-          content: response.content,
-          meta: response.meta
-        };
-        metadata = {
-          messageId: response.messageId,
-          agentId: response.agentId
-        };
-      } else {
-        // 普通工件
-        const isImage = isImageType(artifact.type);
-        
-        if (isImage) {
-          // 图片类型：不需要通过 API 加载内容，直接使用文件名
-          // 图片会通过 /artifacts/ 路径直接加载
-          fullArtifact = {
-            id: artifact.id,
-            type: artifact.type,
-            content: artifact.filename, // 使用文件名作为内容引用
-            extension: artifact.extension
-          };
-        } else {
-          // 非图片类型：通过 API 加载内容
-          fullArtifact = await this.api.get(`/artifacts/${artifact.id}`);
-        }
-        // 加载元数据
-        metadata = await this.api.get(`/artifacts/${artifact.id}/metadata`);
-      }
+      // 2. 直接使用元数据作为 selectedArtifact
+      this.selectedArtifact = metadata;
       
-      this.selectedArtifact.messageId = metadata.messageId;
-      this.selectedArtifact.agentId = metadata.agentId;
+      // 3. 显示工件名称
+      this.artifactNameSpan.textContent = metadata.name;
 
-      // 显示"查看来源"按钮
+      // 4. 显示"查看来源"按钮
       if (metadata.messageId) {
         this.viewSourceBtn.style.display = "inline-block";
       } else {
         this.viewSourceBtn.style.display = "none";
       }
 
-      // 更新图片导航状态
+      // 5. 更新图片导航状态
       this._updateImageNavigation();
 
-      // 选择合适的查看器（基于 type 和 content）
+      // 6. 根据类型决定如何加载内容
+      let fullArtifact;
+      const isImage = isImageType(metadata.type);
+      
+      if (isImage) {
+        // 图片类型：不需要加载内容，直接使用文件名
+        fullArtifact = {
+          id: metadata.id,
+          type: metadata.type,
+          content: metadata.filename,
+          extension: metadata.extension
+        };
+      } else {
+        // 非图片类型：通过 API 加载内容
+        fullArtifact = await this.api.get(`/artifacts/${artifactId}`);
+      }
+
+      // 7. 选择合适的查看器并显示
       const viewerType = this._getViewerType(fullArtifact.type, fullArtifact.content);
       this._displayArtifact(fullArtifact, viewerType);
 
-      this.logger.log("工件已打开", { id: artifact.id, type: fullArtifact.type, viewerType, isWorkspaceFile: artifact.isWorkspaceFile });
+      this.logger.log("工件已打开", { id: metadata.id, type: fullArtifact.type, viewerType });
     } catch (err) {
       this.logger.error("打开工件失败", err);
       this.viewerPanel.innerHTML = '<div class="empty-state error">加载工件失败</div>';
