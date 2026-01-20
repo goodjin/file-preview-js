@@ -156,10 +156,10 @@ const items = artifacts.map(artifact => {
       class="artifact-link" 
       href="${artifactUrl}" 
       target="_blank" 
-      title="工件 ${this.escapeHtml(artifact.id)}"
+      title="${this.escapeHtml(artifact.id)}"
       data-artifact-id="${this.escapeHtml(artifact.id)}"
     >
-      工件 ${this.escapeHtml(artifact.id.substring(0, 8))}...
+      ${this.escapeHtml(artifact.id)}
     </a>
   `;
 }).join('');
@@ -168,7 +168,7 @@ const items = artifacts.map(artifact => {
 **说明:**
 - 只保留 `data-artifact-id` 属性
 - 移除 `data-artifact-type`、`data-artifact-content` 属性
-- 显示名称使用ID的前8位（因为没有name字段）
+- 显示完整的工件ID（不截断）
 - URL直接使用ID
 
 ### 3.3 修改点3: _initArtifactInteractionHandler 方法
@@ -508,7 +508,7 @@ renderToolCallGroupArtifacts(toolCallMessages) {
 ```javascript
 /**
  * 渲染工具调用组中创建的所有工件
- * 统一显示为链接列表，不按类型分组
+ * 统一显示为ID链接列表，不按类型分组，不显示名称
  * @param {Array} toolCallMessages - 工具调用消息数组
  * @returns {string} HTML 字符串
  */
@@ -518,7 +518,7 @@ renderToolCallGroupArtifacts(toolCallMessages) {
   
   if (allArtifacts.length === 0) return '';
   
-  // 渲染工件列表
+  // 渲染工件列表（只显示ID）
   const items = allArtifacts.map(artifact => {
     const artifactUrl = `/artifacts/${this.escapeHtml(artifact.id)}`;
     
@@ -527,10 +527,10 @@ renderToolCallGroupArtifacts(toolCallMessages) {
         class="artifact-link" 
         href="${artifactUrl}" 
         target="_blank" 
-        title="工件 ${this.escapeHtml(artifact.id)}"
+        title="${this.escapeHtml(artifact.id)}"
         data-artifact-id="${this.escapeHtml(artifact.id)}"
       >
-        工件 ${this.escapeHtml(artifact.id.substring(0, 8))}...
+        ${this.escapeHtml(artifact.id)}
       </a>
     `;
   }).join('');
@@ -549,6 +549,7 @@ renderToolCallGroupArtifacts(toolCallMessages) {
 **说明:**
 - 移除按类型分组的逻辑
 - 统一显示为链接列表
+- 只显示完整的工件ID，不显示名称或其他内容
 - 简化渲染逻辑
 
 ## 4. 数据结构设计

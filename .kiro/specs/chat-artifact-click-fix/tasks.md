@@ -16,8 +16,9 @@
 - [ ] 2.1 移除 `data-artifact-type` 属性
 - [ ] 2.2 移除 `data-artifact-content` 属性
 - [ ] 2.3 只保留 `data-artifact-id` 属性，存储真实的工件ID
-- [ ] 2.4 修改显示名称为使用ID的前8位（因为没有name字段）
+- [ ] 2.4 修改显示内容为完整的工件ID（不截断，不显示名称）
 - [ ] 2.5 修改URL为直接使用ID
+- [ ] 2.6 修改title为完整的工件ID
 
 ### 3. 修改 _initArtifactInteractionHandler 方法
 - [ ] 3.1 只读取 `artifactId` 从 dataset
@@ -60,8 +61,8 @@
 ### 8. 简化 renderToolCallGroupArtifacts 方法
 - [ ] 8.1 移除按类型分组的逻辑
 - [ ] 8.2 统一显示为链接列表
-- [ ] 8.3 使用ID的前8位作为显示名称
-- [ ] 8.4 更新方法注释，说明统一显示方式
+- [ ] 8.3 只显示完整的工件ID，不显示名称或其他内容
+- [ ] 8.4 更新方法注释，说明只显示ID的统一方式
 
 ### 9. 测试验证
 - [ ] 9.1 测试点击图片工件链接，验证能正确打开
