@@ -1111,7 +1111,7 @@ const ChatPanel = {
 
   /**
    * 从工具调用消息中收集所有工件ID
-   * 只支持新格式的 artifactRef 和 artifactRefs
+   * 统一处理 artifactRefs 数组格式
    * @param {Array} toolCallMessages - 工具调用消息数组
    * @returns {Array<string>} 工件ID字符串数组
    * @private
@@ -1120,18 +1120,10 @@ const ChatPanel = {
     const allArtifactIds = [];
     
     for (const message of toolCallMessages) {
-      if (!message.payload) continue;
+      if (!message.payload || !message.payload.result) continue;
       
-      // 处理 payload.result.artifactRef 格式（单个工件）
-      if (message.payload.result && message.payload.result.artifactRef) {
-        const artifactId = this._extractArtifactId(message.payload.result.artifactRef);
-        if (artifactId) {
-          allArtifactIds.push(artifactId);
-        }
-      }
-      
-      // 处理 payload.result.artifactRefs 格式（多个工件）
-      if (message.payload.result && Array.isArray(message.payload.result.artifactRefs)) {
+      // 统一处理 artifactRefs 数组格式
+      if (Array.isArray(message.payload.result.artifactRefs)) {
         message.payload.result.artifactRefs.forEach(artifactRef => {
           const artifactId = this._extractArtifactId(artifactRef);
           if (artifactId) {

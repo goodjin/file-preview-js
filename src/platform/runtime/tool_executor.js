@@ -709,7 +709,8 @@ export class ToolExecutor {
       meta: args.meta, 
       messageId 
     });
-    return { artifactRef: ref };
+    // 统一返回数组格式
+    return { artifactRefs: [ref] };
   }
 
   async _executeGetArtifact(ctx, args) {
