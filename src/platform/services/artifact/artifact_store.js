@@ -81,7 +81,7 @@ export class ArtifactStore {
    * - Buffer/Blob/ArrayBuffer：保存为二进制文件
    * 
    * @param {{type:string, content:any, name:string, meta?:object, messageId?:string}} artifact
-   * @returns {Promise<string>} artifact_ref
+   * @returns {Promise<string>} 工件ID
    */
   async putArtifact(artifact) {
     // 验证必需参数
@@ -166,10 +166,9 @@ export class ArtifactStore {
       name: artifact.name.trim(),
       type: metadata.type, 
       extension, 
-      ref: `artifact:${id}`, 
       messageId: artifact.messageId || null 
     });
-    return `artifact:${id}`;
+    return id;
   }
 
   /**

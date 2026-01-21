@@ -1111,7 +1111,7 @@ const ChatPanel = {
 
   /**
    * 从工具调用消息中收集所有工件ID
-   * 统一处理 artifactRefs 数组格式
+   * 统一处理 artifactIds 数组格式
    * @param {Array} toolCallMessages - 工具调用消息数组
    * @returns {Array<string>} 工件ID字符串数组
    * @private
@@ -1122,11 +1122,10 @@ const ChatPanel = {
     for (const message of toolCallMessages) {
       if (!message.payload || !message.payload.result) continue;
       
-      // 统一处理 artifactRefs 数组格式
-      if (Array.isArray(message.payload.result.artifactRefs)) {
-        message.payload.result.artifactRefs.forEach(artifactRef => {
-          const artifactId = this._extractArtifactId(artifactRef);
-          if (artifactId) {
+      // 统一处理 artifactIds 数组格式
+      if (Array.isArray(message.payload.result.artifactIds)) {
+        message.payload.result.artifactIds.forEach(artifactId => {
+          if (artifactId && typeof artifactId === 'string') {
             allArtifactIds.push(artifactId);
           }
         });
@@ -1134,20 +1133,6 @@ const ChatPanel = {
     }
     
     return allArtifactIds;
-  },
-
-  /**
-   * 从 artifactRef 提取工件ID
-   * @param {string} artifactRef - 工件引用，格式如 "artifact:xxx"
-   * @returns {string|null} 工件ID字符串
-   * @private
-   */
-  _extractArtifactId(artifactRef) {
-    if (!artifactRef || typeof artifactRef !== 'string') return null;
-    
-    // 提取工件ID
-    const artifactId = artifactRef.replace(/^artifact:/, '');
-    return artifactId || null;
   },
 
   /**

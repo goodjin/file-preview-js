@@ -702,15 +702,15 @@ export class ToolExecutor {
       throw new Error('工件名称是必需参数，且不能为空');
     }
     
-    const ref = await ctx.tools.putArtifact({ 
+    const id = await ctx.tools.putArtifact({ 
       type: args.type, 
       content: args.content, 
       name: args.name,
       meta: args.meta, 
       messageId 
     });
-    // 统一返回数组格式
-    return { artifactRefs: [ref] };
+    // 统一返回 artifactIds 数组格式
+    return { artifactIds: [id] };
   }
 
   async _executeGetArtifact(ctx, args) {
