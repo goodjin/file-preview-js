@@ -3687,6 +3687,7 @@ body {
 .artifact-name {
   font-size: 13px;
   font-weight: 500;
+  color: white;
 }
 
 .view-source-btn {
