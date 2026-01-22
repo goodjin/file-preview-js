@@ -200,6 +200,24 @@ export class ToolExecutor {
           }
         }
       },
+      {
+        type: "function",
+        function: {
+          name: "show_artifacts",
+          description: "在聊天界面展示已存在的工件。接收工件ID数组，将这些工件在聊天消息中展示出来，就像新创建的工件一样。不会创建新工件，只是引用和展示现有工件。",
+          parameters: {
+            type: "object",
+            properties: {
+              artifactIds: {
+                type: "array",
+                items: { type: "string" },
+                description: "要展示的工件ID列表"
+              }
+            },
+            required: ["artifactIds"]
+          }
+        }
+      },
       // 控制台输出
       {
         type: "function",
@@ -397,6 +415,8 @@ export class ToolExecutor {
           return await this._executePutArtifact(ctx, args);
         case "get_artifact":
           return await this._executeGetArtifact(ctx, args);
+        case "show_artifacts":
+          return await this._executeShowArtifacts(ctx, args);
         case "console_print":
           return this._executeConsolePrint(ctx, args);
         case "terminate_agent":
@@ -777,6 +797,78 @@ export class ToolExecutor {
         }
       };
     }
+  }
+
+  /**
+   * 执行 show_artifacts 工具调用
+   * 在聊天界面展示已存在的工件，不创建新工件
+   * 
+   * @param {object} ctx - 智能体上下文
+   * @param {object} args - 工具参数
+   * @param {string[]} args.artifactIds - 要展示的工件ID列表
+   * @returns {Promise<{artifactIds: string[]} | {error: string, message: string}>}
+   */
+  async _executeShowArtifacts(ctx, args) {
+    const runtime = this.runtime;
+    
+    // 验证参数
+    if (!args.artifactIds || !Array.isArray(args.artifactIds)) {
+      return { error: "invalid_parameter", message: "artifactIds 必须是数组" };
+    }
+    
+    if (args.artifactIds.length === 0) {
+      return { error: "empty_array", message: "artifactIds 数组不能为空" };
+    }
+    
+    // 验证所有工件ID是否存在
+    const validIds = [];
+    const invalidIds = [];
+    
+    for (const id of args.artifactIds) {
+      if (typeof id !== 'string' || id.trim() === '') {
+        invalidIds.push(id);
+        continue;
+      }
+      
+      try {
+        const artifact = await ctx.tools.getArtifact(id);
+        if (artifact) {
+          validIds.push(id);
+        } else {
+          invalidIds.push(id);
+        }
+      } catch (err) {
+        void runtime.log?.warn?.("验证工件ID失败", { id, error: err.message });
+        invalidIds.push(id);
+      }
+    }
+    
+    // 如果有无效ID，记录警告
+    if (invalidIds.length > 0) {
+      void runtime.log?.warn?.("show_artifacts 包含无效的工件ID", {
+        invalidIds,
+        validCount: validIds.length,
+        invalidCount: invalidIds.length
+      });
+    }
+    
+    // 如果没有有效的工件ID，返回错误
+    if (validIds.length === 0) {
+      return { 
+        error: "no_valid_artifacts", 
+        message: "没有找到有效的工件",
+        invalidIds 
+      };
+    }
+    
+    void runtime.log?.debug?.("工具调用完成", { 
+      toolName: "show_artifacts", 
+      validCount: validIds.length,
+      invalidCount: invalidIds.length
+    });
+    
+    // 返回有效的工件ID数组，聊天界面会自动展示这些工件
+    return { artifactIds: validIds };
   }
 
   _executeConsolePrint(ctx, args) {

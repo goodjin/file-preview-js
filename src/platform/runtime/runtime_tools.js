@@ -67,6 +67,7 @@ export class RuntimeTools {
       send_message: "org_management",
       put_artifact: "artifact",
       get_artifact: "artifact",
+      show_artifacts: "artifact",
       read_file: "workspace",
       write_file: "workspace",
       list_files: "workspace",

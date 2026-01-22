@@ -10,8 +10,8 @@ export const BUILTIN_TOOL_GROUPS = {
     tools: ["find_role_by_name", "create_role", "spawn_agent_with_task", "terminate_agent", "send_message"]
   },
   artifact: {
-    description: "工件管理工具 - 用于存储和读取工件（如文件、图片、数据等），工件可在智能体之间共享传递。",
-    tools: ["put_artifact", "get_artifact"]
+    description: "工件管理工具 - 用于存储、读取和展示工件（如文件、图片、数据等），工件可在智能体之间共享传递。",
+    tools: ["put_artifact", "get_artifact", "show_artifacts"]
   },
   workspace: {
     description: "工作空间工具 - 用于在任务专属工作空间内进行文件读写操作，每个任务有独立的工作空间目录。",
