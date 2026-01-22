@@ -220,12 +220,13 @@ const ChatPanel = {
     
     // 使用事件委托监听工件链接和图片点击
     this.messageList.addEventListener('click', (e) => {
-      // 检查是否点击了工件链接
-      if (e.target.classList.contains('artifact-link')) {
+      // 向上查找最近的工件链接元素（处理点击子元素的情况）
+      const artifactLink = e.target.closest('.artifact-link');
+      if (artifactLink) {
         e.preventDefault(); // 阻止默认的链接跳转行为
         
-        // 从事件目标获取工件ID（字符串）
-        const artifactId = e.target.dataset.artifactId;
+        // 从链接元素获取工件ID（字符串）
+        const artifactId = artifactLink.dataset.artifactId;
         
         if (!artifactId) {
           console.error('[ChatPanel] 工件链接缺少ID');
@@ -234,6 +235,7 @@ const ChatPanel = {
         
         // 处理工件点击（传递字符串ID）
         this._handleArtifactClick(artifactId);
+        return;
       }
       
       // 检查是否点击了图片（包括消息附件中的图片和工件缩略图）
