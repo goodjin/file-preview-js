@@ -81,6 +81,14 @@ export class HTTPServer {
   }
 
   /**
+   * 设置运行时对象。
+   * @param {any} runtime - Runtime 实例
+   */
+  setRuntime(runtime) {
+    this._runtime = runtime;
+  }
+
+  /**
    * 设置 LLM 连接状态。
    * @param {"connected"|"disconnected"|"error"} status - 连接状态
    * @param {string|null} error - 错误消息（仅当 status 为 "error" 时）
@@ -785,11 +793,17 @@ export class HTTPServer {
         const parts = pathname.slice("/api/artifacts/".length).split("/");
         const artifactId = decodeURIComponent(parts[0]);
         if (parts.length === 1) {
-          // 获取单个工件内容
-          this._handleGetArtifact(artifactId, res);
+          // 获取单个工件内容 - 异步处理
+          this._handleGetArtifact(artifactId, res).catch(err => {
+            void this.log.error("处理工件内容请求失败", { artifactId, error: err.message, stack: err.stack });
+            this._sendJson(res, 500, { error: "internal_error", message: err.message });
+          });
         } else if (parts[1] === "metadata") {
-          // 获取工件元数据
-          this._handleGetArtifactMetadata(artifactId, res);
+          // 获取工件元数据 - 异步处理
+          this._handleGetArtifactMetadata(artifactId, res).catch(err => {
+            void this.log.error("处理工件元数据请求失败", { artifactId, error: err.message, stack: err.stack });
+            this._sendJson(res, 500, { error: "internal_error", message: err.message });
+          });
         } else {
           this._sendJson(res, 404, { error: "not_found", path: pathname });
         }
@@ -2456,9 +2470,33 @@ export class HTTPServer {
    * @param {any} data
    */
   _sendJson(res, statusCode, data) {
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.writeHead(statusCode);
-    res.end(JSON.stringify(data));
+    try {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.writeHead(statusCode);
+      const jsonStr = JSON.stringify(data);
+      res.end(jsonStr);
+    } catch (err) {
+      // JSON序列化失败时的错误处理
+      void this.log.error("JSON序列化失败", { 
+        statusCode, 
+        error: err.message, 
+        stack: err.stack,
+        dataType: typeof data,
+        dataKeys: data && typeof data === 'object' ? Object.keys(data) : null
+      });
+      
+      // 尝试发送一个简单的错误响应
+      try {
+        if (!res.headersSent) {
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+          res.writeHead(500);
+        }
+        res.end(JSON.stringify({ error: "json_serialization_error", message: err.message }));
+      } catch (finalErr) {
+        void this.log.error("发送错误响应也失败", { error: finalErr.message });
+        res.end();
+      }
+    }
   }
 
   /**
@@ -2691,54 +2729,20 @@ export class HTTPServer {
    * @param {string} artifactId
    * @param {import("node:http").ServerResponse} res
    */
-  _handleGetArtifact(artifactId, res) {
+  async _handleGetArtifact(artifactId, res) {
     try {
-      if (!this._artifactsDir) {
-        this._sendJson(res, 500, { error: "artifacts_dir_not_set" });
+      if (!this._runtime || !this._runtime.artifacts) {
+        this._sendJson(res, 500, { error: "artifact_store_not_available" });
         return;
       }
 
-      const { readFileSync, existsSync } = require("node:fs");
-      const { ArtifactStore } = require("../artifact/artifact_store.js");
+      // 使用ArtifactStore统一处理
+      const artifact = await this._runtime.artifacts.getArtifact(artifactId);
       
-      // 尝试读取元信息文件获取扩展名
-      let extension = ".json";
-      const metaFilePath = path.join(this._artifactsDir, `${artifactId}${ArtifactStore.META_EXTENSION}`);
-      let metadata = null;
-      
-      if (existsSync(metaFilePath)) {
-        try {
-          const metaContent = readFileSync(metaFilePath, "utf8");
-          metadata = JSON.parse(metaContent);
-          extension = metadata.extension || ".json";
-        } catch (e) {
-          // 忽略元信息读取错误，使用默认扩展名
-        }
-      }
-      
-      const filePath = path.join(this._artifactsDir, `${artifactId}${extension}`);
-      
-      if (!existsSync(filePath)) {
+      if (!artifact) {
         this._sendJson(res, 404, { error: "artifact_not_found", id: artifactId });
         return;
       }
-
-      const rawContent = readFileSync(filePath, "utf8");
-      let content;
-      
-      // 尝试解析为 JSON
-      try {
-        content = JSON.parse(rawContent);
-      } catch (e) {
-        content = rawContent;
-      }
-
-      // 返回合并后的工件对象
-      const artifact = {
-        id: artifactId,
-        content,
-        ...(metadata || { createdAt: new Date().toISOString() })
-      };
 
       void this.log.debug("HTTP查询工件", { id: artifactId });
       this._sendJson(res, 200, artifact);
@@ -2753,72 +2757,20 @@ export class HTTPServer {
    * @param {string} artifactId
    * @param {import("node:http").ServerResponse} res
    */
-  _handleGetArtifactMetadata(artifactId, res) {
+  async _handleGetArtifactMetadata(artifactId, res) {
     try {
-      if (!this._artifactsDir) {
-        this._sendJson(res, 500, { error: "artifacts_dir_not_set" });
-        return;
-      }
-
-      const { readFileSync, existsSync, statSync } = require("node:fs");
-      const { ArtifactStore } = require("../artifact/artifact_store.js");
+      // 使用ArtifactStore统一处理
+      const metadata = await this._runtime.artifacts.getArtifactMetadata(artifactId);
       
-      // 首先尝试读取 .meta 文件
-      const metaFilePath = path.join(this._artifactsDir, `${artifactId}${ArtifactStore.META_EXTENSION}`);
-      
-      if (existsSync(metaFilePath)) {
-        try {
-          const metaContent = readFileSync(metaFilePath, "utf8");
-          const metadata = JSON.parse(metaContent);
-          
-          // 获取工件文件的大小
-          const extension = metadata.extension || ".json";
-          const artifactFilePath = path.join(this._artifactsDir, `${artifactId}${extension}`);
-          let size = 0;
-          if (existsSync(artifactFilePath)) {
-            const stat = statSync(artifactFilePath);
-            size = stat.size;
-          }
-          
-          void this.log.debug("HTTP查询工件元数据（从meta文件）", { id: artifactId });
-          this._sendJson(res, 200, {
-            ...metadata,
-            filename: `${artifactId}${extension}`,
-            size
-          });
-          return;
-        } catch (e) {
-          // 元信息文件解析失败，继续尝试旧格式
-        }
-      }
-      
-      // 兼容旧格式：从 JSON 工件文件中读取元信息
-      const filePath = path.join(this._artifactsDir, `${artifactId}.json`);
-      
-      if (!existsSync(filePath)) {
+      if (!metadata) {
         this._sendJson(res, 404, { error: "artifact_not_found", id: artifactId });
         return;
       }
 
-      const content = readFileSync(filePath, "utf8");
-      const artifact = JSON.parse(content);
-      const stat = statSync(filePath);
-
-      const metadata = {
-        id: artifact.id || artifactId,
-        filename: `${artifactId}.json`,
-        size: stat.size,
-        extension: ".json",
-        createdAt: artifact.createdAt,
-        messageId: artifact.messageId || null,
-        type: artifact.type || null,
-        mimeType: "application/json"
-      };
-
-      void this.log.debug("HTTP查询工件元数据（从工件文件）", { id: artifactId });
+      void this.log.debug("HTTP查询工件元数据", { id: artifactId });
       this._sendJson(res, 200, metadata);
     } catch (err) {
-      void this.log.error("查询工件元数据失败", { id: artifactId, error: err.message });
+      void this.log.error("查询工件元数据失败", { id: artifactId, error: err.message, stack: err.stack });
       this._sendJson(res, 500, { error: "internal_error", message: err.message });
     }
   }

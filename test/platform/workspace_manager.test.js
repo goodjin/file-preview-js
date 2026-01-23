@@ -2,7 +2,7 @@
 import fc from "fast-check";
 import path from "node:path";
 import { rm, mkdir, writeFile, readdir } from "node:fs/promises";
-import { WorkspaceManager } from "../src/platform/services/workspace/workspace_manager.js";
+import { WorkspaceManager } from "../../src/platform/services/workspace/workspace_manager.js";
 
 describe("WorkspaceManager", () => {
   /**
@@ -51,7 +51,7 @@ describe("WorkspaceManager", () => {
             expect(readResult.error).toBe("path_traversal_blocked");
             
             // 验证 writeFile 拒绝危险路径
-            const writeResult = await manager.writeFile(taskId, dangerousPath, "test content");
+            const writeResult = await manager.writeFile(taskId, dangerousPath, "test content", { mimeType: "text/plain" });
             expect(writeResult.error).toBe("path_traversal_blocked");
             
             // 验证 listFiles 拒绝危险路径
@@ -108,7 +108,7 @@ describe("WorkspaceManager", () => {
             await manager.bindWorkspace(taskId, workspaceDir);
             
             // 写入文件
-            const writeResult = await manager.writeFile(taskId, relativePath, content);
+            const writeResult = await manager.writeFile(taskId, relativePath, content, { mimeType: "text/plain" });
             expect(writeResult.ok).toBe(true);
             
             // 读取文件
@@ -277,7 +277,7 @@ describe("WorkspaceManager", () => {
 
   test("writeFile returns error for unbound workspace", async () => {
     const manager = new WorkspaceManager();
-    const result = await manager.writeFile("nonexistent-task", "file.txt", "content");
+    const result = await manager.writeFile("nonexistent-task", "file.txt", "content", { mimeType: "text/plain" });
     expect(result.error).toBe("workspace_not_bound");
   });
 
@@ -439,7 +439,7 @@ describe("WorkspaceManager", () => {
             expect(folderExistsBefore).toBe(false);
             
             // 写入文件
-            const writeResult = await manager.writeFile(workspaceId, relativePath, content);
+            const writeResult = await manager.writeFile(workspaceId, relativePath, content, { mimeType: "text/plain" });
             expect(writeResult.ok).toBe(true);
             
             // 验证文件夹已创建
@@ -551,7 +551,7 @@ describe("WorkspaceManager Additional Properties", () => {
             await manager.assignWorkspace(workspaceId, workspaceDir);
             
             // 写入嵌套路径的文件
-            const writeResult = await manager.writeFile(workspaceId, nestedPath, content);
+            const writeResult = await manager.writeFile(workspaceId, nestedPath, content, { mimeType: "text/plain" });
             expect(writeResult.ok).toBe(true);
             
             // 验证文件可以读取
@@ -591,7 +591,7 @@ describe("WorkspaceManager Additional Properties", () => {
             
             // 写入指定数量的文件
             for (let i = 0; i < fileCount; i++) {
-              await manager.writeFile(workspaceId, `file${i}.txt`, `content${i}`);
+              await manager.writeFile(workspaceId, `file${i}.txt`, `content${i}`, { mimeType: "text/plain" });
             }
             
             // 获取工作空间信息

@@ -3,6 +3,7 @@ import path from "node:path";
 import { createNoopModuleLogger } from "../../utils/logger/logger.js";
 import { BinaryDetector } from "./binary_detector.js";
 import { IdGenerator } from "./id_generator.js";
+import ArtifactIdCodec from "./artifact_id_codec.js";
 
 /**
  * 元信息文件后缀
@@ -15,10 +16,11 @@ const META_EXTENSION = ".meta";
  */
 export class ArtifactStore {
   /**
-   * @param {{artifactsDir:string, logger?: {debug:(m:string,d?:any)=>Promise<void>, info:(m:string,d?:any)=>Promise<void>, warn:(m:string,d?:any)=>Promise<void>, error:(m:string,d?:any)=>Promise<void>}} options
+   * @param {{artifactsDir:string, runtime?: any, logger?: {debug:(m:string,d?:any)=>Promise<void>, info:(m:string,d?:any)=>Promise<void>, warn:(m:string,d?:any)=>Promise<void>, error:(m:string,d?:any)=>Promise<void>}} options
    */
   constructor(options) {
     this.artifactsDir = options.artifactsDir;
+    this.runtime = options.runtime; // 用于访问WorkspaceManager
     this.log = options.logger ?? createNoopModuleLogger();
     this.binaryDetector = new BinaryDetector({ logger: this.log });
     
@@ -231,8 +233,146 @@ export class ArtifactStore {
    */
   async getArtifact(ref) {
     await this.ensureReady();
+    
+    // 移除"artifact:"前缀
     const id = String(ref).startsWith("artifact:") ? ref.slice("artifact:".length) : ref;
     
+    // 判断是否为工作区工件
+    if (ArtifactIdCodec.isWorkspaceArtifact(id)) {
+      return await this._getWorkspaceArtifact(id);
+    }
+    
+    // 普通工件处理（现有逻辑）
+    return await this._getRegularArtifact(id);
+  }
+
+  /**
+   * 读取工作区工件
+   * @param {string} artifactId - 工作区工件ID
+   * @returns {Promise<any>}
+   * @private
+   */
+  async _getWorkspaceArtifact(artifactId) {
+    // 解码工件ID
+    const decoded = ArtifactIdCodec.decode(artifactId);
+    if (!decoded) {
+      void this.log.warn("解码工作区工件ID失败", { artifactId });
+      return null;
+    }
+    
+    // 构建文件路径
+    if (!this.runtime || !this.runtime.workspaceManager) {
+      void this.log.error("无法访问WorkspaceManager", { artifactId });
+      return null;
+    }
+    
+    const workspacePath = this.runtime.workspaceManager.getWorkspacePath(decoded.workspaceId);
+    if (!workspacePath) {
+      void this.log.warn("工作区不存在", { workspaceId: decoded.workspaceId, artifactId });
+      return null;
+    }
+    
+    const fullPath = path.resolve(workspacePath, decoded.relativePath);
+    
+    try {
+      // 读取文件
+      const buffer = await readFile(fullPath);
+      
+      // 读取元信息获取mimeType
+      const workspacesDir = path.dirname(workspacePath);
+      const metaFilePath = path.join(workspacesDir, `${decoded.workspaceId}.meta.json`);
+      let mimeType = "application/octet-stream";
+      let createdAt = new Date().toISOString();
+      let modifiedBy = [];
+      
+      try {
+        const metaContent = await readFile(metaFilePath, "utf8");
+        const workspaceMeta = JSON.parse(metaContent);
+        const normalizedPath = path.normalize(decoded.relativePath).replace(/\\/g, "/");
+        const fileMeta = workspaceMeta.files?.[normalizedPath];
+        if (fileMeta?.mimeType) {
+          mimeType = fileMeta.mimeType;
+        }
+        if (fileMeta?.createdAt) {
+          createdAt = fileMeta.createdAt;
+        }
+        if (fileMeta?.modifiedBy) {
+          modifiedBy = fileMeta.modifiedBy;
+        }
+      } catch (err) {
+        // 元信息文件不存在或读取失败，使用默认值
+        void this.log.debug("读取工作区元信息失败，使用默认MIME类型", { 
+          workspaceId: decoded.workspaceId, 
+          error: err.message 
+        });
+      }
+      
+      // 检测是否为二进制
+      const isBinary = await this._detectBinary(buffer, {
+        mimeType,
+        extension: path.extname(decoded.relativePath),
+        filename: path.basename(decoded.relativePath)
+      });
+      
+      // 构建工件对象（与普通工件格式一致）
+      let content;
+      if (isBinary) {
+        content = buffer.toString("base64");
+      } else {
+        const raw = buffer.toString("utf8");
+        try {
+          content = JSON.parse(raw);
+        } catch {
+          content = raw;
+        }
+      }
+      
+      // 返回工件对象（包含chat-panel需要的元数据）
+      const result = {
+        id: artifactId,
+        content,
+        type: mimeType,
+        createdAt,
+        messageId: null,
+        meta: {
+          name: path.basename(decoded.relativePath),
+          filename: path.basename(decoded.relativePath),
+          workspaceId: decoded.workspaceId,
+          relativePath: decoded.relativePath,
+          modifiedBy
+        },
+        isBinary,
+        mimeType
+      };
+      
+      void this.log.debug("读取工作区工件成功", { 
+        artifactId, 
+        workspaceId: decoded.workspaceId, 
+        relativePath: decoded.relativePath,
+        isBinary 
+      });
+      
+      return result;
+    } catch (err) {
+      if (err && typeof err === "object" && err.code === "ENOENT") {
+        void this.log.warn("工作区工件文件不存在", { 
+          artifactId, 
+          workspaceId: decoded.workspaceId, 
+          relativePath: decoded.relativePath 
+        });
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * 读取普通工件（重构）
+   * @param {string} id - 普通工件ID
+   * @returns {Promise<any>}
+   * @private
+   */
+  async _getRegularArtifact(id) {
     // 先读取元信息以确定文件类型和扩展名
     const metadata = await this.getMetadata(id);
     const extension = metadata?.extension || ".json";
@@ -244,7 +384,7 @@ export class ArtifactStore {
       
       // 使用增强的二进制检测系统
       const isBinary = await this._detectBinary(buffer, {
-        mimeType: metadata?.mimeType,
+        mimeType: metadata?.type,
         extension: extension,
         filename: metadata?.filename
       });
@@ -287,7 +427,7 @@ export class ArtifactStore {
       return payload;
     } catch (err) {
       if (err && typeof err === "object" && err.code === "ENOENT") {
-        void this.log.warn("读取工件不存在", { id, ref: String(ref) });
+        void this.log.warn("读取工件不存在", { id, ref: `artifact:${id}` });
         return null;
       }
       throw err;
@@ -631,6 +771,185 @@ export class ArtifactStore {
     if (!filename) return "";
     const lastDot = filename.lastIndexOf(".");
     return lastDot > 0 ? filename.slice(lastDot).toLowerCase() : "";
+  }
+
+  /**
+   * 获取工件元数据（统一处理工作区工件和普通工件）
+   * @param {string} artifactId - 工件ID
+   * @returns {Promise<object|null>} 元数据对象，不存在时返回null
+   */
+  async getArtifactMetadata(artifactId) {
+    await this.ensureReady();
+    
+    // 判断是否为工作区工件
+    if (ArtifactIdCodec.isWorkspaceArtifact(artifactId)) {
+      return await this._getWorkspaceArtifactMetadata(artifactId);
+    }
+    
+    // 普通工件处理
+    return await this._getRegularArtifactMetadata(artifactId);
+  }
+
+  /**
+   * 获取工作区工件元数据
+   * @param {string} artifactId - 工作区工件ID
+   * @returns {Promise<object|null>}
+   * @private
+   */
+  async _getWorkspaceArtifactMetadata(artifactId) {
+    // 解码工件ID
+    const decoded = ArtifactIdCodec.decode(artifactId);
+    if (!decoded) {
+      void this.log.warn("解码工作区工件ID失败", { artifactId });
+      return null;
+    }
+    
+    // 构建文件路径
+    if (!this.runtime || !this.runtime.workspaceManager) {
+      void this.log.error("无法访问WorkspaceManager", { artifactId });
+      return null;
+    }
+    
+    const workspacePath = this.runtime.workspaceManager.getWorkspacePath(decoded.workspaceId);
+    if (!workspacePath) {
+      void this.log.warn("工作区不存在", { workspaceId: decoded.workspaceId, artifactId });
+      return null;
+    }
+    
+    const fullPath = path.resolve(workspacePath, decoded.relativePath);
+    
+    try {
+      // 检查文件是否存在
+      const { stat } = await import("node:fs/promises");
+      const fileStat = await stat(fullPath);
+      
+      // 读取元信息获取mimeType
+      const workspacesDir = path.dirname(workspacePath);
+      const metaFilePath = path.join(workspacesDir, `${decoded.workspaceId}.meta.json`);
+      let mimeType = "application/octet-stream";
+      let createdAt = new Date().toISOString();
+      let updatedAt = createdAt;
+      let modifiedBy = [];
+      
+      try {
+        const metaContent = await readFile(metaFilePath, "utf8");
+        const workspaceMeta = JSON.parse(metaContent);
+        const normalizedPath = path.normalize(decoded.relativePath).replace(/\\/g, "/");
+        const fileMeta = workspaceMeta.files?.[normalizedPath];
+        if (fileMeta) {
+          mimeType = fileMeta.mimeType || mimeType;
+          createdAt = fileMeta.createdAt || createdAt;
+          updatedAt = fileMeta.updatedAt || fileMeta.createdAt || createdAt;
+          modifiedBy = fileMeta.modifiedBy || [];
+        }
+      } catch (err) {
+        // 元信息文件不存在或读取失败，使用默认值
+        void this.log.debug("读取工作区元信息失败，使用默认值", { 
+          workspaceId: decoded.workspaceId, 
+          error: err.message 
+        });
+      }
+      
+      // 返回元数据对象
+      const metadata = {
+        id: artifactId,
+        type: mimeType,
+        name: path.basename(decoded.relativePath),
+        createdAt,
+        updatedAt,
+        meta: {
+          filename: path.basename(decoded.relativePath),
+          workspaceId: decoded.workspaceId,
+          relativePath: decoded.relativePath,
+          modifiedBy
+        },
+        mimeType,
+        size: fileStat.size
+      };
+      
+      void this.log.debug("获取工作区工件元数据成功", { 
+        artifactId, 
+        workspaceId: decoded.workspaceId, 
+        relativePath: decoded.relativePath 
+      });
+      
+      return metadata;
+    } catch (err) {
+      if (err && typeof err === "object" && err.code === "ENOENT") {
+        void this.log.warn("工作区工件文件不存在", { 
+          artifactId, 
+          workspaceId: decoded.workspaceId, 
+          relativePath: decoded.relativePath 
+        });
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * 获取普通工件元数据
+   * @param {string} id - 普通工件ID
+   * @returns {Promise<object|null>}
+   * @private
+   */
+  async _getRegularArtifactMetadata(id) {
+    // 首先尝试读取 .meta 文件
+    const metadata = await this.getMetadata(id);
+    
+    if (metadata) {
+      // 获取工件文件的大小
+      const extension = metadata.extension || ".json";
+      const artifactFilePath = path.resolve(this.artifactsDir, `${id}${extension}`);
+      
+      try {
+        const { stat } = await import("node:fs/promises");
+        const fileStat = await stat(artifactFilePath);
+        
+        void this.log.debug("获取普通工件元数据成功（从meta文件）", { id });
+        return {
+          ...metadata,
+          filename: `${id}${extension}`,
+          size: fileStat.size
+        };
+      } catch (err) {
+        if (err && typeof err === "object" && err.code === "ENOENT") {
+          void this.log.warn("工件文件不存在", { id });
+          return null;
+        }
+        throw err;
+      }
+    }
+    
+    // 兼容旧格式：从 JSON 工件文件中读取元信息
+    const filePath = path.resolve(this.artifactsDir, `${id}.json`);
+    
+    try {
+      const content = await readFile(filePath, "utf8");
+      const artifact = JSON.parse(content);
+      const { stat } = await import("node:fs/promises");
+      const fileStat = await stat(filePath);
+      
+      const legacyMetadata = {
+        id: artifact.id || id,
+        filename: `${id}.json`,
+        size: fileStat.size,
+        extension: ".json",
+        createdAt: artifact.createdAt,
+        messageId: artifact.messageId || null,
+        type: artifact.type || null,
+        mimeType: "application/json"
+      };
+      
+      void this.log.debug("获取普通工件元数据成功（兼容旧格式）", { id });
+      return legacyMetadata;
+    } catch (err) {
+      if (err && typeof err === "object" && err.code === "ENOENT") {
+        void this.log.warn("工件不存在", { id });
+        return null;
+      }
+      throw err;
+    }
   }
 
   /**

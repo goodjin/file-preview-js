@@ -19,24 +19,27 @@ describe("ArtifactStore", () => {
 
   describe("基础工件操作", () => {
     test("putArtifact then getArtifact returns stored payload", async () => {
-      const ref = await store.putArtifact({ name: "测试工件", type: "json", content: { a: 1 }, meta: { x: "y" } });
-      const loaded = await store.getArtifact(ref);
+      const id = await store.putArtifact({ name: "测试工件", type: "json", content: { a: 1 }, meta: { x: "y" } });
+      const loaded = await store.getArtifact(id);
 
       expect(loaded.type).toBe("json");
       expect(loaded.content).toEqual({ a: 1 });
       expect(loaded.meta).toEqual({ name: "测试工件", x: "y" });
     });
 
-    test("putArtifact 返回正确的引用格式", async () => {
-      const ref = await store.putArtifact({ name: "测试数据", type: "json", content: { test: "data" } });
+    test("putArtifact 返回正确的ID格式", async () => {
+      const id = await store.putArtifact({ name: "测试数据", type: "json", content: { test: "data" } });
       
-      expect(ref).toBeDefined();
-      expect(ref.startsWith("artifact:")).toBe(true);
+      expect(id).toBeDefined();
+      expect(typeof id).toBe("string");
+      expect(id.length).toBeGreaterThan(0);
+      // ID应该是UUID格式（包含连字符）
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     });
 
     test("getArtifact 支持带前缀和不带前缀的引用", async () => {
-      const ref = await store.putArtifact({ name: "测试数据", type: "json", content: { test: "data" } });
-      const id = ref.slice("artifact:".length);
+      const id = await store.putArtifact({ name: "测试数据", type: "json", content: { test: "data" } });
+      const ref = `artifact:${id}`;
       
       const loaded1 = await store.getArtifact(ref);
       const loaded2 = await store.getArtifact(id);
@@ -108,13 +111,12 @@ describe("ArtifactStore", () => {
 
   describe("元信息管理", () => {
     test("getMetadata 读取工件元信息", async () => {
-      const ref = await store.putArtifact({ 
+      const id = await store.putArtifact({ 
         name: "元信息测试工件",
         type: "json", 
         content: { test: "data" },
         meta: { custom: "value" }
       });
-      const id = ref.slice("artifact:".length);
       
       const metadata = await store.getMetadata(id);
       
@@ -134,22 +136,31 @@ describe("ArtifactStore", () => {
   describe("图片保存", () => {
     test("saveImage 保存图片文件", async () => {
       const buffer = Buffer.from("fake image data");
-      const fileName = await store.saveImage(buffer, { 
+      const id = await store.saveImage(buffer, { 
         name: "测试图片",
         format: "png",
         messageId: "msg-123",
         agentId: "agent-1"
       });
       
-      expect(fileName).toBeDefined();
-      expect(fileName.endsWith(".png")).toBe(true);
+      expect(id).toBeDefined();
+      expect(typeof id).toBe("string");
+      // ID应该是UUID格式
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      
+      // 验证元数据
+      const metadata = await store.getMetadata(id);
+      expect(metadata.extension).toBe(".png");
+      expect(metadata.name).toBe("测试图片");
     });
 
     test("saveImage 使用默认格式", async () => {
       const buffer = Buffer.from("fake image data");
-      const fileName = await store.saveImage(buffer, { name: "默认格式图片" });
+      const id = await store.saveImage(buffer, { name: "默认格式图片" });
       
-      expect(fileName.endsWith(".png")).toBe(true);
+      expect(id).toBeDefined();
+      const metadata = await store.getMetadata(id);
+      expect(metadata.extension).toBe(".png");
     });
 
     test("saveImage 支持不同的图片格式", async () => {
@@ -157,8 +168,9 @@ describe("ArtifactStore", () => {
       
       const formats = ["png", "jpg", "jpeg", "gif", "webp"];
       for (const format of formats) {
-        const fileName = await store.saveImage(buffer, { name: `${format}格式图片`, format });
-        expect(fileName.endsWith(`.${format}`)).toBe(true);
+        const id = await store.saveImage(buffer, { name: `${format}格式图片`, format });
+        const metadata = await store.getMetadata(id);
+        expect(metadata.extension).toBe(`.${format}`);
       }
     });
   });
@@ -175,8 +187,8 @@ describe("ArtifactStore", () => {
       expect(result.artifactRef).toBeDefined();
       expect(result.artifactRef.startsWith("artifact:")).toBe(true);
       expect(result.metadata).toBeDefined();
-      expect(result.metadata.filename).toBe("test.txt");
-      expect(result.metadata.mimeType).toBe("text/plain");
+      expect(result.metadata.name).toBe("test.txt");
+      expect(result.metadata.type).toBe("text/plain");
       expect(result.metadata.size).toBe(buffer.length);
     });
 
@@ -204,7 +216,7 @@ describe("ArtifactStore", () => {
       expect(loadResult).toBeDefined();
       expect(loadResult.buffer).toBeDefined();
       expect(loadResult.buffer.toString()).toBe("file content");
-      expect(loadResult.metadata.filename).toBe("test.txt");
+      expect(loadResult.metadata.name).toBe("test.txt");
     });
 
     test("getUploadedFile 返回 null 对于不存在的文件", async () => {

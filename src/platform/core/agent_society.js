@@ -263,6 +263,9 @@ export class AgentSociety {
       });
       this._httpServer.setSociety(this);
       
+      // 设置运行时对象，用于访问 artifacts 等服务
+      this._httpServer.setRuntime(this.runtime);
+      
       // 设置配置服务（使用同一个实例）
       if (this._configService) {
         this._httpServer.setConfigService(this._configService);

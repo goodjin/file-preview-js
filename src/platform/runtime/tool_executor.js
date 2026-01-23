@@ -329,9 +329,13 @@ export class ToolExecutor {
             type: "object",
             properties: {
               path: { type: "string", description: "文件的相对路径" },
-              content: { type: "string", description: "文件内容" }
+              content: { type: "string", description: "文件内容" },
+              mimeType: { 
+                type: "string", 
+                description: "文件的MIME类型，如 'text/javascript', 'application/json', 'text/html' 等。必须使用标准MIME类型。" 
+              }
             },
-            required: ["path", "content"]
+            required: ["path", "content", "mimeType"]
           }
         }
       },
@@ -958,7 +962,34 @@ export class ToolExecutor {
     if (!workspaceId) {
       return { error: "workspace_not_assigned", message: "当前智能体未分配工作空间" };
     }
-    return await runtime.workspaceManager.writeFile(workspaceId, args.path, args.content);
+    
+    // 验证mimeType参数
+    if (!args.mimeType || typeof args.mimeType !== 'string') {
+      return { error: "missing_mime_type", message: "必须提供mimeType参数" };
+    }
+    
+    // 调用WorkspaceManager写入文件，传递mimeType和agentId
+    const result = await runtime.workspaceManager.writeFile(
+      workspaceId, 
+      args.path, 
+      args.content,
+      { 
+        mimeType: args.mimeType,
+        agentId: ctx.agent?.id,
+        messageId: ctx.currentMessage?.id
+      }
+    );
+    
+    // 返回结果包含工件ID
+    if (result.ok && result.artifactId) {
+      return { 
+        ok: true, 
+        artifactId: result.artifactId,
+        path: args.path 
+      };
+    }
+    
+    return result;
   }
 
   async _executeListFiles(ctx, args) {

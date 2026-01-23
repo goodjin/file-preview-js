@@ -438,7 +438,11 @@ export class Runtime {
       isAgentActivelyProcessing: (agentId) => this._state.isAgentActivelyProcessing(agentId),
       onInterruptionNeeded: (agentId, message) => this.handleMessageInterruption(agentId, message)
     });
-    this.artifacts = new ArtifactStore({ artifactsDir: this.config.artifactsDir, logger: this.loggerRoot.forModule("artifacts") });
+    this.artifacts = new ArtifactStore({ 
+      artifactsDir: this.config.artifactsDir, 
+      runtime: this,
+      logger: this.loggerRoot.forModule("artifacts") 
+    });
     this.prompts = new PromptLoader({ promptsDir: this.config.promptsDir, logger: this.loggerRoot.forModule("prompts") });
     this.org = new OrgPrimitives({ runtimeDir: this.config.runtimeDir, logger: this.loggerRoot.forModule("org") });
     await this.org.loadIfExists();

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { createNoopModuleLogger } from "../../utils/logger/logger.js";
+import ArtifactIdCodec from "../artifact/artifact_id_codec.js";
 
 /**
  * 工作空间管理器
@@ -198,10 +199,15 @@ export class WorkspaceManager {
    * @param {string} taskId
    * @param {string} relativePath
    * @param {string} content
-   * @param {{messageId?: string, agentId?: string, [key: string]: any}} [meta] - 可选的元信息
-   * @returns {Promise<{ok: boolean, error?: string}>}
+   * @param {{mimeType: string, messageId?: string, agentId?: string, [key: string]: any}} [meta] - 元信息，mimeType为必需参数
+   * @returns {Promise<{ok: boolean, artifactId?: string, error?: string}>}
    */
   async writeFile(taskId, relativePath, content, meta = null) {
+    // 验证mimeType
+    if (!meta || !meta.mimeType) {
+      return { ok: false, error: "missing_mime_type" };
+    }
+
     const workspacePath = this.getWorkspacePath(taskId);
     if (!workspacePath) {
       return { ok: false, error: "workspace_not_bound" };
@@ -228,12 +234,18 @@ export class WorkspaceManager {
       await writeFile(fullPath, content, "utf8");
       void this.log.debug("写入文件成功", { taskId, relativePath });
 
-      // 如果提供了元信息，保存到工作空间元信息文件
-      if (meta && (meta.messageId || meta.agentId || Object.keys(meta).length > 0)) {
-        await this._updateWorkspaceMeta(taskId, relativePath, meta);
-      }
+      // 更新工作空间元数据（包含mimeType和agentId）
+      await this._updateWorkspaceMeta(taskId, relativePath, {
+        mimeType: meta.mimeType,
+        messageId: meta.messageId,
+        agentId: meta.agentId,
+        ...meta
+      });
 
-      return { ok: true };
+      // 生成工件ID
+      const artifactId = ArtifactIdCodec.encode(taskId, relativePath);
+      
+      return { ok: true, artifactId };
     } catch (err) {
       if (err && typeof err === "object" && "code" in err && err.code === "EACCES") {
         return { ok: false, error: "permission_denied" };
@@ -278,11 +290,35 @@ export class WorkspaceManager {
         // 文件不存在或解析失败，使用默认值
       }
 
-      // 更新文件元信息
+      // 标准化路径
       const normalizedPath = path.normalize(relativePath).replace(/\\/g, "/");
+      
+      // 获取现有文件元信息
+      const existingFileMeta = workspaceMeta.files[normalizedPath] || {
+        createdAt: new Date().toISOString(),
+        modifiedBy: []
+      };
+
+      // 更新修改历史
+      const modifiedBy = existingFileMeta.modifiedBy || [];
+      const currentTime = new Date().toISOString();
+      
+      // 添加当前修改记录
+      if (fileMeta.agentId) {
+        modifiedBy.push({
+          agentId: fileMeta.agentId,
+          timestamp: currentTime,
+          messageId: fileMeta.messageId || null
+        });
+      }
+
+      // 更新文件元信息
       workspaceMeta.files[normalizedPath] = {
-        ...fileMeta,
-        updatedAt: new Date().toISOString()
+        mimeType: fileMeta.mimeType,
+        createdAt: existingFileMeta.createdAt,
+        updatedAt: currentTime,
+        modifiedBy: modifiedBy,
+        ...fileMeta
       };
 
       // 写入元信息文件
