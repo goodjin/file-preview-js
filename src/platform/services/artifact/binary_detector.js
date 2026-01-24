@@ -420,13 +420,44 @@ export class BinaryDetector {
     }
 
     try {
+      if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+        return {
+          classification: 'text',
+          confidence: 0.95,
+          reason: 'UTF-8 BOM detected'
+        };
+      }
+
+      if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+        return {
+          classification: 'text',
+          confidence: 0.95,
+          reason: 'UTF-16LE BOM detected'
+        };
+      }
+
+      if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+        return {
+          classification: 'text',
+          confidence: 0.95,
+          reason: 'UTF-16BE BOM detected'
+        };
+      }
+
       // Step 1: Try magic byte detection using file-type library
       try {
         const fileType = await fileTypeFromBuffer(buffer);
         if (fileType) {
-          // file-type library detected a known binary format
+          const mimeResult = this.analyzeMimeType(fileType.mime);
+          if (mimeResult.classification === "text") {
+            return {
+              classification: "text",
+              confidence: 0.95,
+              reason: `Magic bytes detected: ${fileType.ext} (${fileType.mime})`
+            };
+          }
           return {
-            classification: 'binary',
+            classification: "binary",
             confidence: 0.95,
             reason: `Magic bytes detected: ${fileType.ext} (${fileType.mime})`
           };
@@ -439,6 +470,13 @@ export class BinaryDetector {
       // Step 2: Check for null bytes (strong indicator of binary content)
       const hasNullBytes = buffer.indexOf(0) !== -1;
       if (hasNullBytes) {
+        if (this._isLikelyUtf16Text(buffer)) {
+          return {
+            classification: 'text',
+            confidence: 0.85,
+            reason: 'Likely UTF-16 text content (null bytes pattern)'
+          };
+        }
         return {
           classification: 'binary',
           confidence: 0.95,
@@ -541,6 +579,64 @@ export class BinaryDetector {
         reason: `Content analysis failed: ${error.message}`
       };
     }
+  }
+
+  /**
+   * 判断包含 NULL 字节的内容是否更像 UTF-16 文本。
+   * 用途：避免把 UTF-16 编码的 .txt 等文本误判为二进制，从而在工件管理器中被当作 base64 展示。
+   * 约束：仅做轻量启发式判断，不做完整解码；命中时以“文本”优先，避免误伤常见文本文件。
+   * @param {Buffer} buffer - 文件内容
+   * @returns {boolean} true 表示更可能是 UTF-16 文本
+   * @private
+   */
+  _isLikelyUtf16Text(buffer) {
+    if (!buffer || buffer.length < 8) {
+      return false;
+    }
+
+    const sampleSize = Math.min(buffer.length, 8192);
+    const sample = buffer.subarray(0, sampleSize);
+
+    let evenCount = 0;
+    let oddCount = 0;
+    let evenNull = 0;
+    let oddNull = 0;
+    let evenPrintable = 0;
+    let oddPrintable = 0;
+
+    const isPrintableAscii = (byte) => {
+      return byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte <= 126);
+    };
+
+    for (let i = 0; i < sample.length; i++) {
+      const byte = sample[i];
+      if (i % 2 === 0) {
+        evenCount++;
+        if (byte === 0) evenNull++;
+        if (isPrintableAscii(byte)) evenPrintable++;
+      } else {
+        oddCount++;
+        if (byte === 0) oddNull++;
+        if (isPrintableAscii(byte)) oddPrintable++;
+      }
+    }
+
+    if (evenCount === 0 || oddCount === 0) {
+      return false;
+    }
+
+    const evenNullRatio = evenNull / evenCount;
+    const oddNullRatio = oddNull / oddCount;
+
+    const likelyUtf16Le = oddNullRatio > 0.45 && evenNullRatio < 0.05;
+    const likelyUtf16Be = evenNullRatio > 0.45 && oddNullRatio < 0.05;
+
+    if (!likelyUtf16Le && !likelyUtf16Be) {
+      return false;
+    }
+
+    const printableRatio = likelyUtf16Le ? (evenPrintable / evenCount) : (oddPrintable / oddCount);
+    return printableRatio > 0.6;
   }
 
   /**

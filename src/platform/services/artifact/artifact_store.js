@@ -319,7 +319,7 @@ export class ArtifactStore {
       if (isBinary) {
         content = buffer.toString("base64");
       } else {
-        const raw = buffer.toString("utf8");
+        const raw = this._decodeTextBuffer(buffer);
         try {
           content = JSON.parse(raw);
         } catch {
@@ -394,8 +394,7 @@ export class ArtifactStore {
         // 二进制文件读取为 base64
         content = buffer.toString("base64");
       } else {
-        // 文本文件按 utf8 读取
-        const raw = buffer.toString("utf8");
+        const raw = this._decodeTextBuffer(buffer);
         // 尝试解析 JSON，如果失败则返回原始文本
         try {
           content = JSON.parse(raw);
@@ -467,6 +466,41 @@ export class ArtifactStore {
       // 出错时默认为二进制（安全处理）
       return true;
     }
+  }
+
+  /**
+   * 将文本缓冲区解码为字符串，优先处理 BOM。
+   * 背景：工作区中的 .txt 可能是 UTF-16（常见于 Windows 生成的文本），直接按 UTF-8 解码会出现大量 \u0000，
+   * 从而在二进制检测中被判为二进制，导致工件管理器显示为 base64。
+   * @param {Buffer} buffer - 文件内容
+   * @returns {string} 解码后的文本
+   * @private
+   */
+  _decodeTextBuffer(buffer) {
+    if (!buffer || buffer.length === 0) {
+      return "";
+    }
+
+    if (buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+      return buffer.subarray(3).toString("utf8");
+    }
+
+    if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+      return buffer.subarray(2).toString("utf16le");
+    }
+
+    if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+      const body = buffer.subarray(2);
+      const evenLength = body.length - (body.length % 2);
+      const swapped = Buffer.allocUnsafe(evenLength);
+      for (let i = 0; i < evenLength; i += 2) {
+        swapped[i] = body[i + 1];
+        swapped[i + 1] = body[i];
+      }
+      return swapped.toString("utf16le");
+    }
+
+    return buffer.toString("utf8");
   }
 
 

@@ -161,12 +161,13 @@ describe("BinaryDetector", () => {
           const buffer = Buffer.from(bufferArray);
           const result = await detector.analyzeContent(buffer);
           
-          // Should classify as binary
-          expect(result.classification).toBe("binary");
-          // Should have high confidence
+          expect(["binary", "text"]).toContain(result.classification);
           expect(result.confidence).toBeGreaterThan(0.8);
-          // Should mention null bytes in reason
-          expect(result.reason.toLowerCase()).toContain("null");
+          if (result.classification === "binary") {
+            expect(result.reason.toLowerCase()).toContain("null");
+          } else {
+            expect(result.reason.toLowerCase()).toContain("utf-16");
+          }
         }
       ), { numRuns: 30 });
 
@@ -560,21 +561,20 @@ describe("BinaryDetector", () => {
           expect(stats2.cacheHitRate).toBe("50.00%");
         }
       ), { numRuns: 15 });
+    });
 
-      // Test cache size limits
-      test("Cache should respect size limits", async () => {
-        const smallCacheDetector = new BinaryDetector({ maxCacheSize: 3 });
-        
-        // Add 5 different items to cache (should evict 2)
-        for (let i = 0; i < 5; i++) {
-          const buffer = Buffer.from([i, i + 1, i + 2, i + 3]);
-          await smallCacheDetector.detectBinary(buffer, { mimeType: "text/plain" });
-        }
-        
-        const stats = smallCacheDetector.getCacheStats();
-        expect(stats.cacheSize).toBeLessThanOrEqual(3);
-        expect(stats.maxCacheSize).toBe(3);
-      });
+    test("Cache should respect size limits", async () => {
+      const smallCacheDetector = new BinaryDetector({ maxCacheSize: 3 });
+      
+      // Add 5 different items to cache (should evict 2)
+      for (let i = 0; i < 5; i++) {
+        const buffer = Buffer.from([i, i + 1, i + 2, i + 3]);
+        await smallCacheDetector.detectBinary(buffer, { mimeType: "text/plain" });
+      }
+      
+      const stats = smallCacheDetector.getCacheStats();
+      expect(stats.cacheSize).toBeLessThanOrEqual(3);
+      expect(stats.maxCacheSize).toBe(3);
     });
 
     /**
@@ -901,6 +901,27 @@ describe("BinaryDetector", () => {
       const bufferEnd = Buffer.from([65, 66, 67, 68, 0]);
       const resultEnd = await detector.analyzeContent(bufferEnd);
       expect(resultEnd.classification).toBe("binary");
+    });
+
+    test("should classify UTF-16 text as text", async () => {
+      const utf16leText = Buffer.concat([
+        Buffer.from([0xff, 0xfe]),
+        Buffer.from("Hello, World!", "utf16le")
+      ]);
+      const resultLe = await detector.analyzeContent(utf16leText);
+      expect(resultLe.classification).toBe("text");
+      expect(resultLe.reason.toLowerCase()).toContain("utf-16");
+
+      const leBody = Buffer.from("Hello, World!", "utf16le");
+      const utf16beBody = Buffer.allocUnsafe(leBody.length - (leBody.length % 2));
+      for (let i = 0; i < utf16beBody.length; i += 2) {
+        utf16beBody[i] = leBody[i + 1];
+        utf16beBody[i + 1] = leBody[i];
+      }
+      const utf16beText = Buffer.concat([Buffer.from([0xfe, 0xff]), utf16beBody]);
+      const resultBe = await detector.analyzeContent(utf16beText);
+      expect(resultBe.classification).toBe("text");
+      expect(resultBe.reason.toLowerCase()).toContain("utf-16");
     });
 
     test("should classify files with high non-printable ratio as binary", async () => {
@@ -1373,7 +1394,7 @@ describe("BinaryDetector Performance and Integration Tests", () => {
       });
       
       // Verify reference format
-      expect(ref).toMatch(/^artifact:[0-9a-f-]+$/);
+      expect(ref).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
       
       // Retrieve using the reference
       const artifact = await artifactStore.getArtifact(ref);
@@ -1393,7 +1414,7 @@ describe("BinaryDetector Performance and Integration Tests", () => {
       });
       
       expect(result.artifactRef).toMatch(/^artifact:/);
-      expect(result.metadata.mimeType).toBe("text/plain");
+      expect(result.metadata.type).toBe("text/plain");
       
       // Retrieve and verify
       const file = await artifactStore.getUploadedFile(result.artifactRef);
@@ -1411,20 +1432,24 @@ describe("BinaryDetector Performance and Integration Tests", () => {
       });
       
       // Should infer JavaScript MIME type from extension
-      expect(result.metadata.mimeType).toBe("text/javascript");
+      expect(result.metadata.type).toBe("text/javascript");
     });
 
     test("should handle image files correctly", async () => {
       // Create a minimal PNG-like buffer (just for testing, not a valid PNG)
       const imageBuffer = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
       
-      const filename = await artifactStore.saveImage(imageBuffer, {
+      const id = await artifactStore.saveImage(imageBuffer, {
         name: "测试PNG图片",
         format: "png",
         messageId: "img-test"
       });
       
-      expect(filename).toMatch(/\.png$/);
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+
+      const metadata = await artifactStore.getMetadata(id);
+      expect(metadata).toBeDefined();
+      expect(metadata.extension).toBe(".png");
     });
   });
 });
