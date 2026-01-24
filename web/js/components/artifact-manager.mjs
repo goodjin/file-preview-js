@@ -581,7 +581,7 @@ class ArtifactManager {
         const isImage = isImageType(type);
         return {
           ...file,
-          id: `${workspaceId}/${file.path}`,
+          id: file.artifactId ?? `${workspaceId}/${file.path}`,
           type,
           actualFilename: file.name,
           filename: file.name,

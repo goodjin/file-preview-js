@@ -4,6 +4,7 @@ import { mkdir, readFile, appendFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { createNoopModuleLogger, formatLocalTime } from "../../utils/logger/logger.js";
+import ArtifactIdCodec from "../artifact/artifact_id_codec.js";
 
 /**
  * HTTP服务器组件：提供REST API接口与Agent Society交互。
@@ -2910,6 +2911,7 @@ export class HTTPServer {
             files.push({
               name: entry.name,
               path: entryRelativePath,
+              artifactId: ArtifactIdCodec.encode(workspaceId, entryRelativePath),
               size: stat.size,
               extension,
               createdAt: stat.birthtime?.toISOString() || stat.mtime?.toISOString(),
@@ -3002,7 +3004,8 @@ export class HTTPServer {
         try {
           const metaContent = readFileSync(metaFilePath, "utf8");
           const workspaceMeta = JSON.parse(metaContent);
-          fileMeta = workspaceMeta?.files?.[normalizedPath] || null;
+          const metaKey = normalizedPath.replace(/\\/g, "/");
+          fileMeta = workspaceMeta?.files?.[metaKey] || null;
         } catch (e) {
           // 忽略元信息读取错误
         }
