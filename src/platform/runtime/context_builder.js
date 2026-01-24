@@ -225,6 +225,8 @@ export class ContextBuilder {
       },
       putArtifact: (artifact) => runtime.artifacts.putArtifact(artifact),
       getArtifact: (ref) => runtime.artifacts.getArtifact(ref),
+      resolveArtifactFilePath: (ref) => runtime.artifacts.resolveArtifactFilePath(ref),
+      reserveArtifactFile: (input) => runtime.artifacts.reserveArtifactFile(input),
       saveImage: (buffer, meta) => runtime.artifacts.saveImage(buffer, meta),
       composePrompt: (parts) => runtime.prompts.compose(parts),
       consolePrint: (text) => process.stdout.write(String(text ?? ""))

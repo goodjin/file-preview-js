@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { createNoopModuleLogger } from "../../utils/logger/logger.js";
 import { BinaryDetector } from "./binary_detector.js";
@@ -244,6 +245,75 @@ export class ArtifactStore {
     
     // 普通工件处理（现有逻辑）
     return await this._getRegularArtifact(id);
+  }
+
+  async resolveArtifactFilePath(ref) {
+    await this.ensureReady();
+
+    const id = String(ref).startsWith("artifact:") ? String(ref).slice("artifact:".length) : String(ref);
+
+    if (ArtifactIdCodec.isWorkspaceArtifact(id)) {
+      const decoded = ArtifactIdCodec.decode(id);
+      if (!decoded) return null;
+      if (!this.runtime || !this.runtime.workspaceManager) return null;
+      const workspacePath = this.runtime.workspaceManager.getWorkspacePath(decoded.workspaceId);
+      if (!workspacePath) return null;
+      const fullPath = path.resolve(workspacePath, decoded.relativePath);
+      if (!existsSync(fullPath)) return null;
+      return fullPath;
+    }
+
+    const metadata = await this.getMetadata(id);
+    const extension = metadata?.extension || ".json";
+    const filePath = path.resolve(this.artifactsDir, `${id}${extension}`);
+    if (!existsSync(filePath)) return null;
+    return filePath;
+  }
+
+  async reserveArtifactFile(input) {
+    if (!input || typeof input !== "object") {
+      throw new Error("invalid_reserve_artifact_input");
+    }
+
+    const name = typeof input.name === "string" ? input.name.trim() : "";
+    if (!name) {
+      throw new Error("missing_artifact_name");
+    }
+
+    await this.ensureReady();
+
+    const id = await this.idGenerator.next();
+    const createdAt = new Date().toISOString();
+    const type = typeof input.type === "string" && input.type.trim() ? input.type.trim() : null;
+    const messageId = typeof input.messageId === "string" && input.messageId.trim() ? input.messageId.trim() : null;
+    const createdByAgentId =
+      typeof input.createdByAgentId === "string" && input.createdByAgentId.trim() ? input.createdByAgentId.trim() : null;
+
+    let extension = path.extname(name);
+    if (!extension) {
+      extension = type ? this._getExtensionFromType(type) : ".bin";
+    }
+
+    const filePath = path.resolve(this.artifactsDir, `${id}${extension}`);
+
+    const meta = typeof input.meta === "object" && input.meta !== null ? input.meta : {};
+    const mergedMeta = createdByAgentId ? { ...meta, createdByAgentId } : meta;
+
+    const metadata = {
+      id,
+      extension,
+      type: type || "application/octet-stream",
+      name,
+      createdAt,
+      messageId,
+      createdByAgentId,
+      meta: mergedMeta
+    };
+
+    await this._writeMetadata(id, metadata);
+    void this.log.info("预留工件文件", { id, name, type: metadata.type, extension, messageId, createdByAgentId });
+
+    return { artifactId: id, filePath };
   }
 
   /**

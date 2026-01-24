@@ -8,4 +8,5 @@
 
 ## 子目录列表
 - chrome: 该目录包含 6 个文件与 1 个子目录，直接文件类型以 .js、.md 为主，用于承载本层级的实现与配置。（详见 chrome/chrome.md）
+- ffmpeg: FFmpeg 音视频处理模块，提供命令执行、进度查询与管理界面。（详见 ffmpeg/ffmpeg.md）
 - ssh: SSH远程连接模块，提供SSH连接管理、交互式Shell会话和文件传输功能。包含连接管理器、Shell管理器和文件传输管理器三个核心组件。（详见 ssh/ssh.md）
