@@ -322,14 +322,23 @@ export class FfmpegManager {
     task.status = "running";
     task.startedAt = new Date().toISOString();
     // 记录 ffmpeg 路径与最终参数
-    this.log.info?.("[FFmpeg] 启动任务", {
+    let cmd = JSON.stringify( {
       taskId,
       ffmpegPath,
       finalArgv,
       stdoutLogPath: task.stdoutLogPath,
-      stderrLogPath: task.stderrLogPath
+      stderrLogPath: task.stderrLogPath,
+      input
     });
 
+    // 将 cmd 写入 task.stdoutLogPath 文件
+    try {
+      stdoutStream.write(cmd + '\n');
+    } catch (e) {
+      void this.log.warn?.("[FFmpeg] 写入命令日志失败", { taskId, error: e?.message ?? String(e) });
+    }
+
+    
     const child = spawn(ffmpegPath, finalArgv, {
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"]
