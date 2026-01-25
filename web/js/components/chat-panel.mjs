@@ -66,6 +66,16 @@ const ChatPanel = {
           this.sendMessage();
         }
       });
+
+      this.chatInput.addEventListener('input', () => {
+        this._syncChatInputHeight();
+      });
+
+      window.addEventListener('resize', () => {
+        this._syncChatInputHeight();
+      });
+
+      this._syncChatInputHeight();
     }
     
     // 初始化附件管理器
@@ -83,6 +93,20 @@ const ChatPanel = {
     
     // 初始化工件交互处理器
     this._initArtifactInteractionHandler();
+  },
+
+  _syncChatInputHeight() {
+    if (!this.chatInput) return;
+
+    const el = this.chatInput;
+    el.style.height = 'auto';
+
+    const viewportHeight = document.documentElement?.clientHeight || window.innerHeight || 0;
+    const maxHeightPx = Math.max(40, Math.floor(viewportHeight * 0.25));
+    const nextHeightPx = Math.min(el.scrollHeight, maxHeightPx);
+
+    el.style.height = `${nextHeightPx}px`;
+    el.style.overflowY = el.scrollHeight > maxHeightPx ? 'auto' : 'hidden';
   },
 
   /**
@@ -1905,6 +1929,7 @@ const ChatPanel = {
       
       // 清空输入框
       this.chatInput.value = '';
+      this._syncChatInputHeight();
       
       // 清空附件
       if (hasAttachments) {

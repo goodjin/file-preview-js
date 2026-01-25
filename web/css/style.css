@@ -794,7 +794,8 @@ body {
   font-size: 14px;
   resize: none;
   min-height: 40px;
-  max-height: 120px;
+  max-height: 25vh;
+  overflow-y: hidden;
   line-height: 1.5;
 }
 
