@@ -52,11 +52,6 @@ export class FfmpegManager {
   }
 
   async run(ctx, input) {
-    const argv = normalizeStringArray(input?.argv);
-    if (!argv) {
-      return { error: "invalid_parameter", message: "argv 必须是字符串数组" };
-    }
-
     const taskId = randomUUID();
     const nowIso = new Date().toISOString();
 
@@ -86,12 +81,29 @@ export class FfmpegManager {
     const messageId = ctx?.currentMessage?.id ?? null;
     const createdByAgentId = ctx?.agent?.id ?? null;
 
+    const fail = (error, message) => {
+      task.status = "failed";
+      task.error = error;
+      task.completedAt = new Date().toISOString();
+      if (message) {
+        pushBoundedLines(task.progress.lastStderrLines, String(message), this.maxStderrLines);
+      }
+      const artifactIds = [];
+      if (Array.isArray(task.outputArtifactIds)) artifactIds.push(...task.outputArtifactIds);
+      if (Array.isArray(task.logArtifactIds)) artifactIds.push(...task.logArtifactIds);
+      const res = { taskId, status: task.status, error, message, outputArtifactIds: task.outputArtifactIds, logArtifactIds: task.logArtifactIds };
+      if (artifactIds.length > 0) res.artifactIds = artifactIds;
+      return res;
+    };
+
+    const argv = normalizeStringArray(input?.argv);
+    if (!argv) {
+      return fail("invalid_parameter", "argv 必须是字符串数组");
+    }
+
     const ffmpegPath = await this._resolveFfmpegPath();
     if (!ffmpegPath) {
-      task.status = "failed";
-      task.error = "ffmpeg_not_found";
-      task.completedAt = new Date().toISOString();
-      return { error: "ffmpeg_not_found", message: "未找到 ffmpeg 可执行文件" };
+      return fail("ffmpeg_not_found", "未找到 ffmpeg 可执行文件");
     }
 
     const finalArgv = [...argv];
@@ -101,18 +113,12 @@ export class FfmpegManager {
       const index = normalizeIndexNumber(item?.index);
       const artifactId = typeof item?.artifactId === "string" ? item.artifactId.trim() : "";
       if (index === null || !ensureIndexInRange(index, finalArgv.length) || !artifactId) {
-        task.status = "failed";
-        task.error = "invalid_input_mapping";
-        task.completedAt = new Date().toISOString();
-        return { error: "invalid_input_mapping", message: "inputs 参数不合法" };
+        return fail("invalid_input_mapping", "inputs 参数不合法");
       }
 
       const filePath = await ctx.tools.resolveArtifactFilePath(artifactId);
       if (!filePath) {
-        task.status = "failed";
-        task.error = "input_artifact_not_found";
-        task.completedAt = new Date().toISOString();
-        return { error: "input_artifact_not_found", message: `输入工件不存在或无法解析路径: ${artifactId}` };
+        return fail("input_artifact_not_found", `输入工件不存在或无法解析路径: ${artifactId}`);
       }
 
       finalArgv[index] = filePath;
@@ -125,10 +131,7 @@ export class FfmpegManager {
       const type = typeof item?.type === "string" && item.type.trim() ? item.type.trim() : null;
 
       if (index === null || !ensureIndexInRange(index, finalArgv.length) || !name) {
-        task.status = "failed";
-        task.error = "invalid_output_mapping";
-        task.completedAt = new Date().toISOString();
-        return { error: "invalid_output_mapping", message: "outputs 参数不合法" };
+        return fail("invalid_output_mapping", "outputs 参数不合法");
       }
 
       const reserved = await ctx.tools.reserveArtifactFile({
@@ -144,10 +147,7 @@ export class FfmpegManager {
       });
 
       if (!reserved?.artifactId || !reserved?.filePath) {
-        task.status = "failed";
-        task.error = "reserve_output_failed";
-        task.completedAt = new Date().toISOString();
-        return { error: "reserve_output_failed", message: "预留输出工件失败" };
+        return fail("reserve_output_failed", "预留输出工件失败");
       }
 
       task.outputArtifactIds.push(reserved.artifactId);
@@ -162,26 +162,17 @@ export class FfmpegManager {
       const artifactId = typeof item?.artifactId === "string" ? item.artifactId.trim() : "";
 
       if (index === null || !ensureIndexInRange(index, finalArgv.length) || !placeholder || !artifactId) {
-        task.status = "failed";
-        task.error = "invalid_replacements";
-        task.completedAt = new Date().toISOString();
-        return { error: "invalid_replacements", message: "replacements 参数不合法" };
+        return fail("invalid_replacements", "replacements 参数不合法");
       }
 
       const filePath = await ctx.tools.resolveArtifactFilePath(artifactId);
       if (!filePath) {
-        task.status = "failed";
-        task.error = "replacement_artifact_not_found";
-        task.completedAt = new Date().toISOString();
-        return { error: "replacement_artifact_not_found", message: `替换用工件不存在或无法解析路径: ${artifactId}` };
+        return fail("replacement_artifact_not_found", `替换用工件不存在或无法解析路径: ${artifactId}`);
       }
 
       const raw = String(finalArgv[index] ?? "");
       if (!raw.includes(placeholder)) {
-        task.status = "failed";
-        task.error = "replacement_placeholder_not_found";
-        task.completedAt = new Date().toISOString();
-        return { error: "replacement_placeholder_not_found", message: `argv[${index}] 不包含 placeholder` };
+        return fail("replacement_placeholder_not_found", `argv[${index}] 不包含 placeholder`);
       }
 
       finalArgv[index] = raw.split(placeholder).join(filePath);
@@ -197,6 +188,14 @@ export class FfmpegManager {
 
     task.status = "running";
     task.startedAt = new Date().toISOString();
+    // 记录 ffmpeg 路径与最终参数
+    this.log.info?.("[FFmpeg] 启动任务", {
+      taskId,
+      ffmpegPath,
+      finalArgv,
+      stdoutLogPath: task.stdoutLogPath,
+      stderrLogPath: task.stderrLogPath
+    });
 
     const child = spawn(ffmpegPath, finalArgv, {
       windowsHide: true,
@@ -235,6 +234,7 @@ export class FfmpegManager {
     child.on("error", async (err) => {
       task.status = "failed";
       task.error = err?.message ?? String(err);
+      pushBoundedLines(task.progress.lastStderrLines, `spawn_error: ${task.error}`, this.maxStderrLines);
       task.completedAt = new Date().toISOString();
       await finalizeStreams();
     });
@@ -245,6 +245,7 @@ export class FfmpegManager {
       task.status = code === 0 ? "completed" : "failed";
       if (code !== 0) {
         task.error = task.error || `ffmpeg_exit_${code}`;
+        pushBoundedLines(task.progress.lastStderrLines, `exit_code: ${code}`, this.maxStderrLines);
       }
       await finalizeStreams();
     });
@@ -277,6 +278,14 @@ export class FfmpegManager {
       outputArtifactIds: task.outputArtifactIds,
       logArtifactIds: task.logArtifactIds
     };
+
+    if (task.status === "failed") {
+      response.failure = {
+        error: task.error,
+        exitCode: task.exitCode,
+        stderrTail: Array.isArray(task.progress?.lastStderrLines) ? task.progress.lastStderrLines : []
+      };
+    }
 
     const artifactIds = [];
     if (Array.isArray(task.outputArtifactIds)) artifactIds.push(...task.outputArtifactIds);
@@ -370,4 +379,3 @@ export class FfmpegManager {
     }
   }
 }
-

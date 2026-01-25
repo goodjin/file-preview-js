@@ -5,7 +5,7 @@ export function getToolDefinitions() {
       function: {
         name: "ffmpeg_run",
         description:
-          "执行 ffmpeg 命令（异步）。返回 taskId 和输出工件ID。注意：在 ffmpeg_task_status 显示 completed 之前，这些输出工件可能是不完整的，不要在任务完成前把它们当作最终结果使用。",
+          "执行 ffmpeg 命令（异步）。返回 taskId 和输出工件ID。注意：在 ffmpeg_task_status 显示 completed 之前，这些输出工件可能是不完整的，不要在任务完成前把它们当作最终结果使用。若启动前参数校验失败，也会返回 taskId 且 status=failed，需通过 ffmpeg_task_status 查看失败详情。",
         parameters: {
           type: "object",
           properties: {
@@ -63,7 +63,7 @@ export function getToolDefinitions() {
       type: "function",
       function: {
         name: "ffmpeg_task_status",
-        description: "查询 ffmpeg 异步任务状态与进度。completed 时输出工件才可视为完整结果。",
+        description: "查询 ffmpeg 异步任务状态与进度。completed 时输出工件才可视为完整结果；failed 时会返回 failure（包含错误码与 stderrTail）以及日志工件ID。",
         parameters: {
           type: "object",
           properties: {
@@ -75,4 +75,3 @@ export function getToolDefinitions() {
     }
   ];
 }
-
