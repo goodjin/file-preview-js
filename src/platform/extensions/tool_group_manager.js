@@ -18,8 +18,8 @@ export const BUILTIN_TOOL_GROUPS = {
     tools: ["read_file", "write_file", "list_files", "get_workspace_info"]
   },
   command: {
-    description: "命令执行工具 - 用于执行终端命令和 JavaScript 代码，支持 Canvas 绘图。",
-    tools: ["run_command", "run_javascript"]
+    description: "代码执行工具 - 用于执行 JavaScript 代码，支持 Canvas 绘图。",
+    tools: ["run_javascript"]
   },
   network: {
     description: "HTTP 请求工具 - 用于调用已知的、确定的 HTTP/HTTPS API 接口（如 REST API、JSON API 等）。仅适用于有明确接口规范的场景。如需模拟人类浏览网页、处理动态渲染页面、执行页面交互操作，请使用 chrome 工具组。",

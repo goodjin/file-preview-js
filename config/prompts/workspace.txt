@@ -35,14 +35,6 @@ get_workspace_info({})
 ```
 返回：{ fileCount: 10, dirCount: 3, totalSize: 51200, lastModified: "2024-01-01T00:00:00Z" }
 
-### run_command - 执行命令
-```
-run_command({ command: "node main.js", timeoutMs: 30000 })
-```
-返回：{ stdout: "输出", stderr: "错误输出", exitCode: 0 }
-- 命令在工作空间目录下执行
-- 危险命令会被拦截
-
 ## 重要规则
 
 1) 路径安全：
@@ -75,7 +67,6 @@ run_command({ command: "node main.js", timeoutMs: 30000 })
 - 开发包含多个文件的项目（如网站、应用程序、协作编纂书籍或报告）
 - 多个智能体分工协作（如：架构师设计接口、开发者实现代码、测试者编写测试）
 - 需要相互引用的文件（如：代码引用配置文件、模块间相互依赖）
-- 需要执行命令验证结果（如：运行测试、构建项目）
 - 多智能体协作编写的多文件合集（如：分卷的书籍、课程）
 
 ### 何时使用工件
@@ -92,5 +83,5 @@ run_command({ command: "node main.js", timeoutMs: 30000 })
 1) 架构师智能体：write_file("design/api.md", "接口设计...")
 2) 前端智能体：read_file("design/api.md") → write_file("src/app.js", "前端代码...")
 3) 后端智能体：read_file("design/api.md") → write_file("src/server.js", "后端代码...")
-4) 测试智能体：read_file("src/*.js") → write_file("test/test.js", "测试代码...") → run_command("npm test")
+4) 测试智能体：read_file("src/*.js") → write_file("test/test.js", "测试代码...")
 

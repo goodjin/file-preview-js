@@ -332,7 +332,6 @@ spawn_agent_with_task({
         ▼
 5. 程序员编写代码
    - write_file("src/module.js", code)
-   - run_command("npm test")
         │
         ▼
 6. 程序员汇报完成

@@ -7,7 +7,7 @@
 - 面向外部的 HTTP 接口（REST API、静态资源与文件服务）。
 - 与大模型服务交互的客户端、服务注册表与模型选择逻辑。
 - 工件（artifact）存储、二进制检测与内容路由，用于将附件转换为模型可处理的格式。
-- 运行时配套的工作空间文件操作与命令执行能力。
+- 运行时配套的工作空间文件操作能力。
 - 消息格式化、消息类型校验、任务委托书（TaskBrief）结构化数据。
 - 可插拔模块加载与工具组管理，用于扩展工具能力。
 
@@ -19,7 +19,6 @@
 - artifact_store.js: 功能：工件存储与读取。责任：将工件内容写入 artifactsDir，并将元信息写入同名 .meta 文件；按引用读取并合并元信息。内部结构：导出 ArtifactStore；主要方法包括 ensureReady、putArtifact、getArtifact、getMetadata；内部使用 BinaryDetector 进行二进制判定。
 - binary_detector.js: 功能：二进制检测。责任：基于 MIME、扩展名、内容特征进行多层检测，并对结果做缓存与统计。内部结构：导出 BinaryDetector；公开方法 detectBinary；包含内部缓存、超时保护与若干分类表（MIME_CLASSIFICATIONS、EXTENSION_CLASSIFICATIONS）。
 - capability_router.js: 功能：按模型输入能力路由消息内容。责任：当消息包含附件时，区分可直接传递给模型的内容与需要转为文本描述的内容，并返回可用于 LLM 调用的 processedContent。内部结构：导出 CapabilityRouter；主要方法包括 routeContent、getRequiredCapabilities、checkCapabilitySupport；依赖 message_formatter.js（formatMultimodalContent、isTextFile）。
-- command_executor.js: 功能：在指定工作目录执行终端命令。责任：在运行时提供最小的命令执行能力，包含危险命令拦截与超时终止。内部结构：导出 CommandExecutor；主要方法 execute；内部包含 _checkCommandSafety 与阻断规则列表。
 - concurrency_controller.js: 功能：LLM 请求并发控制。责任：限制并发数量，并对同一智能体的请求做互斥约束；提供取消活跃/排队请求的能力。内部结构：导出 RequestInfo、ConcurrencyStats、ConcurrencyController；主要方法 executeRequest、cancelRequest；内部维护 activeRequests 与 requestQueue。
 - config.js: 功能：读取并解析平台配置。责任：按优先级加载 app.local.json/app.json 与 llmservices.local.json/llmservices.json，并对部分字段做默认值与路径归一化。内部结构：导出 loadConfig；包含内部函数 loadLlmServicesConfig、_loadOptionalJson、_validateMaxConcurrentRequests。
 - config_service.js: 功能：配置读写服务。责任：读取/保存 app.local.json 与 llmservices.local.json，提供 API key 掩码与 LLM 服务条目增删改等操作。内部结构：导出 ConfigService；包含 hasLocalConfig、getLlmConfig、saveLlmConfig、getLlmServices、addLlmService、updateLlmService 等方法。

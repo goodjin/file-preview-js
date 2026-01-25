@@ -24,7 +24,6 @@
  * - HTTP 请求：http_request
  * - 文件操作：read_file、write_file、list_files
  * - 工作空间：get_workspace_info
- * - 命令执行：run_command
  * 
  * 【与其他模块的关系】
  * - 被 LlmHandler 调用来执行工具
@@ -346,22 +345,6 @@ export class ToolExecutor {
           parameters: { type: "object", properties: {} }
         }
       },
-      // 命令执行
-      {
-        type: "function",
-        function: {
-          name: "run_command",
-          description: "在工作空间内执行终端命令。危险命令会被拦截。",
-          parameters: {
-            type: "object",
-            properties: {
-              command: { type: "string", description: "要执行的命令" },
-              timeoutMs: { type: "number", description: "超时时间（毫秒）" }
-            },
-            required: ["command"]
-          }
-        }
-      },
       // 合并模块提供的工具定义
       ...runtime.moduleLoader.getToolDefinitions()
     ];
@@ -426,8 +409,6 @@ export class ToolExecutor {
           return await this._executeListFiles(ctx, args);
         case "get_workspace_info":
           return await this._executeGetWorkspaceInfo(ctx, args);
-        case "run_command":
-          return await this._executeRunCommand(ctx, args);
         default:
           void runtime.log?.warn?.("未知工具调用", { toolName });
           return { error: `unknown_tool:${toolName}` };
@@ -988,20 +969,5 @@ export class ToolExecutor {
       return { error: "workspace_not_assigned", message: "当前智能体未分配工作空间" };
     }
     return await runtime.workspaceManager.getWorkspaceInfo(workspaceId);
-  }
-
-  async _executeRunCommand(ctx, args) {
-    const runtime = this.runtime;
-    const taskId = runtime._getTaskIdForAgent(ctx.agent?.id);
-    if (!taskId) {
-      return { error: "workspace_not_bound", message: "当前智能体未绑定工作空间" };
-    }
-    const workspacePath = runtime.workspaceManager.getWorkspacePath(taskId);
-    if (!workspacePath) {
-      return { error: "workspace_not_bound", message: "工作空间路径未找到" };
-    }
-    return await runtime.commandExecutor.execute(workspacePath, args.command, {
-      timeoutMs: args.timeoutMs
-    });
   }
 }

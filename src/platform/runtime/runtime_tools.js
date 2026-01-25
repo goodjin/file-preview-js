@@ -72,7 +72,6 @@ export class RuntimeTools {
       write_file: "workspace",
       list_files: "workspace",
       get_workspace_info: "workspace",
-      run_command: "command",
       run_javascript: "command",
       http_request: "network",
       compress_context: "context",

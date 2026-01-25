@@ -1,4 +1,4 @@
-﻿import readline from "node:readline";
+import readline from "node:readline";
 import { AgentSociety } from "../src/platform/core/agent_society.js";
 
 /**
@@ -57,7 +57,6 @@ spawn_agent(roleId="programmer-xxx", taskBrief={
 - 使用 list_files 查看工作空间结构
 - 使用 read_file 读取现有代码
 - 使用 write_file 创建架构文档和模块规格说明
-- 使用 run_command 执行测试和构建命令
 
 【进度汇报】
 - 架构设计完成后向用户汇报方案并征求确认
@@ -128,15 +127,13 @@ const PROGRAMMER_ROLE_PROMPT = `
 - 使用 write_file 创建代码文件（这是你的主要工作！）
 - 使用 read_file 查看相关文件和依赖模块
 - 使用 list_files 了解项目结构
-- 使用 run_command 执行测试
 
 【正确的工作流程】
 1. 收到任务后，首先仔细阅读 Task_Brief 中的约束条件
 2. 根据 constraints 选择正确的技术栈
 3. 使用 write_file 将代码写入文件（如：write_file(path="calculator.html", content="...")）
-4. 代码完成后，使用 run_command 测试
-5. 向架构师汇报完成情况
-6. 停止调用工具，等待下一步指示
+4. 向架构师汇报完成情况
+5. 停止调用工具，等待下一步指示
 
 【质量要求】
 - 代码完成后进行自测

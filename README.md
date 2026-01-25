@@ -39,7 +39,7 @@ Agent Society 是一个基于大语言模型（LLM）的自组织多智能体协
 - 📨 **异步消息通道**：发送、投递、接收与基础排队，支持并发控制
 - 📦 **工件存储与引用**：跨岗位交付以工件引用为主，避免长上下文传递
 - 📝 **提示词模板系统**：系统预置提示词与拼接模板加载
-- 🔧 **丰富的工具集**：文件操作、命令执行、HTTP 请求、JavaScript 沙箱运行、上下文压缩、SSH远程连接等
+- 🔧 **丰富的工具集**：文件操作、HTTP 请求、JavaScript 沙箱运行、上下文压缩、SSH远程连接等
 - 📊 **上下文管理**：自动监控上下文使用率，支持压缩、摘要与硬性限制保护
 - 🌐 **HTTP API & Web UI**：内置 HTTP 服务器与可视化 Web 界面
 - 📋 **完整日志系统**：分模块日志记录，支持多级别配置与生命周期追踪
@@ -294,7 +294,6 @@ agent-society/
 │       │   │   └── conversation_manager.js
 │       │   ├── workspace/ # 工作空间服务
 │       │   │   ├── workspace_manager.js
-│       │   │   └── command_executor.js
 │       │   ├── http/      # HTTP服务
 │       │   │   ├── http_server.js
 │       │   │   └── http_client.js

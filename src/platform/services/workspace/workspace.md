@@ -2,7 +2,7 @@
 
 ## 概述
 
-工作空间服务模块负责管理任务工作空间的文件操作和命令执行，确保路径安全和命令安全。
+工作空间服务模块负责任务工作空间的文件操作，确保路径安全。
 
 ## 模块职责
 
@@ -17,14 +17,6 @@
   - 工作空间元信息管理
   - 工作空间统计信息
 
-### command_executor.js
-- **职责**：命令执行器，在工作空间内安全执行终端命令
-- **主要功能**：
-  - 命令执行
-  - 命令安全检查（禁止危险命令）
-  - 超时控制
-  - 跨平台支持（Windows/Unix）
-
 ## 核心概念
 
 ### 工作空间绑定
@@ -36,16 +28,6 @@
 - 拒绝绝对路径
 - 拒绝包含 `..` 的路径
 - 验证解析后的路径是否在工作空间内
-
-### 命令安全
-禁止执行以下危险命令：
-- `rm -rf /`、`rm -rf /*`
-- `sudo`、`su`
-- `chmod 777`
-- `mkfs`、`dd if=`
-- `shutdown`、`reboot`
-- fork bomb: `:(){ :|:& };:`
-- Windows: `format c:`、`del /f /s /q c:`
 
 ## 使用示例
 
@@ -110,35 +92,6 @@ const info = await manager.getWorkspaceInfo(taskId);
 console.log(`文件数: ${info.fileCount}, 总大小: ${info.totalSize} bytes`);
 ```
 
-### 执行命令
-
-```javascript
-import { CommandExecutor } from "./services/workspace/command_executor.js";
-
-const executor = new CommandExecutor({
-  defaultTimeoutMs: 60000,
-  logger: myLogger
-});
-
-// 执行命令
-const result = await executor.execute(
-  workspacePath,
-  "npm install",
-  { timeoutMs: 120000 }
-);
-
-if (result.error) {
-  console.error(`命令失败: ${result.error}`);
-  if (result.timedOut) {
-    console.error(`超时: ${result.timeoutMs}ms`);
-  }
-} else {
-  console.log(`退出码: ${result.exitCode}`);
-  console.log(`标准输出: ${result.stdout}`);
-  console.log(`标准错误: ${result.stderr}`);
-}
-```
-
 ## 工作空间元信息
 
 工作空间元信息保存在工作空间目录的上一级，文件名为 `{workspaceId}.meta.json`：
@@ -164,15 +117,8 @@ if (result.error) {
 2. **拒绝路径遍历**：拒绝包含 `..` 的路径
 3. **路径验证**：确保解析后的路径在工作空间内
 
-### 命令安全
-1. **危险命令拦截**：禁止执行危险命令
-2. **超时控制**：防止命令无限执行
-3. **进程树终止**：Windows 使用 taskkill，Unix 使用 SIGKILL
-
 ## 注意事项
 
 1. **懒加载**：使用 `assignWorkspace` 时，文件夹不会立即创建，首次写入时才创建
 2. **路径规范化**：所有路径都会被规范化，确保安全
-3. **跨平台**：命令执行器支持 Windows 和 Unix 系统
-4. **超时处理**：命令执行超时后会强制终止进程树
-5. **元信息可选**：文件元信息是可选的，写入失败不影响主流程
+3. **元信息可选**：文件元信息是可选的，写入失败不影响主流程

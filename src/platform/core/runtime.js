@@ -1,4 +1,4 @@
-﻿import path from "node:path";
+import path from "node:path";
 import { Config } from "../utils/config/config.js";
 import { ArtifactStore } from "../services/artifact/artifact_store.js";
 import { MessageBus } from "./message_bus.js";
@@ -9,7 +9,6 @@ import { Logger, createNoopModuleLogger, normalizeLoggingConfig } from "../utils
 import { ConversationManager } from "../services/conversation/conversation_manager.js";
 import { HttpClient } from "../services/http/http_client.js";
 import { WorkspaceManager } from "../services/workspace/workspace_manager.js";
-import { CommandExecutor } from "../services/workspace/command_executor.js";
 import { ContactManager } from "../services/contact/contact_manager.js";
 import { ModuleLoader } from "../extensions/module_loader.js";
 import { LlmServiceRegistry } from "../services/llm/llm_service_registry.js";
@@ -154,7 +153,6 @@ export class Runtime {
     // ==================== 临时服务实例 ====================
     // 在 init() 中会重新初始化带 logger
     this.workspaceManager = new WorkspaceManager();
-    this.commandExecutor = new CommandExecutor();
     this.contactManager = new ContactManager();
     this.moduleLoader = new ModuleLoader();
     this.serviceRegistry = null;
@@ -392,7 +390,7 @@ export class Runtime {
    * 2. 初始化日志系统
    * 3. 初始化核心服务（MessageBus、OrgPrimitives、ArtifactStore、PromptLoader、LlmClient）
    * 4. 加载系统提示词
-   * 5. 初始化辅助服务（HttpClient、WorkspaceManager、CommandExecutor、ContactManager）
+   * 5. 初始化辅助服务（HttpClient、WorkspaceManager、ContactManager）
    * 6. 初始化工具组管理器
    * 7. 初始化模块加载器并加载模块
    * 8. 初始化 LLM 服务注册表和模型选择器
@@ -462,9 +460,8 @@ export class Runtime {
       onRetry: (event) => this._emitLlmRetry(event)
     }) : null;
     this.httpClient = new HttpClient({ logger: this.loggerRoot.forModule("http") });
-    // 重新初始化 WorkspaceManager 和 CommandExecutor 带 logger
+    // 重新初始化 WorkspaceManager 带 logger
     this.workspaceManager = new WorkspaceManager({ logger: this.loggerRoot.forModule("workspace") });
-    this.commandExecutor = new CommandExecutor({ logger: this.loggerRoot.forModule("command") });
     // 重新初始化 ContactManager 带 logger
     this.contactManager = new ContactManager({ logger: this.loggerRoot.forModule("contact") });
 

@@ -93,7 +93,7 @@ Agent Society 遵循"最小化系统"原则：
 │  │ • artifact/     - 工件存储、二进制检测、内容路由   │         │
 │  │ • llm/          - LLM客户端、服务注册、模型选择    │         │
 │  │ • conversation/ - 会话管理、上下文压缩            │         │
-│  │ • workspace/    - 工作空间、命令执行              │         │
+│  │ • workspace/    - 工作空间文件操作                │         │
 │  │ • http/         - HTTP服务器、HTTP客户端          │         │
 │  │ • contact/      - 联系人管理                      │         │
 │  └───────────────────────────────────────────────────┘         │
@@ -181,7 +181,6 @@ src/platform/
 │   │   └── conversation_manager.js # 会话管理
 │   ├── workspace/
 │   │   ├── workspace_manager.js   # 工作空间管理
-│   │   └── command_executor.js    # 命令执行
 │   ├── http/
 │   │   ├── http_server.js         # HTTP服务器
 │   │   └── http_client.js         # HTTP客户端
@@ -303,7 +302,6 @@ src/platform/
 
 #### 工作空间服务 (services/workspace/)
 - **workspace_manager.js**: 工作空间管理器，管理任务绑定的文件系统工作空间
-- **command_executor.js**: 命令执行器，在工作空间内安全执行Shell命令
 
 #### HTTP服务 (services/http/)
 - **http_server.js**: HTTP服务器
@@ -389,12 +387,11 @@ src/platform/
 - 限制全局或服务级的最大并发请求数
 - 协调消息处理循环的调度
 
-### WorkspaceManager & CommandExecutor (services/workspace/)
+### WorkspaceManager (services/workspace/)
 
 任务执行环境管理。
 
 - **WorkspaceManager**: 管理任务绑定的文件系统工作空间，提供文件读写能力。
-- **CommandExecutor**: 在工作空间内安全执行 Shell 命令。
 
 ## 智能体模型
 
@@ -615,7 +612,7 @@ Runtime 主类保留为核心协调器，负责初始化、配置管理和组合
 - **工件服务**: artifact_store, binary_detector, content_router
 - **LLM服务**: llm_client, llm_service_registry, model_selector, concurrency_controller
 - **会话服务**: conversation_manager
-- **工作空间服务**: workspace_manager, command_executor
+- **工作空间服务**: workspace_manager
 - **HTTP服务**: http_server, http_client
 - **联系人服务**: contact_manager
 
