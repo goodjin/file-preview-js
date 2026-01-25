@@ -31,17 +31,11 @@
       </div>
 
       <div class="form">
-        <label>argv（JSON 数组，或按空格/换行分隔）</label>
-        <textarea id="ffmpeg-argv" rows="4" spellcheck="false">["-version"]</textarea>
+        <label>vargs（完整参数字符串，不包含程序名）</label>
+        <textarea id="ffmpeg-vargs" rows="4" spellcheck="false">-i $FFMEPG_INPUT -c copy $FFMEPG_OUTPUT.mp4</textarea>
 
-        <label>inputs（JSON 数组，可选）</label>
-        <textarea id="ffmpeg-inputs" rows="3" spellcheck="false">[]</textarea>
-
-        <label>outputs（JSON 数组，可选）</label>
-        <textarea id="ffmpeg-outputs" rows="3" spellcheck="false">[]</textarea>
-
-        <label>replacements（JSON 数组，可选）</label>
-        <textarea id="ffmpeg-replacements" rows="3" spellcheck="false">[]</textarea>
+        <label>artifacts（JSON 数组，按顺序替换 $FFMEPG_INPUT）</label>
+        <textarea id="ffmpeg-artifacts" rows="3" spellcheck="false">[]</textarea>
       </div>
     </div>
 
@@ -58,4 +52,3 @@
   <script src="panel.js"></script>
 </body>
 </html>
-

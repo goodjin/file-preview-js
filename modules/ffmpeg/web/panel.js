@@ -55,17 +55,11 @@ const ModulePanel_Ffmpeg = {
 
   async submitTask() {
     try {
-      const argvRaw = (document.getElementById("ffmpeg-argv")?.value || "").trim();
-      const inputsRaw = (document.getElementById("ffmpeg-inputs")?.value || "").trim();
-      const outputsRaw = (document.getElementById("ffmpeg-outputs")?.value || "").trim();
-      const replacementsRaw = (document.getElementById("ffmpeg-replacements")?.value || "").trim();
+      const vargs = (document.getElementById("ffmpeg-vargs")?.value || "").trim();
+      const artifactsRaw = (document.getElementById("ffmpeg-artifacts")?.value || "").trim();
+      const artifacts = this._parseJsonArray(artifactsRaw);
 
-      const argv = this._parseArgv(argvRaw);
-      const inputs = this._parseJsonArray(inputsRaw);
-      const outputs = this._parseJsonArray(outputsRaw);
-      const replacements = this._parseJsonArray(replacementsRaw);
-
-      const body = { argv, inputs, outputs, replacements };
+      const body = { vargs, artifacts };
 
       const res = await this._fetchJson(`${this.apiBase}/tasks`, {
         method: "POST",
@@ -85,21 +79,6 @@ const ModulePanel_Ffmpeg = {
     } catch (err) {
       alert(`提交失败: ${err.message}`);
     }
-  },
-
-  _parseArgv(text) {
-    if (!text) return [];
-    if (text.startsWith("[")) {
-      const arr = JSON.parse(text);
-      if (!Array.isArray(arr) || arr.some(v => typeof v !== "string")) {
-        throw new Error("argv JSON 必须是字符串数组");
-      }
-      return arr;
-    }
-    return text
-      .split(/\s+/)
-      .map(s => s.trim())
-      .filter(Boolean);
   },
 
   _parseJsonArray(text) {
@@ -176,4 +155,3 @@ const ModulePanel_Ffmpeg = {
 
 window.ModulePanel_Ffmpeg = ModulePanel_Ffmpeg;
 document.addEventListener("DOMContentLoaded", () => void ModulePanel_Ffmpeg.init());
-

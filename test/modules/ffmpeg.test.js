@@ -87,8 +87,8 @@ describe("FFmpeg Module - Run and Status", () => {
     ctx.currentMessage = { id: "m1", taskId: "t1" };
 
     const runRes = await loader.executeToolCall(ctx, "ffmpeg_run", {
-      argv: [fakeFfmpegScript, "--write", "OUT"],
-      outputs: [{ index: 2, name: "out.txt", type: "text/plain" }]
+      vargs: `${fakeFfmpegScript} --write $FFMEPG_OUTPUT.txt`,
+      artifacts: []
     });
 
     expect(runRes.taskId).toBeDefined();
@@ -132,7 +132,7 @@ describe("FFmpeg Module - Run and Status", () => {
     const ctx = runtime._buildAgentContext(runtime._agents.get("root"));
     ctx.currentMessage = { id: "m2", taskId: "t2" };
 
-    const runRes = await loader.executeToolCall(ctx, "ffmpeg_run", { argv: "bad" });
+    const runRes = await loader.executeToolCall(ctx, "ffmpeg_run", { vargs: 123, artifacts: [] });
     expect(typeof runRes.taskId).toBe("string");
     expect(runRes.status).toBe("failed");
     expect(runRes.error).toBe("invalid_parameter");
@@ -147,7 +147,10 @@ describe("FFmpeg Module - Run and Status", () => {
     const ctx = runtime._buildAgentContext(runtime._agents.get("root"));
     ctx.currentMessage = { id: "m3", taskId: "t3" };
 
-    const runRes = await loader.executeToolCall(ctx, "ffmpeg_run", { argv: [fakeFfmpegScript, "--fail"] });
+    const runRes = await loader.executeToolCall(ctx, "ffmpeg_run", {
+      vargs: `${fakeFfmpegScript} --fail $FFMEPG_OUTPUT.txt`,
+      artifacts: []
+    });
     expect(typeof runRes.taskId).toBe("string");
 
     let status;

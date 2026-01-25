@@ -16,6 +16,13 @@ FFmpeg 模块为系统提供音视频处理命令执行能力。工具以异步�
 - ffmpeg_run
 - ffmpeg_task_status
 
+## ffmpeg_run 调用参数与占位符规则
+- 参数：`vargs`（字符串）与 `artifacts`（字符串数组）
+- vargs：不包含程序名的完整参数字符串，会被解析为 argv 并调用 ffmpeg
+- 输入占位符：`$FFMEPG_INPUT`（或 `$FFMPEG_INPUT`），按出现顺序逐个替换为 `artifacts` 中对应工件的真实文件路径
+- 输出占位符：`$FFMEPG_OUTPUT`（或 `$FFMPEG_OUTPUT`），用于替代输出文件路径；输出文件路径由工具内部预留的新工件文件路径提供，并通过 `outputArtifactIds` 返回
+- 扩展名：可写为 `$FFMEPG_OUTPUT.mp4` 以指定输出工件扩展名（支持多段扩展名，如 `.tar.gz`）
+
 ## 目录结构
 ```
 modules/ffmpeg/
@@ -28,4 +35,3 @@ modules/ffmpeg/
     ├── panel.js
     └── panel.css
 ```
-
