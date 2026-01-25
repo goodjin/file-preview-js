@@ -66,8 +66,11 @@ export class ConcurrencyController {
     // 活跃请求映射: agentId -> RequestInfo
     this.activeRequests = new Map();
     
-    // 等待队列
-    this.requestQueue = [];
+    // 等待队列（公平：每个 agent 同时最多 1 个 queued request）
+    // queuedByAgent: agentId -> RequestInfo
+    this.queuedByAgent = new Map();
+    // queuedAgentIds: 按入队顺序保存 agentId，用于 round-robin 取出
+    this.queuedAgentIds = [];
     
     // 统计信息
     this.stats = new ConcurrencyStats();
@@ -87,11 +90,11 @@ export class ConcurrencyController {
       throw error;
     }
 
-    // 检查该智能体是否已有活跃请求
-    if (this.activeRequests.has(agentId)) {
-      const error = new Error(`Agent ${agentId} already has an active request`);
+    // 检查该智能体是否已有 pending 请求（active 或 queued）
+    if (this.activeRequests.has(agentId) || this.queuedByAgent.has(agentId)) {
+      const error = new Error(`Agent ${agentId} already has a pending request`);
       this.stats.rejectedRequests++;
-      await this.log.warn("请求被拒绝：智能体已有活跃请求", { 
+      await this.log.warn("请求被拒绝：智能体已有 pending 请求", { 
         agentId, 
         error: error.message 
       });
@@ -104,7 +107,7 @@ export class ConcurrencyController {
       const requestInfo = new RequestInfo(agentId, requestFn, resolve, reject);
 
       // 如果可以立即执行，则立即执行
-      if (this._canExecuteRequest()) {
+      if (this._canExecuteRequest() && this.queuedAgentIds.length === 0) {
         this._executeRequestImmediately(requestInfo);
       } else {
         // 否则加入队列
@@ -142,10 +145,14 @@ export class ConcurrencyController {
       return true;
     }
 
-    // 检查队列中的请求
-    const queueIndex = this.requestQueue.findIndex(req => req.agentId === agentId);
-    if (queueIndex !== -1) {
-      const queuedRequest = this.requestQueue.splice(queueIndex, 1)[0];
+    // 检查队列中的请求（每 agent 最多 1 个 queued）
+    const queuedRequest = this.queuedByAgent.get(agentId);
+    if (queuedRequest) {
+      this.queuedByAgent.delete(agentId);
+      const index = this.queuedAgentIds.indexOf(agentId);
+      if (index !== -1) {
+        this.queuedAgentIds.splice(index, 1);
+      }
       this.stats.queueLength--;
       this.stats.rejectedRequests++; // 增加拒绝计数
       
@@ -228,7 +235,8 @@ export class ConcurrencyController {
    * @param {RequestInfo} requestInfo
    */
   async _enqueueRequest(requestInfo) {
-    this.requestQueue.push(requestInfo);
+    this.queuedByAgent.set(requestInfo.agentId, requestInfo);
+    this.queuedAgentIds.push(requestInfo.agentId);
     this.stats.queueLength++;
 
     await this.log.info("请求已加入队列", {
@@ -251,16 +259,24 @@ export class ConcurrencyController {
    * 处理队列中的等待请求
    */
   async _processQueue() {
-    while (this.requestQueue.length > 0 && this._canExecuteRequest()) {
-      const nextRequest = this.requestQueue.shift();
+    while (this.queuedAgentIds.length > 0 && this._canExecuteRequest()) {
+      const nextAgentId = this.queuedAgentIds.shift();
+      if (!nextAgentId) break;
+
+      const nextRequest = this.queuedByAgent.get(nextAgentId);
+      if (!nextRequest) {
+        continue;
+      }
+
+      this.queuedByAgent.delete(nextAgentId);
       this.stats.queueLength--;
-      
+
       // 异步记录日志，不阻塞
       this.log.info("从队列中取出请求进行处理", {
         agentId: nextRequest.agentId,
         queueLength: this.stats.queueLength
       }).catch(() => {});
-      
+
       this._executeRequestImmediately(nextRequest);
     }
   }
@@ -307,7 +323,7 @@ export class ConcurrencyController {
    */
   hasRequest(agentId) {
     return this.activeRequests.has(agentId) || 
-           this.requestQueue.some(req => req.agentId === agentId);
+           this.queuedByAgent.has(agentId);
   }
 
   /**
@@ -324,7 +340,7 @@ export class ConcurrencyController {
    * @returns {number}
    */
   getQueueLength() {
-    return this.requestQueue.length;
+    return this.queuedAgentIds.length;
   }
 
   /**

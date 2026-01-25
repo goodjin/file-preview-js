@@ -39,6 +39,8 @@ export class RuntimeLlm {
       return;
     }
 
+    const cancelScope = this.runtime._cancelManager?.newScope(agentId) ?? null;
+
     // 获取智能体应使用的 LlmClient
     const llmClient = this.runtime.getLlmClientForAgent(agentId);
     if (!llmClient) {
@@ -70,7 +72,7 @@ export class RuntimeLlm {
 
     const systemPrompt = this.buildSystemPromptForAgent(ctx);
     const conv = this.ensureConversation(agentId, systemPrompt);
-    await this.doLlmProcessing(ctx, message, conv, agentId, llmClient);
+    await this.doLlmProcessing(ctx, message, conv, agentId, llmClient, cancelScope);
   }
 
   /**
@@ -83,7 +85,16 @@ export class RuntimeLlm {
    * @returns {Promise<void>}
    * @private
    */
-  async doLlmProcessing(ctx, message, conv, agentId, llmClient) {
+  async doLlmProcessing(ctx, message, conv, agentId, llmClient, cancelScope) {
+    if (cancelScope) {
+      try {
+        cancelScope.assertActive();
+      } catch {
+        this.runtime._state.setAgentComputeStatus(agentId, 'idle');
+        return;
+      }
+    }
+
     // 在用户消息中注入上下文状态提示
     const contextStatusPrompt = this.runtime._conversationManager.buildContextStatusPrompt(agentId);
     const userContent = this.formatMessageForLlm(ctx, message) + contextStatusPrompt;
@@ -94,6 +105,15 @@ export class RuntimeLlm {
 
     const tools = this.runtime.getToolDefinitions();
     for (let i = 0; i < this.runtime.maxToolRounds; i += 1) {
+      if (cancelScope) {
+        try {
+          cancelScope.assertActive();
+        } catch {
+          this.runtime._state.setAgentComputeStatus(agentId, 'idle');
+          return;
+        }
+      }
+
       let msg = null;
       try {
         const llmMeta = {
@@ -103,12 +123,24 @@ export class RuntimeLlm {
           messageId: message?.id ?? null,
           messageFrom: message?.from ?? null,
           taskId: message?.taskId ?? null,
-          round: i + 1
+          round: i + 1,
+          cancelEpoch: cancelScope?.epoch ?? null
         };
         void this.runtime.log.info("请求 LLM", llmMeta);
         // 设置状态为等待LLM响应
         this.runtime._state.setAgentComputeStatus(agentId, 'waiting_llm');
         msg = await llmClient.chat({ messages: conv, tools, meta: llmMeta });
+
+        if (cancelScope && this.runtime._cancelManager.getEpoch(agentId) !== cancelScope.epoch) {
+          void this.runtime.log.info("检测到取消 epoch 变化，丢弃 LLM 响应", {
+            agentId,
+            expectedEpoch: cancelScope.epoch,
+            currentEpoch: this.runtime._cancelManager.getEpoch(agentId),
+            messageId: message?.id ?? null
+          });
+          this.runtime._state.setAgentComputeStatus(agentId, 'idle');
+          return;
+        }
         
         // 检查智能体状态：如果已被停止或正在停止，丢弃响应
         const statusAfterLlm = this.runtime._state.getAgentComputeStatus(agentId);
@@ -249,6 +281,10 @@ export class RuntimeLlm {
         
         // 没有工具调用但有文本内容，自动发送给 user
         if (content.trim()) {
+          if (cancelScope && this.runtime._cancelManager.getEpoch(agentId) !== cancelScope.epoch) {
+            this.runtime._state.setAgentComputeStatus(agentId, 'idle');
+            return;
+          }
           const currentAgentId = ctx.agent?.id ?? "unknown";
           // 没有调用 send_message 的回复默认发给 user
           const targetId = "user";
@@ -290,6 +326,11 @@ export class RuntimeLlm {
       });
 
       for (const call of toolCalls) {
+        if (cancelScope && this.runtime._cancelManager.getEpoch(agentId) !== cancelScope.epoch) {
+          this.runtime._state.setAgentComputeStatus(agentId, 'idle');
+          return;
+        }
+
         // 在执行每个工具调用前检查智能体状态
         const statusBeforeTool = this.runtime._state.getAgentComputeStatus(agentId);
         if (statusBeforeTool === 'stopped' || statusBeforeTool === 'stopping' || statusBeforeTool === 'terminating') {
@@ -358,6 +399,11 @@ export class RuntimeLlm {
           };
         }
         
+        if (cancelScope && this.runtime._cancelManager.getEpoch(agentId) !== cancelScope.epoch) {
+          this.runtime._state.setAgentComputeStatus(agentId, 'idle');
+          return;
+        }
+
         // 在工具执行后再次检查状态
         const statusAfterTool = this.runtime._state.getAgentComputeStatus(agentId);
         if (statusAfterTool === 'stopped' || statusAfterTool === 'stopping' || statusAfterTool === 'terminating') {

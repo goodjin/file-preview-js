@@ -22,16 +22,16 @@ import { JavaScriptExecutor } from "../runtime/javascript_executor.js";
 import { BrowserJavaScriptExecutor } from "../runtime/browser_javascript_executor.js";
 import { ContextBuilder } from "../runtime/context_builder.js";
 import { AgentManager } from "../runtime/agent_manager.js";
-import { MessageProcessor } from "../runtime/message_processor.js";
 import { ToolExecutor } from "../runtime/tool_executor.js";
-import { LlmHandler } from "../runtime/llm_handler.js";
 import { ShutdownManager } from "../runtime/shutdown_manager.js";
 import { RuntimeState } from "../runtime/runtime_state.js";
 import { RuntimeEvents } from "../runtime/runtime_events.js";
 import { RuntimeLifecycle } from "../runtime/runtime_lifecycle.js";
-import { RuntimeMessaging } from "../runtime/runtime_messaging.js";
 import { RuntimeTools } from "../runtime/runtime_tools.js";
 import { RuntimeLlm } from "../runtime/runtime_llm.js";
+import { AgentCancelManager } from "../runtime/agent_cancel_manager.js";
+import { TurnEngine } from "../runtime/turn_engine.js";
+import { ComputeScheduler } from "../runtime/compute_scheduler.js";
 
 /**
  * Runtime - 运行时核心协调器
@@ -179,18 +179,18 @@ export class Runtime {
     this._agentManager = new AgentManager(this);
     /** @type {RuntimeLifecycle} 生命周期管理器 */
     this._lifecycle = new RuntimeLifecycle(this);
-    /** @type {RuntimeMessaging} 消息处理循环管理器 */
-    this._messaging = new RuntimeMessaging(this);
-    /** @type {MessageProcessor} 消息处理器 */
-    this._messageProcessor = new MessageProcessor(this);
     /** @type {ToolExecutor} 工具执行器 */
     this._toolExecutor = new ToolExecutor(this);
     /** @type {RuntimeTools} 工具管理器 */
     this._tools = new RuntimeTools(this);
     /** @type {RuntimeLlm} LLM 交互管理器 */
     this._llm = new RuntimeLlm(this);
-    /** @type {LlmHandler} LLM 处理器 */
-    this._llmHandler = new LlmHandler(this);
+    /** @type {AgentCancelManager} 智能体取消/停止信号管理器 */
+    this._cancelManager = new AgentCancelManager({ logger: this.log });
+    /** @type {TurnEngine} 回合引擎（协程式） */
+    this._turnEngine = new TurnEngine(this);
+    /** @type {ComputeScheduler} 协程式计算调度器 */
+    this._computeScheduler = new ComputeScheduler(this, this._turnEngine);
     /** @type {ShutdownManager} 关闭管理器 */
     this._shutdownManager = new ShutdownManager(this);
   }
@@ -303,7 +303,9 @@ export class Runtime {
    * Requirements: 1.1, 1.4, 5.1
    */
   handleMessageInterruption(agentId, newMessage) {
-    return this._messaging.handleMessageInterruption(agentId, newMessage);
+    this._state.addInterruption(agentId, newMessage);
+    this._cancelManager?.abort(agentId, { reason: "message_interruption" });
+    this.llm?.abort(agentId);
   }
 
   /**
@@ -314,7 +316,7 @@ export class Runtime {
    * @returns {Promise<void>}
    */
   async startProcessing() {
-    return await this._messaging.startProcessing();
+    return await this._computeScheduler.start();
   }
 
   /**
@@ -325,7 +327,7 @@ export class Runtime {
    * @returns {Promise<void>}
    */
   async run() {
-    return await this._messaging.run();
+    return await this._computeScheduler.start();
   }
 
   // ==================== 状态管理接口 ====================
@@ -694,8 +696,7 @@ export class Runtime {
    * @returns {Promise<void>}
    */
   async startProcessing() {
-    // 委托给 RuntimeMessaging 处理
-    return await this._messaging.startProcessing();
+    return await this._computeScheduler.start();
   }
 
   /**
@@ -703,8 +704,7 @@ export class Runtime {
    * @returns {Promise<void>}
    */
   async run() {
-    // 委托给 RuntimeMessaging 处理
-    return await this._messaging.run();
+    return await this._computeScheduler.start();
   }
 
   /**
@@ -1160,6 +1160,9 @@ export class Runtime {
     for (const agentId of agentsToTerminate) {
       // 设置状态为 terminating
       this._state.setAgentComputeStatus(agentId, 'terminating');
+
+      // 统一取消语义：递增 epoch + abort signal（用于丢弃晚到结果）
+      this._cancelManager?.abort(agentId, { reason: "terminate_agent" });
       
       // 中止 LLM 调用
       const aborted = this.llm?.abort(agentId) ?? false;
@@ -1195,6 +1198,9 @@ export class Runtime {
       
       // 清理运算状态
       this._agentComputeStatus.delete(agentId);
+
+      // 清理取消状态
+      this._cancelManager?.clear(agentId);
     }
 
     // 持久化终止事件到组织状态（会自动处理级联终止）

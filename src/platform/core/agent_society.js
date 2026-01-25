@@ -245,7 +245,7 @@ export class AgentSociety {
       roleId: "root",
       roleName: "root",
       rolePrompt: rootPrompt,
-      behavior: async (ctx, message) => await ctx.runtime._handleWithLlm(ctx, message)
+      behavior: async () => {}
     });
     this.runtime.registerAgentInstance(rootAgent);
   }

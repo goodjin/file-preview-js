@@ -713,7 +713,7 @@ export class ToolExecutor {
     }
     
     // 2. Get current agent's LLM service ID
-    const serviceId = runtime._llmHandler?._getServiceIdForAgent?.(ctx.agent?.id) || null;
+    const serviceId = runtime.getLlmServiceIdForAgent?.(ctx.agent?.id ?? null) ?? null;
     
     // 3. If text content, return directly
     if (!artifact.isBinary) {
@@ -891,7 +891,8 @@ export class ToolExecutor {
       method: args.method,
       headers: args.headers,
       body: args.body,
-      timeoutMs: args.timeoutMs
+      timeoutMs: args.timeoutMs,
+      signal: runtime._cancelManager?.getSignal(agentId) ?? null
     });
     
     if (error) {

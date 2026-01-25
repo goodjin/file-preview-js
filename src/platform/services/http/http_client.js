@@ -10,6 +10,7 @@ import { createNoopModuleLogger } from "../../utils/logger/logger.js";
  * @property {Record<string, string>} [headers] - 请求头
  * @property {any} [body] - 请求体（POST/PUT/PATCH 时使用）
  * @property {number} [timeoutMs] - 超时时间（毫秒），默认 30000
+ * @property {AbortSignal} [signal] - 外部取消信号（用于 stop/abort 中止请求）
  */
 
 /**
@@ -107,6 +108,7 @@ export class HttpClient {
     const method = (options.method ?? "GET").toUpperCase();
     const url = options.url;
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const externalSignal = options.signal ?? null;
 
     // 初始化请求日志
     /** @type {HttpRequestLog} */
@@ -162,6 +164,22 @@ export class HttpClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       fetchOptions.signal = controller.signal;
+      
+      let abortedByExternal = false;
+      const abortByExternal = () => {
+        abortedByExternal = true;
+        try {
+          controller.abort();
+        } catch {}
+      };
+      
+      if (externalSignal) {
+        if (externalSignal.aborted) {
+          abortByExternal();
+        } else {
+          externalSignal.addEventListener("abort", abortByExternal, { once: true });
+        }
+      }
 
       await this.log.info("HTTP 请求开始", {
         requestId,
@@ -173,6 +191,11 @@ export class HttpClient {
 
       const response = await fetch(url, fetchOptions);
       clearTimeout(timeoutId);
+      if (externalSignal && !externalSignal.aborted) {
+        try {
+          externalSignal.removeEventListener("abort", abortByExternal);
+        } catch {}
+      }
 
       const latencyMs = Date.now() - startTime;
       const responseBody = await response.text();
@@ -208,7 +231,9 @@ export class HttpClient {
       
       // 处理超时错误
       const isTimeout = err && err.name === "AbortError";
-      const error = isTimeout ? "request_timeout" : errorMessage;
+      const error = isTimeout
+        ? (externalSignal?.aborted ? "request_aborted" : "request_timeout")
+        : errorMessage;
 
       requestLog.latencyMs = latencyMs;
       requestLog.error = error;

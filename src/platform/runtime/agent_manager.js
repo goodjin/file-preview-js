@@ -87,9 +87,7 @@ export class AgentManager {
     const behaviorFactory = runtime._behaviorRegistry.get(roleName);
     const behavior = behaviorFactory
       ? behaviorFactory(runtime._buildAgentContext())
-      : runtime.llm
-        ? async (ctx, message) => await runtime._handleWithLlm(ctx, message)
-        : async () => {};
+      : async () => {};
     
     // 创建智能体实例
     const agent = new Agent({
@@ -336,9 +334,7 @@ export class AgentManager {
       const behaviorFactory = runtime._behaviorRegistry.get(roleName);
       const behavior = behaviorFactory
         ? behaviorFactory(runtime._buildAgentContext())
-        : runtime.llm
-          ? async (ctx, message) => await runtime._handleWithLlm(ctx, message)
-          : async () => {};
+        : async () => {};
 
       const agent = new Agent({
         id: meta.id,

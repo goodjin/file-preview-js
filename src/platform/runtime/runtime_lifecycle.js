@@ -160,25 +160,23 @@ export class RuntimeLifecycle {
       void runtime.log?.warn?.("中止 LLM 调用失败：智能体不存在", { agentId });
       return { ok: false, agentId, aborted: false };
     }
-    
-    // 检查智能体状态
-    const status = runtime._state.getAgentComputeStatus(agentId);
-    if (status !== 'waiting_llm') {
-      void runtime.log?.info?.("智能体未在等待 LLM 响应", { agentId, status });
-      return { ok: true, agentId, aborted: false };
-    }
-    
-    // 中止 LLM 调用
+
+    // 统一取消语义：递增 epoch + abort signal（用于丢弃晚到结果）
+    runtime._cancelManager?.abort(agentId, { reason: "abort_llm_call" });
+
+    // 中止 LLM 调用（尽最大努力取消 active/queued）
     const aborted = runtime.llm?.abort(agentId) ?? false;
-    
+
+    // 无论是否能在网络层真正中止，都将当前计算状态置为 idle
+    // 具体的“丢弃响应/停止推进”由调用方在 await 返回后通过 epoch 校验保证
+    runtime._state.setAgentComputeStatus(agentId, 'idle');
+
     if (aborted) {
-      // 更新智能体状态为 idle
-      runtime._state.setAgentComputeStatus(agentId, 'idle');
-      void runtime.log?.info?.("成功中止 LLM 调用", { agentId });
+      void runtime.log?.info?.("已发起 LLM 中止请求", { agentId });
     } else {
-      void runtime.log?.warn?.("中止 LLM 调用失败", { agentId });
+      void runtime.log?.info?.("未发现可中止的 LLM 请求，但已触发取消 epoch", { agentId });
     }
-    
+
     return { ok: true, agentId, aborted };
   }
 
@@ -214,6 +212,9 @@ export class RuntimeLifecycle {
       if (currentStatus === 'waiting_llm' || currentStatus === 'processing' || currentStatus === 'idle') {
         // 设置状态为 stopping
         runtime._state.setAgentComputeStatus(agentId, 'stopping');
+
+        // 统一取消语义：递增 epoch + abort signal（用于丢弃晚到结果）
+        runtime._cancelManager?.abort(agentId, { reason: "cascade_stop" });
         
         // 中止 LLM 调用
         const aborted = runtime.llm?.abort(agentId) ?? false;
