@@ -48,30 +48,9 @@ export class RuntimeLlm {
       return;
     }
 
-    // 检查上下文是否超过硬性限制
-    const contextStatus = this.runtime._conversationManager.getContextStatus(agentId);
-    if (contextStatus.status === 'exceeded') {
-      void this.runtime.log.error("上下文已超过硬性限制，拒绝 LLM 调用", {
-        agentId,
-        usedTokens: contextStatus.usedTokens,
-        maxTokens: contextStatus.maxTokens,
-        usagePercent: (contextStatus.usagePercent * 100).toFixed(1) + '%'
-      });
-
-      // 向父智能体发送错误通知
-      await this.sendErrorNotificationToParent(agentId, message, {
-        errorType: "context_exceeded",
-        message: `智能体 ${agentId} 的上下文已超过硬性限制 (${contextStatus.usedTokens}/${contextStatus.maxTokens} tokens)`,
-        usedTokens: contextStatus.usedTokens,
-        maxTokens: contextStatus.maxTokens,
-        usagePercent: contextStatus.usagePercent
-      });
-
-      return;
-    }
-
     const systemPrompt = this.buildSystemPromptForAgent(ctx);
     const conv = this.ensureConversation(agentId, systemPrompt);
+
     await this.doLlmProcessing(ctx, message, conv, agentId, llmClient, cancelScope);
   }
 
@@ -115,7 +94,17 @@ export class RuntimeLlm {
       }
 
       let msg = null;
-      try {
+      let slideAttempted = false;
+      while (true) {
+        if (cancelScope) {
+          try {
+            cancelScope.assertActive();
+          } catch {
+            this.runtime._state.setAgentComputeStatus(agentId, 'idle');
+            return;
+          }
+        }
+
         const llmMeta = {
           agentId: ctx.agent?.id ?? null,
           roleId: ctx.agent?.roleId ?? null,
@@ -126,74 +115,96 @@ export class RuntimeLlm {
           round: i + 1,
           cancelEpoch: cancelScope?.epoch ?? null
         };
-        void this.runtime.log.info("请求 LLM", llmMeta);
-        // 设置状态为等待LLM响应
-        this.runtime._state.setAgentComputeStatus(agentId, 'waiting_llm');
-        msg = await llmClient.chat({ messages: conv, tools, meta: llmMeta });
 
-        if (cancelScope && this.runtime._cancelManager.getEpoch(agentId) !== cancelScope.epoch) {
-          void this.runtime.log.info("检测到取消 epoch 变化，丢弃 LLM 响应", {
-            agentId,
-            expectedEpoch: cancelScope.epoch,
-            currentEpoch: this.runtime._cancelManager.getEpoch(agentId),
-            messageId: message?.id ?? null
-          });
+        try {
+          if (agentId) {
+            const preSlideResult = this.runtime._conversationManager.slideWindowIfNeededByEstimate(agentId, { keepRatio: 0.7, maxLoops: 3 });
+            if (preSlideResult.ok && preSlideResult.slid) {
+              void this.runtime.log.warn("检测到上下文接近/超过硬性阈值，已在调用前自动滑动窗口", {
+                agentId,
+                round: i + 1,
+                preSlideResult
+              });
+            }
+          }
+
+          void this.runtime.log.info("请求 LLM", llmMeta);
+          this.runtime._state.setAgentComputeStatus(agentId, 'waiting_llm');
+          const convSnapshot = conv.slice();
+          msg = await llmClient.chat({ messages: conv, tools, meta: llmMeta });
+
+          if (agentId && msg?._usage?.promptTokens) {
+            const estimatorResult = this.runtime._conversationManager.updatePromptTokenEstimator(agentId, convSnapshot, msg._usage.promptTokens);
+            void this.runtime.log.debug("已更新 prompt token 估算器", { agentId, estimatorResult });
+          }
+
+          if (cancelScope && this.runtime._cancelManager.getEpoch(agentId) !== cancelScope.epoch) {
+            void this.runtime.log.info("检测到取消 epoch 变化，丢弃 LLM 响应", {
+              agentId,
+              expectedEpoch: cancelScope.epoch,
+              currentEpoch: this.runtime._cancelManager.getEpoch(agentId),
+              messageId: message?.id ?? null
+            });
+            this.runtime._state.setAgentComputeStatus(agentId, 'idle');
+            return;
+          }
+          
+          // 检查智能体状态：如果已被停止或正在停止，丢弃响应
+          const statusAfterLlm = this.runtime._state.getAgentComputeStatus(agentId);
+          if (statusAfterLlm === 'stopped' || statusAfterLlm === 'stopping' || statusAfterLlm === 'terminating') {
+            void this.runtime.log.info("智能体已停止，丢弃 LLM 响应", {
+              agentId,
+              status: statusAfterLlm,
+              messageId: message?.id ?? null
+            });
+            return;
+          }
+          
+          this.runtime._state.setAgentComputeStatus(agentId, 'processing');
+          break;
+        } catch (err) {
           this.runtime._state.setAgentComputeStatus(agentId, 'idle');
-          return;
-        }
-        
-        // 检查智能体状态：如果已被停止或正在停止，丢弃响应
-        const statusAfterLlm = this.runtime._state.getAgentComputeStatus(agentId);
-        if (statusAfterLlm === 'stopped' || statusAfterLlm === 'stopping' || statusAfterLlm === 'terminating') {
-          void this.runtime.log.info("智能体已停止，丢弃 LLM 响应", {
-            agentId,
-            status: statusAfterLlm,
-            messageId: message?.id ?? null
-          });
-          return; // 丢弃响应，结束处理
-        }
-        
-        // LLM响应后设置为处理中
-        this.runtime._state.setAgentComputeStatus(agentId, 'processing');
-      } catch (err) {
-        // 改进的异常处理：区分不同类型的错误
-        this.runtime._state.setAgentComputeStatus(agentId, 'idle');
-        
-        // 打印完整的原始错误信息（包含堆栈和行号）
-        void this.runtime.log.error("LLM 调用失败", { 
-          agentId: ctx.agent?.id ?? null, 
-          messageId: message?.id ?? null, 
-          taskId: message?.taskId ?? null,
-          round: i + 1,
-          error: err // 直接传递原始错误对象，让日志系统处理
-        });
-        
-        const text = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
-        const errorType = err?.name ?? "UnknownError";
 
-        // 从对话历史中移除导致失败的用户消息，避免下次调用时再次发送
-        if (i === 0 && conv.length > 0 && conv[conv.length - 1].role === "user") {
-          conv.pop();
-          void this.runtime.log.info("已从对话历史中移除导致失败的用户消息", {
-            agentId: ctx.agent?.id ?? null,
-            messageId: message?.id ?? null
-          });
-        }
+          if (!slideAttempted && this.isContextLengthExceededError(err) && agentId) {
+            slideAttempted = true;
+            const slideResult = this.runtime._conversationManager.slideWindowByEstimatedTokens(agentId, 0.7);
+            void this.runtime.log.warn("LLM 调用疑似 token/context 超限，已滑动上下文窗口并重试", {
+              agentId,
+              round: i + 1,
+              slideResult,
+              errorMessage: err?.message ?? String(err ?? "unknown error")
+            });
+            continue;
+          }
 
-        // 根据错误类型决定处理策略
-        if (errorType === "AbortError") {
-          // 中断错误：记录日志但不停止整个系统
-          void this.runtime.log.info("LLM 调用被用户中断，智能体将继续处理其他消息", { 
-            agentId: ctx.agent?.id ?? null,
-            messageId: message?.id ?? null,
-            taskId: message?.taskId ?? null
+          void this.runtime.log.error("LLM 调用失败", { 
+            agentId: ctx.agent?.id ?? null, 
+            messageId: message?.id ?? null, 
+            taskId: message?.taskId ?? null,
+            round: i + 1,
+            error: err
           });
           
-          // 不发送通知消息（根据需求 2.4）
-          
-          return; // 结束当前消息处理，但不停止整个系统
-        } else {
-          // 其他错误：记录详细信息，向父智能体发送错误通知，但不停止系统
+          const text = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
+          const errorType = err?.name ?? "UnknownError";
+
+          if (i === 0 && conv.length > 0 && conv[conv.length - 1].role === "user") {
+            conv.pop();
+            void this.runtime.log.info("已从对话历史中移除导致失败的用户消息", {
+              agentId: ctx.agent?.id ?? null,
+              messageId: message?.id ?? null
+            });
+          }
+
+          if (errorType === "AbortError") {
+            void this.runtime.log.info("LLM 调用被用户中断，智能体将继续处理其他消息", { 
+              agentId: ctx.agent?.id ?? null,
+              messageId: message?.id ?? null,
+              taskId: message?.taskId ?? null
+            });
+            return;
+          }
+
           void this.runtime.log.error("LLM 调用遇到非中断错误", {
             agentId: ctx.agent?.id ?? null,
             messageId: message?.id ?? null,
@@ -203,7 +214,6 @@ export class RuntimeLlm {
             willContinueProcessing: true
           });
           
-          // 向父智能体发送错误通知
           await this.sendErrorNotificationToParent(agentId, message, {
             errorType: "llm_call_failed",
             message: `LLM 调用失败: ${text}`,
@@ -211,7 +221,7 @@ export class RuntimeLlm {
             errorName: errorType
           });
           
-          return; // 结束当前消息处理，但不停止整个系统
+          return;
         }
       }
       if (!msg) {
@@ -234,7 +244,7 @@ export class RuntimeLlm {
         
         // 如果更新后超过硬性限制，记录警告（下次调用时会被拒绝）
         if (status.status === 'exceeded') {
-          void this.runtime.log.warn("上下文已超过硬性限制，下次 LLM 调用将被拒绝", {
+          void this.runtime.log.warn("上下文已超过硬性限制，将在下一次调用前自动滑动窗口", {
             agentId,
             usedTokens: status.usedTokens,
             maxTokens: status.maxTokens,
@@ -300,7 +310,7 @@ export class RuntimeLlm {
             to: targetId,
             from: currentAgentId,
             taskId: currentTaskId,
-            payload: { text: content.trim() }
+            payload: { text: content.trim(), usage: msg._usage ?? null }
           });
           
           // 记录智能体发送消息的生命周期事件
@@ -697,5 +707,39 @@ export class RuntimeLlm {
     }
 
     return result;
+  }
+
+  /**
+   * 判断错误是否可能是“上下文长度/token 超限”。\n   *
+   * 说明：不同 OpenAI 兼容服务的错误结构并不一致，这里采用“结构字段 + 文本关键词”混合判断。\n   *
+   * @param {any} err
+   * @returns {boolean}
+   */
+  isContextLengthExceededError(err) {
+    const status = err?.status ?? err?.response?.status ?? null;
+    const code = err?.error?.code ?? err?.code ?? null;
+    const type = err?.error?.type ?? err?.type ?? null;
+    const message = err && typeof err.message === "string" ? err.message : String(err ?? "");
+    const messageLower = message.toLowerCase();
+
+    if (code === "context_length_exceeded") {
+      return true;
+    }
+    if (type === "context_length_exceeded") {
+      return true;
+    }
+    if (status === 400 && (messageLower.includes("context length") || messageLower.includes("maximum context") || messageLower.includes("too many tokens"))) {
+      return true;
+    }
+    if (messageLower.includes("context_length_exceeded") || messageLower.includes("maximum context length")) {
+      return true;
+    }
+    if (message.includes("上下文") && (message.includes("超限") || message.includes("超过") || message.includes("太长"))) {
+      return true;
+    }
+    if (message.includes("token") && (message.includes("超限") || messageLower.includes("exceed") || messageLower.includes("limit"))) {
+      return true;
+    }
+    return false;
   }
 }

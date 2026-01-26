@@ -39,6 +39,18 @@ export class ConversationManager {
     
     // 每个智能体的 token 使用统计（基于 LLM 返回的实际值）
     this._tokenUsage = new Map();
+
+    /**
+     * prompt token 估算器（基于每次成功调用返回的 usage 动态校准）。
+     *
+     * 设计目标：
+     * - 不引入 tokenizer 依赖；
+     * - 用“上一次真实 prompt_tokens / 上一次发送内容字符数”得到 tokensPerChar；
+     * - 在 token/context 超限时，用估算值按比例滑动窗口，减少超限概率。
+     *
+     * Map<agentId, {tokensPerChar:number, lastPromptTokens:number, lastPromptChars:number, updatedAt:number}>
+     */
+    this._promptTokenEstimator = new Map();
   }
 
   /**
@@ -317,6 +329,409 @@ export class ConversationManager {
       totalTokens: usage.totalTokens ?? 0,
       updatedAt: Date.now()
     });
+  }
+
+  /**
+   * 更新 prompt token 估算器（基于本次实际发送的 messages 与返回的 promptTokens）。
+   *
+   * 注意：
+   * - 这里估算的是 prompt token（上下文输入 token），不包含 completion token。
+   * - 若 messages 过短或 promptTokens 非法，会跳过更新，避免污染估算器。
+   *
+   * @param {string} agentId
+   * @param {any[]} sentMessages - 本次实际发送给 LLM 的 messages（包含 system）
+   * @param {number} promptTokens - LLM 返回的 prompt_tokens
+   * @returns {{ok:boolean, tokensPerChar?:number, sampleChars?:number, sampleTokens?:number, error?:string}}
+   */
+  updatePromptTokenEstimator(agentId, sentMessages, promptTokens) {
+    if (!agentId) {
+      return { ok: false, error: "agent_id_missing" };
+    }
+    if (!Array.isArray(sentMessages) || sentMessages.length === 0) {
+      return { ok: false, error: "invalid_messages" };
+    }
+    if (typeof promptTokens !== "number" || !Number.isFinite(promptTokens) || promptTokens <= 0) {
+      return { ok: false, error: "invalid_prompt_tokens" };
+    }
+
+    const sampleChars = this._getMessagesCharCount(sentMessages);
+    if (!Number.isFinite(sampleChars) || sampleChars <= 0) {
+      return { ok: false, error: "invalid_sample_chars" };
+    }
+
+    const raw = promptTokens / sampleChars;
+    const current = this._clamp(raw, 0.05, 8);
+    const prev = this._promptTokenEstimator.get(agentId)?.tokensPerChar ?? null;
+
+    const tokensPerChar = typeof prev === "number" && Number.isFinite(prev)
+      ? (prev * 0.7 + current * 0.3)
+      : current;
+
+    this._promptTokenEstimator.set(agentId, {
+      tokensPerChar,
+      lastPromptTokens: promptTokens,
+      lastPromptChars: sampleChars,
+      updatedAt: Date.now()
+    });
+
+    return { ok: true, tokensPerChar, sampleChars, sampleTokens: promptTokens };
+  }
+
+  /**
+   * 估算一条消息的 prompt token 数。
+   *
+   * 估算策略：
+   * - token ≈ 内容字符数 * tokensPerChar；
+   * - 如果没有校准样本，使用保守默认值（1 token/char），倾向于“少发不超限”。\n   *
+   * @param {string} agentId
+   * @param {{role?:string, content?:any}} message
+   * @returns {number}
+   */
+  estimateMessageTokens(agentId, message) {
+    const tokensPerChar = this._promptTokenEstimator.get(agentId)?.tokensPerChar ?? 1;
+    const charCount = this._getMessageCharCount(message);
+    const estimated = charCount * tokensPerChar;
+    return Math.max(0, Math.ceil(estimated));
+  }
+
+  /**
+   * 估算一组 messages 的 prompt token 数。
+   * @param {string} agentId
+   * @param {any[]} messages
+   * @returns {number}
+   */
+  estimatePromptTokens(agentId, messages) {
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return 0;
+    }
+    let total = 0;
+    for (const msg of messages) {
+      total += this.estimateMessageTokens(agentId, msg);
+    }
+    return total;
+  }
+
+  /**
+   * 获取“基于估算 token”的上下文限制状态。
+   *
+   * 说明：
+   * - 该状态用于在发起 LLM 请求前做预防性滑动窗口；\n   * - 与 getContextStatus() 不同，它不依赖上一次真实 usage，而是对“当前将要发送的 messages”做估算。\n   *
+   * @param {string} agentId
+   * @param {any[]} messages
+   * @returns {{estimatedPromptTokens:number, maxTokens:number, hardLimitThreshold:number, thresholdTokens:number, status:'normal'|'exceeded'}}
+   */
+  getEstimatedContextLimitStatus(agentId, messages) {
+    const maxTokens = this.contextLimit?.maxTokens ?? 0;
+    const hardLimitThreshold = this.contextLimit?.hardLimitThreshold ?? 1;
+    const thresholdTokens = Math.floor(maxTokens * hardLimitThreshold);
+
+    const estimatedPromptTokens = this.estimatePromptTokens(agentId, messages);
+
+    const exceeded = Boolean(maxTokens) && Number.isFinite(maxTokens) && maxTokens > 0 && estimatedPromptTokens >= thresholdTokens;
+    return {
+      estimatedPromptTokens,
+      maxTokens,
+      hardLimitThreshold,
+      thresholdTokens,
+      status: exceeded ? 'exceeded' : 'normal'
+    };
+  }
+
+  /**
+   * 如果“估算 token”达到硬性阈值，则自动滑动窗口。
+   *
+   * @param {string} agentId
+   * @param {{keepRatio?:number, maxLoops?:number}} [options]
+   * @returns {{ok:boolean, slid:boolean, loops:number, before?:ReturnType<ConversationManager['getEstimatedContextLimitStatus']>, after?:ReturnType<ConversationManager['getEstimatedContextLimitStatus']>, slideResults?:any[], error?:string}}
+   */
+  slideWindowIfNeededByEstimate(agentId, options = {}) {
+    const keepRatio = typeof options.keepRatio === "number" ? options.keepRatio : 0.7;
+    const maxLoops = typeof options.maxLoops === "number" ? options.maxLoops : 3;
+
+    const conv = this.conversations.get(agentId);
+    if (!conv) {
+      return { ok: false, slid: false, loops: 0, error: "conversation_not_found" };
+    }
+
+    const before = this.getEstimatedContextLimitStatus(agentId, conv);
+    if (before.status !== 'exceeded') {
+      return { ok: true, slid: false, loops: 0, before, after: before, slideResults: [] };
+    }
+
+    const slideResults = [];
+    let slid = false;
+    let loops = 0;
+
+    for (let i = 0; i < maxLoops; i += 1) {
+      const status = this.getEstimatedContextLimitStatus(agentId, conv);
+      if (status.status !== 'exceeded') {
+        break;
+      }
+
+      const slideResult = this.slideWindowByEstimatedTokens(agentId, keepRatio);
+      slideResults.push(slideResult);
+      loops += 1;
+
+      if (!slideResult.ok) {
+        return { ok: false, slid, loops, before, after: this.getEstimatedContextLimitStatus(agentId, conv), slideResults, error: slideResult.error ?? "slide_failed" };
+      }
+
+      if (slideResult.slid) {
+        slid = true;
+      } else {
+        break;
+      }
+    }
+
+    const after = this.getEstimatedContextLimitStatus(agentId, conv);
+    return { ok: true, slid, loops, before, after, slideResults };
+  }
+
+  /**
+   * 按“估算 token”滑动上下文窗口：保留 system + 最后 keepRatio 的非 system token 贡献。
+   *
+   * 设计约束：
+   * - 必须保留开头连续的 system 消息（system prompt + 历史摘要等）。
+   * - 裁剪边界不能导致 tool 响应失去对应的 tool_calls（避免孤立 tool 消息）。
+   *
+   * @param {string} agentId
+   * @param {number} [keepRatio=0.7] - 保留比例（0-1），含义为“保留最后 keepRatio 的 token 贡献”
+   * @returns {{ok:boolean, slid?:boolean, originalCount?:number, newCount?:number, estimatedTotalTokens?:number, estimatedKeptNonSystemTokens?:number, keepRatio?:number, error?:string}}
+   */
+  slideWindowByEstimatedTokens(agentId, keepRatio = 0.7) {
+    const conv = this.conversations.get(agentId);
+    if (!conv) {
+      return { ok: false, error: "conversation_not_found" };
+    }
+    if (typeof keepRatio !== "number" || !Number.isFinite(keepRatio) || keepRatio <= 0 || keepRatio >= 1) {
+      return { ok: false, error: "invalid_keep_ratio" };
+    }
+
+    const originalCount = conv.length;
+    if (originalCount <= 1) {
+      return { ok: true, slid: false, originalCount, newCount: originalCount, estimatedTotalTokens: 0, estimatedKeptNonSystemTokens: 0, keepRatio };
+    }
+
+    const systemPrefixLen = this._getSystemPrefixLength(conv);
+    const nonSystem = conv.slice(systemPrefixLen);
+    if (nonSystem.length === 0) {
+      return { ok: true, slid: false, originalCount, newCount: originalCount, estimatedTotalTokens: this.estimatePromptTokens(agentId, conv), estimatedKeptNonSystemTokens: 0, keepRatio };
+    }
+
+    const nonSystemTokens = nonSystem.map((m) => this.estimateMessageTokens(agentId, m));
+    const totalNonSystemTokens = nonSystemTokens.reduce((a, b) => a + b, 0);
+    const targetKeptNonSystemTokens = Math.max(1, Math.ceil(totalNonSystemTokens * keepRatio));
+
+    let keptNonSystemTokens = 0;
+    let startInNonSystem = nonSystem.length - 1;
+    for (let i = nonSystem.length - 1; i >= 0; i -= 1) {
+      keptNonSystemTokens += nonSystemTokens[i];
+      startInNonSystem = i;
+      if (keptNonSystemTokens >= targetKeptNonSystemTokens) {
+        break;
+      }
+    }
+
+    let startGlobal = systemPrefixLen + startInNonSystem;
+    startGlobal = this._adjustStartIndexForToolConsistency(conv, startGlobal, systemPrefixLen);
+
+    const newConv = [
+      ...conv.slice(0, systemPrefixLen),
+      ...conv.slice(startGlobal)
+    ];
+
+    if (newConv.length === originalCount) {
+      return {
+        ok: true,
+        slid: false,
+        originalCount,
+        newCount: originalCount,
+        estimatedTotalTokens: this.estimatePromptTokens(agentId, conv),
+        estimatedKeptNonSystemTokens: keptNonSystemTokens,
+        keepRatio
+      };
+    }
+
+    conv.splice(0, conv.length, ...newConv);
+
+    return {
+      ok: true,
+      slid: true,
+      originalCount,
+      newCount: conv.length,
+      estimatedTotalTokens: this.estimatePromptTokens(agentId, conv),
+      estimatedKeptNonSystemTokens: keptNonSystemTokens,
+      keepRatio
+    };
+  }
+
+  /**
+   * 计算会话开头连续 system 消息的长度。
+   * @param {any[]} conv
+   * @returns {number}
+   * @private
+   */
+  _getSystemPrefixLength(conv) {
+    let n = 0;
+    for (let i = 0; i < conv.length; i += 1) {
+      if (conv[i]?.role === "system") {
+        n += 1;
+      } else {
+        break;
+      }
+    }
+    return n;
+  }
+
+  /**
+   * 根据 tool_calls/tool_call_id 的关系，调整裁剪起点，避免孤立 tool 响应。
+   *
+   * 处理策略：
+   * - 如果裁剪后 suffix 中存在 tool 消息，其 tool_call_id 在 suffix 中找不到对应的 assistant tool_calls.id，说明裁剪截断了调用链。\n   * - 优先向前扩展（把对应的 assistant tool_calls 拉进来）；找不到则丢弃该 tool 消息（将起点推进到 tool 之后）。\n   *
+   * @param {any[]} conv
+   * @param {number} startGlobal
+   * @param {number} minStart - 不允许小于 system 前缀长度
+   * @returns {number}
+   * @private
+   */
+  _adjustStartIndexForToolConsistency(conv, startGlobal, minStart) {
+    let start = Math.max(minStart, startGlobal);
+    if (start >= conv.length) {
+      return Math.max(minStart, conv.length - 1);
+    }
+
+    for (let guard = 0; guard < 20; guard += 1) {
+      const suffix = conv.slice(start);
+      const callIds = this._collectToolCallIdsFromMessages(suffix);
+
+      let orphanGlobalIndex = -1;
+      let orphanToolCallId = null;
+      for (let i = 0; i < suffix.length; i += 1) {
+        const msg = suffix[i];
+        if (msg?.role === "tool" && msg.tool_call_id) {
+          if (!callIds.has(msg.tool_call_id)) {
+            orphanGlobalIndex = start + i;
+            orphanToolCallId = msg.tool_call_id;
+            break;
+          }
+        }
+      }
+
+      if (orphanGlobalIndex === -1) {
+        return start;
+      }
+
+      const callIndex = this._findAssistantToolCallMessageIndex(conv, orphanToolCallId, orphanGlobalIndex - 1);
+      if (callIndex >= minStart && callIndex >= 0) {
+        start = Math.min(start, callIndex);
+        continue;
+      }
+
+      start = Math.min(conv.length, orphanGlobalIndex + 1);
+      start = Math.max(minStart, start);
+      if (start >= conv.length) {
+        return Math.max(minStart, conv.length - 1);
+      }
+    }
+
+    return start;
+  }
+
+  /**
+   * 收集 messages 中所有 assistant.tool_calls.id。
+   * @param {any[]} messages
+   * @returns {Set<string>}
+   * @private
+   */
+  _collectToolCallIdsFromMessages(messages) {
+    const ids = new Set();
+    for (const msg of messages) {
+      if (msg?.role === "assistant" && Array.isArray(msg.tool_calls)) {
+        for (const call of msg.tool_calls) {
+          if (call?.id) {
+            ids.add(call.id);
+          }
+        }
+      }
+    }
+    return ids;
+  }
+
+  /**
+   * 在 conv 中从指定位置向前查找包含目标 tool_call_id 的 assistant 消息。
+   * @param {any[]} conv
+   * @param {string} toolCallId
+   * @param {number} fromIndex - 起始搜索位置（包含）
+   * @returns {number} 找到返回索引，否则返回 -1
+   * @private
+   */
+  _findAssistantToolCallMessageIndex(conv, toolCallId, fromIndex) {
+    if (!toolCallId) {
+      return -1;
+    }
+    const start = Math.min(fromIndex, conv.length - 1);
+    for (let i = start; i >= 0; i -= 1) {
+      const msg = conv[i];
+      if (msg?.role !== "assistant" || !Array.isArray(msg.tool_calls)) {
+        continue;
+      }
+      for (const call of msg.tool_calls) {
+        if (call?.id === toolCallId) {
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * 获取一条消息的内容字符数（用于 prompt token 估算）。\n   *
+   * @param {{content?:any}} message
+   * @returns {number}
+   * @private
+   */
+  _getMessageCharCount(message) {
+    const content = message?.content;
+    if (typeof content === "string") {
+      return content.length;
+    }
+    if (content === null || content === undefined) {
+      return 0;
+    }
+    try {
+      return JSON.stringify(content).length;
+    } catch {
+      return String(content).length;
+    }
+  }
+
+  /**
+   * 获取 messages 的内容字符总数（用于 prompt token 估算）。\n   *
+   * @param {any[]} messages
+   * @returns {number}
+   * @private
+   */
+  _getMessagesCharCount(messages) {
+    let total = 0;
+    for (const msg of messages) {
+      total += this._getMessageCharCount(msg);
+    }
+    return total;
+  }
+
+  /**
+   * 数值夹逼。\n   *
+   * @param {number} value
+   * @param {number} min
+   * @param {number} max
+   * @returns {number}
+   * @private
+   */
+  _clamp(value, min, max) {
+    if (!Number.isFinite(value)) return min;
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
   }
 
   /**

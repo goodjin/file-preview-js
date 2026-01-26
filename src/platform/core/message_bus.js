@@ -75,13 +75,19 @@ export class MessageBus {
     const delayMs = Math.max(0, Number.isFinite(parsedDelayMs) ? parsedDelayMs : 0);
     
     let interruptionTriggered = false;
-    if (delayMs === 0 && this._isAgentActivelyProcessing && this._isAgentActivelyProcessing(message.to)) {
+    const toStatus = this._getAgentStatus ? this._getAgentStatus(message.to) : null;
+    const shouldInterrupt = delayMs === 0 &&
+      this._isAgentActivelyProcessing &&
+      this._isAgentActivelyProcessing(message.to) &&
+      toStatus === "waiting_llm";
+    if (shouldInterrupt) {
       interruptionTriggered = true;
       // 智能体正在活跃处理，需要触发中断流程
       void this.log.info("检测到活跃处理智能体，触发中断流程", {
         to: message.to,
         from: message.from,
-        taskId: message.taskId ?? null
+        taskId: message.taskId ?? null,
+        toStatus
       });
       
       // 触发中断回调（如果提供）

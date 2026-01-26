@@ -1,5 +1,5 @@
-﻿import { describe, expect, test } from "bun:test";
-import { Runtime } from "../src/platform/core/runtime.js";
+import { describe, expect, test } from "bun:test";
+import { Runtime } from "../../src/platform/core/runtime.js";
 
 describe("Runtime - Message Interruption Integration", () => {
   
@@ -41,15 +41,15 @@ describe("Runtime - Message Interruption Integration", () => {
     const agentId = "test-agent";
     
     // Initially not active
-    expect(runtime.isAgentActivelyProcessing(agentId)).toBe(false);
+    expect(runtime._state.isAgentActivelyProcessing(agentId)).toBe(false);
     
     // Simulate adding to active processing set
     runtime._activeProcessingAgents.add(agentId);
-    expect(runtime.isAgentActivelyProcessing(agentId)).toBe(true);
+    expect(runtime._state.isAgentActivelyProcessing(agentId)).toBe(true);
     
     // Remove from active processing set
     runtime._activeProcessingAgents.delete(agentId);
-    expect(runtime.isAgentActivelyProcessing(agentId)).toBe(false);
+    expect(runtime._state.isAgentActivelyProcessing(agentId)).toBe(false);
     
     await runtime.shutdown();
   });
@@ -79,6 +79,7 @@ describe("Runtime - Message Interruption Integration", () => {
     
     // Mark agent as actively processing
     runtime._activeProcessingAgents.add(agentId);
+    runtime.setAgentComputeStatus(agentId, "waiting_llm");
     
     // Send message to active agent
     runtime.bus.send({ to: agentId, from: "user", payload: "test" });
@@ -115,7 +116,7 @@ describe("Runtime - Message Interruption Integration", () => {
     };
     
     // Agent is NOT in active processing set
-    expect(runtime.isAgentActivelyProcessing(agentId)).toBe(false);
+    expect(runtime._state.isAgentActivelyProcessing(agentId)).toBe(false);
     
     // Send message to inactive agent
     runtime.bus.send({ to: agentId, from: "user", payload: "test" });

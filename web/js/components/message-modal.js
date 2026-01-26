@@ -75,6 +75,14 @@ const MessageModal = {
   renderContent(message) {
     if (!this.body) return;
 
+    const usage = message?.payload?.usage ?? null;
+    const usageHtml = usage ? `
+      <div class="detail-item">
+        <div class="detail-label">Token Usage</div>
+        <div class="json-viewer">${this.formatJson(usage)}</div>
+      </div>
+    ` : '';
+
     const html = `
       <div class="detail-item">
         <div class="detail-label">消息 ID</div>
@@ -96,6 +104,7 @@ const MessageModal = {
         <div class="detail-label">创建时间</div>
         <div class="detail-value">${this.formatTime(message.createdAt)}</div>
       </div>
+      ${usageHtml}
       <div class="detail-item">
         <div class="detail-label">消息内容 (Payload)</div>
         <div class="json-viewer">${this.formatJson(message.payload)}</div>

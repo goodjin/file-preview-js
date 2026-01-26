@@ -1,6 +1,6 @@
-﻿import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import * as fc from "fast-check";
-import { MessageBus } from "../src/platform/core/message_bus.js";
+import { MessageBus } from "../../src/platform/core/message_bus.js";
 
 describe("MessageBus - Property-Based Tests for Active Agent Detection", () => {
   
@@ -25,6 +25,7 @@ describe("MessageBus - Property-Based Tests for Active Agent Detection", () => {
           let interruptionCount = 0;
           
           const bus = new MessageBus({
+            getAgentStatus: (id) => (id === agentId && isActive ? "waiting_llm" : "idle"),
             isAgentActivelyProcessing: (id) => {
               return id === agentId && isActive;
             },
@@ -97,6 +98,7 @@ describe("MessageBus - Property-Based Tests for Active Agent Detection", () => {
           const interruptionLog = [];
           
           const bus = new MessageBus({
+            getAgentStatus: (id) => (id === agentId && isActive ? "waiting_llm" : "idle"),
             isAgentActivelyProcessing: (id) => id === agentId && isActive,
             onInterruptionNeeded: (id, message) => {
               interruptionLog.push({ 
@@ -174,6 +176,7 @@ describe("MessageBus - Property-Based Tests for Active Agent Detection", () => {
           });
           
           const bus = new MessageBus({
+            getAgentStatus: (id) => (activeAgents.has(id) ? "waiting_llm" : "idle"),
             isAgentActivelyProcessing: (id) => activeAgents.has(id),
             onInterruptionNeeded: (id, message) => {
               interruptionCounts.set(id, (interruptionCounts.get(id) || 0) + 1);
@@ -234,6 +237,7 @@ describe("MessageBus - Property-Based Tests for Active Agent Detection", () => {
         fc.array(fc.integer({ min: 1, max: 1000 }), { minLength: 3, maxLength: 10 }), // payloads
         (agentId, isActive, payloads) => {
           const bus = new MessageBus({
+            getAgentStatus: (id) => (id === agentId && isActive ? "waiting_llm" : "idle"),
             isAgentActivelyProcessing: (id) => id === agentId && isActive,
             onInterruptionNeeded: (id, message) => {
               // Interruption callback
@@ -288,6 +292,7 @@ describe("MessageBus - Property-Based Tests for Active Agent Detection", () => {
           let interruptionCount = 0;
           
           const bus = new MessageBus({
+            getAgentStatus: (id) => (id === agentId && isActive ? "waiting_llm" : "idle"),
             isAgentActivelyProcessing: (id) => id === agentId && isActive,
             onInterruptionNeeded: (id, message) => {
               interruptionCount++;

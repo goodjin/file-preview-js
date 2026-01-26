@@ -1,4 +1,4 @@
-﻿import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { rm, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { ConversationManager } from "../src/platform/services/conversation/conversation_manager.js";
@@ -225,6 +225,96 @@ describe("ConversationManager", () => {
       manager.clearTokenUsage(agentId);
       
       expect(manager.getTokenUsage(agentId)).toBeNull();
+    });
+  });
+
+  describe("Prompt token 估算与滑动窗口", () => {
+    test("updatePromptTokenEstimator 可基于 usage 校准 tokensPerChar", () => {
+      const agentId = "agent-1";
+      const sampleMessages = [{ role: "system", content: "a".repeat(100) }];
+
+      const result = manager.updatePromptTokenEstimator(agentId, sampleMessages, 200);
+      expect(result.ok).toBe(true);
+      expect(result.tokensPerChar).toBeCloseTo(2, 3);
+
+      const estimated = manager.estimateMessageTokens(agentId, { role: "user", content: "a".repeat(10) });
+      expect(estimated).toBe(20);
+    });
+
+    test("slideWindowByEstimatedTokens 按估算 token 保留最后 70%", () => {
+      const agentId = "agent-1";
+      const conv = manager.ensureConversation(agentId, "system prompt");
+
+      manager.updatePromptTokenEstimator(agentId, [{ role: "system", content: "a".repeat(100) }], 100);
+
+      for (let i = 0; i < 10; i++) {
+        conv.push({ role: "user", content: "x".repeat(10) });
+      }
+
+      const result = manager.slideWindowByEstimatedTokens(agentId, 0.7);
+      expect(result.ok).toBe(true);
+      expect(result.slid).toBe(true);
+
+      const updated = manager.getConversation(agentId);
+      expect(updated[0].role).toBe("system");
+      expect(updated.length).toBe(8); // 1 system + last 7 user
+      for (let i = 1; i < updated.length; i++) {
+        expect(updated[i].role).toBe("user");
+        expect(updated[i].content.length).toBe(10);
+      }
+    });
+
+    test("slideWindowByEstimatedTokens 不截断 tool_call 链路", () => {
+      const agentId = "agent-1";
+      const conv = manager.ensureConversation(agentId, "system prompt");
+
+      manager.updatePromptTokenEstimator(agentId, [{ role: "system", content: "a".repeat(100) }], 100);
+
+      conv.push({ role: "user", content: "u".repeat(10) });
+      conv.push({
+        role: "assistant",
+        content: "call".repeat(2),
+        tool_calls: [{ id: "call_1", function: { name: "tool_x", arguments: "{}" } }]
+      });
+      conv.push({ role: "tool", tool_call_id: "call_1", content: "t".repeat(1000) });
+      conv.push({ role: "assistant", content: "a".repeat(1000) });
+
+      const result = manager.slideWindowByEstimatedTokens(agentId, 0.7);
+      expect(result.ok).toBe(true);
+
+      const verify = manager.verifyHistoryConsistency(agentId);
+      expect(verify.consistent).toBe(true);
+
+      const updated = manager.getConversation(agentId);
+      const hasCall = updated.some(m => m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.some(c => c.id === "call_1"));
+      const hasTool = updated.some(m => m.role === "tool" && m.tool_call_id === "call_1");
+      expect(hasCall).toBe(true);
+      expect(hasTool).toBe(true);
+    });
+
+    test("slideWindowIfNeededByEstimate 在超过硬性阈值时触发滑动", () => {
+      const agentId = "agent-1";
+      manager = new ConversationManager({
+        maxContextMessages: 50,
+        conversationsDir: tempDir,
+        contextLimit: {
+          maxTokens: 100,
+          warningThreshold: 0.7,
+          criticalThreshold: 0.9,
+          hardLimitThreshold: 0.95
+        }
+      });
+
+      const conv = manager.ensureConversation(agentId, "system prompt");
+      manager.updatePromptTokenEstimator(agentId, [{ role: "system", content: "a".repeat(100) }], 100);
+
+      conv.push({ role: "user", content: "x".repeat(200) }); // 估算为 200 tokens，超过阈值
+
+      const result = manager.slideWindowIfNeededByEstimate(agentId, { keepRatio: 0.7, maxLoops: 3 });
+      expect(result.ok).toBe(true);
+      expect(result.before.status).toBe("exceeded");
+      expect(result.slid).toBe(true);
+      expect(result.after.estimatedPromptTokens).toBeLessThan(result.before.estimatedPromptTokens);
     });
   });
 

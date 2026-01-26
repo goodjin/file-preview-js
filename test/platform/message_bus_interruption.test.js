@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MessageBus 插话检测单元测试
  * 
  * 测试 MessageBus 的插话检测功能：
@@ -10,16 +10,18 @@
  */
 
 import { describe, test, expect, beforeEach } from "bun:test";
-import { MessageBus } from "../src/platform/core/message_bus.js";
+import { MessageBus } from "../../src/platform/core/message_bus.js";
 
 describe("MessageBus 插话检测", () => {
   let bus;
   let callbackCalls;
   let isActivelyProcessingCalls;
+  let statusByAgent;
 
   beforeEach(() => {
     callbackCalls = [];
     isActivelyProcessingCalls = [];
+    statusByAgent = new Map([["agent-1", "waiting_llm"]]);
     
     bus = new MessageBus({
       logger: {
@@ -28,6 +30,7 @@ describe("MessageBus 插话检测", () => {
         warn: async () => {},
         error: async () => {}
       },
+      getAgentStatus: (agentId) => statusByAgent.get(agentId) ?? "idle",
       isAgentActivelyProcessing: (agentId) => {
         isActivelyProcessingCalls.push(agentId);
         // 模拟 agent-1 正在活跃处理
@@ -57,10 +60,27 @@ describe("MessageBus 插话检测", () => {
     // 验证消息仍然被加入队列
     expect(result.messageId).toBeDefined();
     expect(result.messageId.length).toBeGreaterThan(0);
+    expect(result.interruptionTriggered).toBe(true);
     
     // 验证消息在队列中
     const queueDepth = bus.getQueueDepth("agent-1");
     expect(queueDepth).toBe(1);
+  });
+
+  test("活跃但非 waiting_llm 不触发插话回调", () => {
+    statusByAgent.set("agent-1", "processing");
+    const message = {
+      to: "agent-1",
+      from: "user",
+      payload: { text: "test message" }
+    };
+
+    const result = bus.send(message);
+
+    expect(callbackCalls.length).toBe(0);
+    expect(result.messageId).toBeDefined();
+    expect(result.interruptionTriggered).toBeUndefined();
+    expect(bus.getQueueDepth("agent-1")).toBe(1);
   });
 
   test("非活跃智能体不触发插话回调", () => {
@@ -114,6 +134,7 @@ describe("MessageBus 插话检测", () => {
         warn: async () => {},
         error: async () => {}
       },
+      getAgentStatus: () => "waiting_llm",
       isAgentActivelyProcessing: (agentId) => {
         return agentId === "agent-1";
       },
@@ -141,6 +162,7 @@ describe("MessageBus 插话检测", () => {
   });
 
   test("多次发送消息到活跃智能体触发多次回调", () => {
+    statusByAgent.set("agent-1", "waiting_llm");
     const message1 = {
       to: "agent-1",
       from: "user",
@@ -181,6 +203,7 @@ describe("MessageBus 插话检测", () => {
         warn: async () => {},
         error: async () => {}
       },
+      getAgentStatus: () => "waiting_llm",
       isAgentActivelyProcessing: (agentId) => {
         return agentId === "agent-1";
       }
@@ -199,6 +222,7 @@ describe("MessageBus 插话检测", () => {
     // 验证消息仍然被加入队列
     expect(result.messageId).toBeDefined();
     expect(result.messageId.length).toBeGreaterThan(0);
+    expect(result.interruptionTriggered).toBe(true);
     
     // 验证消息在队列中
     const queueDepth = noCallbackBus.getQueueDepth("agent-1");
@@ -217,6 +241,7 @@ describe("MessageBus 插话检测", () => {
         warn: async () => {},
         error: async () => {}
       },
+      getAgentStatus: () => "waiting_llm",
       isAgentActivelyProcessing: (agentId) => {
         testCalls.push(agentId);
         return agentId === "agent-1";
@@ -256,23 +281,23 @@ describe("MessageBus 插话检测", () => {
       }
     });
 
-    // 测试 stopped 状态
+    // 测试 stopped 状态（暂停语义：允许发送）
     const result1 = statusBus.send({
       to: "stopped-agent",
       from: "user",
       payload: { text: "test" }
     });
-    expect(result1.rejected).toBe(true);
-    expect(result1.reason).toBe("agent_stopped");
+    expect(result1.rejected).toBeUndefined();
+    expect(result1.messageId).toBeDefined();
 
-    // 测试 stopping 状态
+    // 测试 stopping 状态（暂停语义：允许发送）
     const result2 = statusBus.send({
       to: "stopping-agent",
       from: "user",
       payload: { text: "test" }
     });
-    expect(result2.rejected).toBe(true);
-    expect(result2.reason).toBe("agent_stopping");
+    expect(result2.rejected).toBeUndefined();
+    expect(result2.messageId).toBeDefined();
 
     // 测试 terminating 状态
     const result3 = statusBus.send({

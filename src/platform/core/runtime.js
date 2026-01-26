@@ -304,8 +304,11 @@ export class Runtime {
    */
   handleMessageInterruption(agentId, newMessage) {
     this._state.addInterruption(agentId, newMessage);
-    this._cancelManager?.abort(agentId, { reason: "message_interruption" });
-    this.llm?.abort(agentId);
+    const status = this._state.getAgentComputeStatus(agentId);
+    if (status === "waiting_llm") {
+      this._cancelManager?.abort(agentId, { reason: "message_interruption" });
+      this.llm?.abort(agentId);
+    }
   }
 
   /**
