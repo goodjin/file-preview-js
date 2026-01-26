@@ -40,8 +40,8 @@ const ARCHITECT_ROLE_PROMPT = `
   - "必须是静态网页，不需要后端服务器"
   - "所有逻辑在浏览器端运行"
 
-【spawn_agent 调用示例】
-spawn_agent(roleId="programmer-xxx", taskBrief={
+【spawn_agent_with_task 调用示例】
+spawn_agent_with_task(roleId="programmer-xxx", taskBrief={
   objective: "实现计算器的核心运算模块",
   constraints: ["使用 JavaScript 实现", "纯前端代码，无后端依赖", "支持四则运算"],
   inputs: "两个数字和一个运算符",

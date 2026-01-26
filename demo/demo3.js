@@ -74,7 +74,7 @@ function buildRestaurantGameRequirement() {
 7. 努力经营，避免破产，争取扩张
 
 【创建员工团队】
-经理需要先用 create_role 创建子岗位（如"服务员"、"厨师"），然后用 spawn_agent 在岗位上创建智能体实例。
+经理需要先用 create_role 创建子岗位（如"服务员"、"厨师"），然后用 spawn_agent_with_task 在岗位上创建智能体实例。
 根据业务需要，同一岗位可以有多个智能体（如：生意好时多招几个服务员）。
 
 【交互规则】

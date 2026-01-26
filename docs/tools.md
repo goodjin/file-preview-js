@@ -56,39 +56,6 @@ null
 - 如果同名岗位已存在，返回已有岗位（不重复创建）
 - 系统会自动根据 `rolePrompt` 分析岗位需求，并从配置的 LLM 服务中选择最合适的一个绑定到该岗位（如为"程序员"绑定擅长 Coding 的模型）
 
-### spawn_agent
-
-在指定岗位上创建智能体实例。
-
-**参数：**
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `roleId` | `string` | 是 | 岗位 ID |
-| `taskBrief` | `object` | 是 | 任务委托书 |
-
-**Task Brief 结构：**
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `objective` | `string` | 是 | 目标描述 |
-| `constraints` | `string[]` | 是 | 技术约束数组 |
-| `inputs` | `string` | 是 | 输入说明 |
-| `outputs` | `string` | 是 | 输出要求 |
-| `completion_criteria` | `string` | 是 | 完成标准 |
-| `collaborators` | `array` | 否 | 协作联系人 |
-| `references` | `string[]` | 否 | 参考资料 |
-| `priority` | `string` | 否 | 优先级 |
-
-**返回值：**
-
-```javascript
-{
-  id: "agent-uuid",
-  roleId: "role-uuid",
-  roleName: "岗位名称"
-}
-```
 
 ### spawn_agent_with_task
 

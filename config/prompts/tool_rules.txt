@@ -10,7 +10,7 @@
 
 1) 你必须通过可用工具执行平台动作（创建岗位/创建智能体/发送消息/写入或读取工件/打印）。
    - 想创建岗位？→ 调用 create_role 工具
-   - 想创建智能体？→ 调用 spawn_agent 工具
+   - 想创建智能体？→ 调用 spawn_agent_with_task 工具
    - 想发送消息？→ 调用 send_message 工具
    
 2) 与其他智能体的沟通必须用 send_message 工具，禁止在普通文本中"假装已经发送"。
@@ -22,7 +22,7 @@
 【立即行动原则】
 当你决定要执行某个操作时，必须立即调用相应的工具函数，不要只是描述你的计划。
 - 如果你说"我将创建三个角色"，那就立即调用三次 create_role
-- 如果你说"我将创建智能体"，那就立即调用 spawn_agent
+- 如果你说"我将创建智能体"，那就立即调用 spawn_agent_with_task
 - 不要等待用户确认，直接执行你的计划
 
 【汇报与等待（工作流）】
@@ -42,20 +42,13 @@
 【spawn_agent 约束（系统硬约束）】
 1) parentAgentId：由系统根据调用者自动填充，智能体侧无需也不应传入。
 2) 子岗位：只能在"自己创建的子岗位"上 spawn_agent；其它情况一律返回失败（报 not_child_role 错误）。
-3) spawn_agent 只创建智能体，不会自动发送任务消息！创建后必须用 send_message 向新智能体发送具体任务。
 
-【spawn_agent_with_task 便捷接口】
-如果你想创建智能体并立即发送任务消息，可以使用 spawn_agent_with_task 接口：
-- 该接口会自动完成：创建智能体 + 发送任务消息
-- 参数与 spawn_agent 相同，额外增加 initialMessage 字段
-- 使用此接口可以省去一次 send_message 调用
-
-【create_role 与 spawn_agent 的正确用法】
+【create_role 与 spawn_agent_with_task 的正确用法】
 create_role：创建岗位（定义职责），同名岗位只需创建一次
 - 例：create_role({ name: "助理", rolePrompt: "负责协助处理日常事务..." })
 - 返回：{ id: "role-xxx", name: "助理", ... }
 
-spawn_agent：在岗位上创建智能体实例（招聘员工），必须提供任务委托书（Task Brief）
+spawn_agent_with_task ： 在岗位上创建智能体实例（招聘员工），必须提供任务委托书（Task Brief）
 - 必填参数：roleId（岗位ID）、taskBrief（任务委托书）
 - taskBrief 必填字段：
   - objective：目标描述
@@ -68,28 +61,7 @@ spawn_agent：在岗位上创建智能体实例（招聘员工），必须提供
   - references：参考资料
   - priority：优先级
 
-spawn_agent 示例：
-```
-spawn_agent({
-  roleId: "role-xxx",
-  taskBrief: {
-    objective: "创建一个简单的计算器",
-    constraints: ["使用HTML+JavaScript", "必须是静态网页", "支持四则运算"],
-    inputs: "用户通过网页界面输入数字和运算符",
-    outputs: "在网页上显示计算结果",
-    completion_criteria: "计算器能正确执行加减乘除运算"
-  }
-})
-```
-
 【重要】缺少 taskBrief 或必填字段会导致创建失败！
-
-【spawn_agent 后必须发送任务消息】
-spawn_agent 只是创建智能体实例，不会自动发送任务消息！
-正确流程：
-1) spawn_agent(...) → 获得新智能体的 id
-2) send_message(to=新智能体id, payload={task: "具体任务", ...}) → 发送任务
-3) 或者使用 spawn_agent_with_task 一步完成
 
 spawn_agent_with_task 示例（推荐）：
 ```

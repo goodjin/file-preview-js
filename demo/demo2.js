@@ -34,7 +34,7 @@ function makeReadline() {
 function buildRestaurantRequirement() {
   return [
     "目标：构建一个可在命令行交互的“模拟饭店”，让用户作为顾客点餐、下单、出菜、结账付款。",
-    "约束：你是 Root 为本 taskId 创建的第一个直属子智能体（任务入口/负责人）。你需要用 create_role / spawn_agent 自组织创建饭店员工智能体（至少包含：迎宾、服务员、后厨、收银、库存）。",
+    "约束：你是 Root 为本 taskId 创建的第一个直属子智能体（任务入口/负责人）。你需要用 create_role / spawn_agent_with_task 自组织创建饭店员工智能体（至少包含：迎宾、服务员、后厨、收银、库存）。",
     "交互：用户后续会不断发送短文本命令（menu/order/cart/submit/bill/pay/exit），你要解析并推进状态机。",
     "数据：你需要内置一个小菜单（至少 6 个菜品，包含 ID/名称/单价），并有库存（可扣减）。",
     "输出：所有对用户的输出必须 send_message(to=user, taskId 保持不变, payload.text 为纯文本)。",
