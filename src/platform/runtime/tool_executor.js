@@ -498,6 +498,12 @@ export class ToolExecutor {
     if (!args.initialMessage || typeof args.initialMessage !== "object") {
       return { error: "missing_initial_message" };
     }
+    if (typeof args.roleId !== "string" || !args.roleId.trim()) {
+      return { error: "roleId_required" };
+    }
+    if (!runtime.org?.getRole?.(args.roleId)) {
+      return { error: "role_not_found" };
+    }
 
     // 验证 taskBrief 参数
     const taskBriefValidation = validateTaskBrief(args.taskBrief);

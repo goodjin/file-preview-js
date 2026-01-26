@@ -1,7 +1,8 @@
-﻿import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { Runtime } from "../../src/platform/core/runtime.js";
+import { AgentManager } from "../../src/platform/runtime/agent_manager.js";
 import { Agent } from "../../src/agents/agent.js";
 import { createWriterBehavior } from "../../src/agents/behaviors.js";
 import { Logger, normalizeLoggingConfig } from "../../src/platform/utils/logger/logger.js";
@@ -301,6 +302,42 @@ describe("Runtime", () => {
       initialMessage: validInitialMessage 
     });
     expect(sameRoleResult.error).toBe("spawn_failed");
+
+    const missingRoleIdResult = await runtime.executeToolCall(ctxRoot, "spawn_agent_with_task", {
+      taskBrief: validTaskBrief,
+      initialMessage: validInitialMessage
+    });
+    expect(missingRoleIdResult.error).toBe("roleId_required");
+
+    const roleNotFoundResult = await runtime.executeToolCall(ctxRoot, "spawn_agent_with_task", {
+      roleId: "role-not-exists",
+      taskBrief: validTaskBrief,
+      initialMessage: validInitialMessage
+    });
+    expect(roleNotFoundResult.error).toBe("role_not_found");
+  });
+
+  test("rejects spawnAgent without valid roleId", async () => {
+    const runtime = {
+      org: {
+        getRole: (roleId) => (roleId === "r1" ? { id: "r1", name: "writer", rolePrompt: "p" } : null),
+        createAgent: async (input) => ({ id: "a1", roleId: input.roleId, parentAgentId: input.parentAgentId })
+      },
+      _behaviorRegistry: new Map([["writer", () => async () => {}]]),
+      _buildAgentContext: () => ({ runtime: null }),
+      _agents: new Map(),
+      _agentMetaById: new Map(),
+      _agentLastActivityTime: new Map(),
+      config: { dataDir: null, runtimeDir: process.cwd() },
+      workspaceManager: { assignWorkspace: async () => {} },
+      log: { info: async () => {} },
+      loggerRoot: null
+    };
+
+    const agentManager = new AgentManager(runtime);
+
+    await expect(agentManager.spawnAgent({ parentAgentId: "root" })).rejects.toThrow("roleId_required");
+    await expect(agentManager.spawnAgent({ roleId: "not-exists", parentAgentId: "root" })).rejects.toThrow("role_not_found");
   });
 
   test("LLM without tool_calls ends message processing naturally", async () => {

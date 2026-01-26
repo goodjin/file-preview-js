@@ -77,6 +77,14 @@ export class AgentManager {
     ) {
       throw new Error("parentAgentId_required");
     }
+
+    if (typeof input.roleId !== "string" || !input.roleId.trim()) {
+      throw new Error("roleId_required");
+    }
+
+    if (!runtime.org?.getRole?.(input.roleId)) {
+      throw new Error("role_not_found");
+    }
     
     // 在组织中创建智能体记录
     const meta = await runtime.org.createAgent(input);
