@@ -173,6 +173,35 @@ describe("TabManager", () => {
     expect(result.browserId).toBe("invalid-browser-id");
   });
 
+  it("should set viewport to 1024x768 before navigating when creating tab", async () => {
+    const callSequence = [];
+    const mockPage = {
+      setViewport: vi.fn(async () => {
+        callSequence.push("setViewport");
+      }),
+      goto: vi.fn(async () => {
+        callSequence.push("goto");
+      }),
+      url: vi.fn().mockReturnValue("about:blank"),
+      on: vi.fn(),
+      authenticate: vi.fn()
+    };
+    const mockBrowser = {
+      newPage: vi.fn().mockResolvedValue(mockPage)
+    };
+    mockBrowserManager.getPuppeteerBrowser.mockReturnValue(mockBrowser);
+    mockBrowserManager.getBrowser.mockReturnValue({ proxy: null });
+
+    const result = await tabManager.newTab("browser-id-1", "https://example.com");
+
+    expect(result.ok).toBe(true);
+    expect(mockPage.setViewport).toHaveBeenCalledTimes(1);
+    expect(mockPage.setViewport).toHaveBeenCalledWith({ width: 1024, height: 768 });
+    expect(mockPage.goto).toHaveBeenCalledTimes(1);
+    expect(callSequence[0]).toBe("setViewport");
+    expect(callSequence[1]).toBe("goto");
+  });
+
   it("should return tab_not_found for invalid tabId", async () => {
     const result = await tabManager.closeTab("invalid-tab-id");
     expect(result.error).toBe("tab_not_found");

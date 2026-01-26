@@ -44,6 +44,7 @@ export class TabManager {
 
     try {
       const page = await browser.newPage();
+      await page.setViewport({ width: 1024, height: 768 });
       
       // 如果浏览器实例有代理认证信息，为新页面设置认证
       if (browserInstance.proxy && browserInstance.proxy.username && browserInstance.proxy.password) {
