@@ -114,6 +114,10 @@ export class AgentManager {
       parentAgentId: meta.parentAgentId ?? null 
     });
     
+    if (input?.taskBrief && typeof input.taskBrief === "object") {
+      runtime._state?.setAgentTaskBrief?.(agent.id, input.taskBrief);
+    }
+    
     // 初始化活动时间
     runtime._agentLastActivityTime.set(agent.id, Date.now());
     
@@ -168,7 +172,11 @@ export class AgentManager {
       throw new Error("invalid_parentAgentId");
     }
     
-    return await this.spawnAgent({ roleId: input.roleId, parentAgentId: callerAgentId });
+    return await this.spawnAgent({ 
+      roleId: input.roleId, 
+      parentAgentId: callerAgentId,
+      taskBrief: input?.taskBrief
+    });
   }
 
   /**
@@ -285,6 +293,7 @@ export class AgentManager {
       runtime._conversations.delete(agentId);
       void runtime._conversationManager?.deletePersistedConversation?.(agentId);
       runtime._agentMetaById.delete(agentId);
+      runtime._agentTaskBriefs.delete(agentId);
       runtime._agentLastActivityTime.delete(agentId);
       runtime._idleWarningEmitted?.delete(agentId);
     }

@@ -39,6 +39,14 @@ describe("ToolExecutor", () => {
 
     runtime = new Runtime({ configPath });
     await runtime.init();
+    
+    runtime.registerAgentInstance(new Agent({
+      id: "root",
+      roleId: "root",
+      roleName: "root",
+      rolePrompt: "",
+      behavior: async () => {}
+    }));
   });
 
   test("getToolDefinitions returns array of tool definitions", () => {
@@ -172,8 +180,19 @@ describe("ToolExecutor", () => {
     });
 
     expect(result).toBeTruthy();
-    // 验证返回了智能体信息
-    expect(result.id || result.error).toBeTruthy();
+    expect(result.error).toBeFalsy();
+    expect(result.id).toBeTruthy();
+    
+    const storedTaskBrief = runtime._agentTaskBriefs.get(result.id);
+    expect(storedTaskBrief).toBeTruthy();
+    expect(storedTaskBrief.inputs).toBe("Test inputs");
+    expect(storedTaskBrief.outputs).toBe("Test outputs");
+    
+    const childAgent = runtime._agents.get(result.id);
+    const childCtx = runtime._buildAgentContext(childAgent);
+    const childSystemPrompt = runtime._buildSystemPromptForAgent(childCtx);
+    expect(childSystemPrompt).toContain("【任务委托书 Task Brief】");
+    expect(childSystemPrompt).toContain("Test inputs");
   });
 
   test("executeToolCall validates spawn_agent_with_task taskBrief", async () => {
@@ -206,8 +225,48 @@ describe("ToolExecutor", () => {
     });
 
     expect(result.error).toBeTruthy();
-    // 可能是 invalid_task_brief 或 missing_creator_agent
-    expect(result.error === "invalid_task_brief" || result.error === "missing_creator_agent").toBe(true);
+    expect(result.error).toBe("invalid_task_brief");
+  });
+  
+  test("terminate_agent clears taskBrief for terminated agents", async () => {
+    const role = await runtime.org.createRole({
+      name: "test-role-terminate",
+      rolePrompt: "Test prompt",
+      createdBy: "root"
+    });
+
+    const rootAgent = runtime._agents.get("root");
+    const ctx = runtime._buildAgentContext(rootAgent);
+    ctx.currentMessage = {
+      id: "test-msg",
+      from: "user",
+      to: "root",
+      taskId: "test-task",
+      payload: {}
+    };
+
+    const spawnResult = await runtime._toolExecutor.executeToolCall(ctx, "spawn_agent_with_task", {
+      roleId: role.id,
+      taskBrief: {
+        objective: "Test objective",
+        constraints: ["constraint1"],
+        inputs: "Test inputs",
+        outputs: "Test outputs",
+        completion_criteria: "Test criteria"
+      },
+      initialMessage: "Start working on the task"
+    });
+
+    expect(spawnResult.error).toBeFalsy();
+    expect(runtime._agentTaskBriefs.has(spawnResult.id)).toBe(true);
+
+    const terminateResult = await runtime._toolExecutor.executeToolCall(ctx, "terminate_agent", {
+      agentId: spawnResult.id,
+      reason: "test"
+    });
+
+    expect(terminateResult.error).toBeFalsy();
+    expect(runtime._agentTaskBriefs.has(spawnResult.id)).toBe(false);
   });
 
   test("executeToolCall executes send_message", async () => {
@@ -248,13 +307,15 @@ describe("ToolExecutor", () => {
   test("executeToolCall executes put_artifact", async () => {
     const ctx = runtime._buildAgentContext(runtime._agents.get("root"));
     const result = await runtime._toolExecutor.executeToolCall(ctx, "put_artifact", {
-      type: "text",
-      content: "test content"
+      type: "text/plain",
+      content: "test content",
+      name: "test.txt"
     });
 
     expect(result).toBeTruthy();
-    expect(result.artifactRef).toBeTruthy();
-    expect(result.artifactRef).toMatch(/^artifact:/);
+    expect(Array.isArray(result.artifactIds)).toBe(true);
+    expect(result.artifactIds.length).toBe(1);
+    expect(typeof result.artifactIds[0]).toBe("string");
   });
 
   test("executeToolCall executes get_artifact", async () => {
@@ -262,13 +323,14 @@ describe("ToolExecutor", () => {
     
     // 先创建工件
     const putResult = await runtime._toolExecutor.executeToolCall(ctx, "put_artifact", {
-      type: "text",
-      content: "test content"
+      type: "text/plain",
+      content: "test content",
+      name: "test.txt"
     });
 
     // 获取工件
     const getResult = await runtime._toolExecutor.executeToolCall(ctx, "get_artifact", {
-      ref: putResult.artifactRef
+      ref: putResult.artifactIds[0]
     });
 
     expect(getResult).toBeTruthy();

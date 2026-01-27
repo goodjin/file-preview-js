@@ -1205,6 +1205,8 @@ export class Runtime {
 
       // 清理智能体元数据
       this._agentMetaById.delete(agentId);
+      
+      this._agentTaskBriefs.delete(agentId);
 
       // 清理空闲跟踪数据
       this._agentLastActivityTime.delete(agentId);

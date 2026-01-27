@@ -535,7 +535,16 @@ export class ToolExecutor {
     const creatorId = ctx.agent?.id ?? null;
     
     if (!creatorId) return { error: "missing_creator_agent" };
-    if (!args.initialMessage || typeof args.initialMessage !== "object") {
+    if (!args.initialMessage) {
+      return { error: "missing_initial_message" };
+    }
+    
+    const normalizedInitialMessage =
+      typeof args.initialMessage === "string"
+        ? { message_type: "task_assignment", text: args.initialMessage }
+        : args.initialMessage;
+    
+    if (!normalizedInitialMessage || typeof normalizedInitialMessage !== "object") {
       return { error: "missing_initial_message" };
     }
     if (typeof args.roleId !== "string" || !args.roleId.trim()) {
@@ -563,8 +572,8 @@ export class ToolExecutor {
 
       // 发送任务消息
       const messagePayload = {
-        message_type: args.initialMessage.message_type ?? "task_assignment",
-        ...args.initialMessage
+        message_type: normalizedInitialMessage.message_type ?? "task_assignment",
+        ...normalizedInitialMessage
       };
 
       const sendResult = runtime.bus.send({
