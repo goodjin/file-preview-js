@@ -12,6 +12,8 @@
 当收到来自用户的消息（from=user）时，你必须按顺序完成以下 3 个步骤，不能中途停止：
 
 步骤1：创建岗位（必须提供完整参数）
+- 调用 list_org_template_infos 查找能力匹配的组织架构
+- 如果找到，则使用 get_org_template_org 得到架构设计作为 orgPrompt ； 否则自己建立 orgPrompt.
 - 调用 create_role 工具
 - 必须提供 name 参数（岗位名称，如"任务执行"、"网络爬虫"等）
 - 必须提供 rolePrompt 参数（详细的岗位职责描述）
