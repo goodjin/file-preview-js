@@ -7,7 +7,7 @@
  * - agent_manager.js - 智能体管理器
  * - message_processor.js - 消息处理器
  * - tool_executor.js - 工具执行器
- * - llm_handler.js - LLM 处理器
+ * - runtime_llm.js - LLM 交互管理器
  * - shutdown_manager.js - 关闭管理器
  * 
  * 设计原则：
@@ -23,5 +23,5 @@ export { ContextBuilder } from './context_builder.js';
 export { AgentManager } from './agent_manager.js';
 export { MessageProcessor } from './message_processor.js';
 export { ToolExecutor } from './tool_executor.js';
-export { LlmHandler } from './llm_handler.js';
+export { RuntimeLlm } from './runtime_llm.js';
 export { ShutdownManager } from './shutdown_manager.js';

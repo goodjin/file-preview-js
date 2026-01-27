@@ -2032,14 +2032,7 @@ export class HTTPServer {
         }
       };
 
-      // 使用 ContextBuilder 构建 system prompt
-      let systemPrompt = "";
-      if (runtime._contextBuilder && typeof runtime._contextBuilder.buildSystemPromptForAgent === "function") {
-        systemPrompt = runtime._contextBuilder.buildSystemPromptForAgent(ctx);
-      } else {
-        // 降级方案：使用旧的方法
-        systemPrompt = runtime._buildSystemPromptForAgent(ctx);
-      }
+      const systemPrompt = runtime._buildSystemPromptForAgent(ctx);
 
       void this.log.debug("HTTP查询智能体 system prompt", { agentId, promptLength: systemPrompt.length });
       this._sendJson(res, 200, {

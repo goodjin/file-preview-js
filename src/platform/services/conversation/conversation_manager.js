@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile, readdir, unlink } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -375,6 +376,48 @@ export class ConversationManager {
     });
 
     return { ok: true, tokensPerChar, sampleChars, sampleTokens: promptTokens };
+  }
+
+  /**
+   * 同步加载单个智能体的持久化对话历史到内存（用于启动早期/调度器同步路径）。
+   *
+   * 说明：
+   * - TurnEngine/ComputeScheduler 的关键路径是同步的，无法 await；
+   * - 当运行时尚未完成 loadAllConversations，或 conversations Map 尚未包含该 agentId 时，
+   *   该方法允许在首次对话时按需同步恢复历史，确保发送给 LLM 的 messages 包含重启前内容。
+   *
+   * @param {string} agentId
+   * @returns {{ok:boolean, loaded:boolean, messageCount?:number, error?:string}}
+   */
+  loadConversationSync(agentId) {
+    if (!this._conversationsDir) {
+      return { ok: false, loaded: false, error: "conversationsDir not set" };
+    }
+    if (!agentId || typeof agentId !== "string" || !agentId.trim()) {
+      return { ok: false, loaded: false, error: "missing_agent_id" };
+    }
+
+    const filePath = path.join(this._conversationsDir, `${agentId}.json`);
+    if (!existsSync(filePath)) {
+      return { ok: true, loaded: false };
+    }
+
+    try {
+      const raw = readFileSync(filePath, "utf8");
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data?.messages)) {
+        return { ok: false, loaded: false, error: "invalid_format" };
+      }
+
+      this.conversations.set(agentId, data.messages);
+      if (data.tokenUsage) {
+        this._tokenUsage.set(agentId, data.tokenUsage);
+      }
+
+      return { ok: true, loaded: true, messageCount: data.messages.length };
+    } catch (err) {
+      return { ok: false, loaded: false, error: err?.message ?? String(err ?? "unknown_error") };
+    }
   }
 
   /**

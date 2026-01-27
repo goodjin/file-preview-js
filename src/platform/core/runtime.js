@@ -59,7 +59,6 @@ import { ComputeScheduler } from "../runtime/compute_scheduler.js";
  * - AgentManager: 智能体生命周期管理
  * - MessageProcessor: 消息调度和处理
  * - ToolExecutor: 工具定义和执行
- * - LlmHandler: LLM 交互处理
  * - ShutdownManager: 优雅关闭管理
  * 
  * 【设计原则】

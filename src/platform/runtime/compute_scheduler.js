@@ -302,6 +302,7 @@ export class ComputeScheduler {
         if (inflight && inflight.epoch === epoch) {
           this._inFlight.delete(agentId);
         }
+        void this.runtime._conversationManager?.persistConversation?.(agentId);
         this.runtime._state.unmarkAgentAsActivelyProcessing(agentId);
         if (!this.runtime._agents.has(agentId)) return;
         const status = this.runtime._state.getAgentComputeStatus(agentId);
@@ -371,6 +372,7 @@ export class ComputeScheduler {
         if (inflight && inflight.epoch === epoch) {
           this._inFlight.delete(agentId);
         }
+        void this.runtime._conversationManager?.persistConversation?.(agentId);
         this.runtime._state.unmarkAgentAsActivelyProcessing(agentId);
         if (!this.runtime._agents.has(agentId)) return;
         const status = this.runtime._state.getAgentComputeStatus(agentId);
