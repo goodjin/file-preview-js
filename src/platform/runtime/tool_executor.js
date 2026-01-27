@@ -88,6 +88,10 @@ export class ToolExecutor {
             properties: {
               name: { type: "string" },
               rolePrompt: { type: "string" },
+              orgPrompt: {
+                type: "string",
+                description: "可选：用于描述组织架构的提示词。若传入，将被记录在该岗位上；后续由该岗位创建的下级岗位，在未显式传入 orgPrompt 时会默认继承该值。"
+              },
               toolGroups: { 
                 type: "array", 
                 items: { type: "string" },
@@ -499,9 +503,19 @@ export class ToolExecutor {
       }
     }
 
+    const callerRoleId = ctx.agent?.roleId ?? null;
+    const callerRole = callerRoleId ? runtime.org.getRole(callerRoleId) : null;
+    const inheritedOrgPrompt = callerRole?.orgPrompt ?? null;
+    const explicitOrgPrompt =
+      typeof args.orgPrompt === "string"
+        ? (args.orgPrompt.trim() ? args.orgPrompt : null)
+        : undefined;
+    const effectiveOrgPrompt = explicitOrgPrompt === undefined ? inheritedOrgPrompt : explicitOrgPrompt;
+
     const result = await ctx.tools.createRole({ 
       name: args.name, 
       rolePrompt: args.rolePrompt,
+      orgPrompt: effectiveOrgPrompt,
       llmServiceId,
       toolGroups: args.toolGroups
     });

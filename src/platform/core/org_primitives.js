@@ -23,6 +23,9 @@ function validateRole(role) {
   if (typeof role.rolePrompt !== "string") {
     errors.push("岗位提示词必须是字符串");
   }
+  if (role.orgPrompt !== undefined && role.orgPrompt !== null && typeof role.orgPrompt !== "string") {
+    errors.push("岗位组织架构提示词必须是字符串或null");
+  }
   // toolGroups 是可选的，如果存在则必须是字符串数组或 null
   if (role.toolGroups !== undefined && role.toolGroups !== null) {
     if (!Array.isArray(role.toolGroups)) {
@@ -371,8 +374,8 @@ export class OrgPrimitives {
 
   /**
    * 创建岗位（Role）。
-   * @param {{name:string, rolePrompt:string, createdBy?:string, llmServiceId?:string, toolGroups?:string[]}} input
-   * @returns {Promise<{id:string, name:string, rolePrompt:string, llmServiceId:string|null, toolGroups:string[]|null}>}
+   * @param {{name:string, rolePrompt:string, orgPrompt?:string|null, createdBy?:string, llmServiceId?:string, toolGroups?:string[]}} input
+   * @returns {Promise<{id:string, name:string, rolePrompt:string, orgPrompt:string|null, llmServiceId:string|null, toolGroups:string[]|null}>}
    */
   async createRole(input) {
     const existing = this.findRoleByName(input.name);
@@ -385,6 +388,7 @@ export class OrgPrimitives {
       id,
       name: input.name,
       rolePrompt: input.rolePrompt,
+      orgPrompt: input.orgPrompt ?? null,
       createdBy: input.createdBy ?? null,
       createdAt: formatLocalTimestamp(),
       status: "active",  // 默认状态为活跃
@@ -400,8 +404,8 @@ export class OrgPrimitives {
   /**
    * 更新岗位信息。
    * @param {string} roleId - 岗位ID
-   * @param {{rolePrompt?: string, llmServiceId?: string|null, toolGroups?: string[]|null}} updates - 要更新的字段
-   * @returns {Promise<{id:string, name:string, rolePrompt:string, llmServiceId:string|null, toolGroups:string[]|null}|null>}
+   * @param {{rolePrompt?: string, orgPrompt?: string|null, llmServiceId?: string|null, toolGroups?: string[]|null}} updates - 要更新的字段
+   * @returns {Promise<{id:string, name:string, rolePrompt:string, orgPrompt:string|null, llmServiceId:string|null, toolGroups:string[]|null}|null>}
    */
   async updateRole(roleId, updates) {
     const role = this._roles.get(roleId);
@@ -413,6 +417,14 @@ export class OrgPrimitives {
     // 更新允许修改的字段
     if (updates.rolePrompt !== undefined && typeof updates.rolePrompt === "string") {
       role.rolePrompt = updates.rolePrompt;
+    }
+
+    if (updates.orgPrompt !== undefined) {
+      if (updates.orgPrompt === null) {
+        role.orgPrompt = null;
+      } else if (typeof updates.orgPrompt === "string") {
+        role.orgPrompt = updates.orgPrompt;
+      }
     }
     
     // 更新 LLM 服务 ID（允许设置为 null 表示使用默认服务）

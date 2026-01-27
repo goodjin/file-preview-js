@@ -76,7 +76,14 @@ export class ContextBuilder {
     }
 
     const base = ctx.systemBasePrompt ?? "";
+    const roleRecord = ctx.agent?.roleId ? this.runtime.org.getRole(ctx.agent.roleId) : null;
+    const orgPromptRaw = roleRecord?.orgPrompt ?? null;
+    const orgPromptSection =
+      typeof orgPromptRaw === "string" && orgPromptRaw.trim()
+        ? `【组织架构】\n${orgPromptRaw}`
+        : "";
     const role = ctx.agent?.rolePrompt ?? "";
+    const roleWithOrg = orgPromptSection ? `${orgPromptSection}\n\n${role}` : role;
     
     // 获取并格式化 TaskBrief
     const taskBrief = this.runtime._agentTaskBriefs.get(agentId);
@@ -94,7 +101,7 @@ export class ContextBuilder {
     const composed = ctx.tools.composePrompt({
       base,
       composeTemplate: ctx.systemComposeTemplate ?? "{{BASE}}\n{{ROLE}}\n{{TASK}}",
-      rolePrompt: role,
+      rolePrompt: roleWithOrg,
       taskText: "",
       workspace: ctx.systemWorkspacePrompt ?? ""
     });

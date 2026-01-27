@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ToolExecutor 单元测试
  * 
  * 测试 ToolExecutor 的核心功能：
@@ -94,6 +94,49 @@ describe("ToolExecutor", () => {
     expect(result.id).toBeTruthy();
     expect(result.name).toBe("new-role");
     expect(result.rolePrompt).toBe("New role prompt");
+  });
+
+  test("executeToolCall executes create_role with orgPrompt", async () => {
+    const ctx = runtime._buildAgentContext(runtime._agents.get("root"));
+    const result = await runtime._toolExecutor.executeToolCall(ctx, "create_role", {
+      name: "new-role-with-org",
+      rolePrompt: "New role prompt",
+      orgPrompt: "Org architecture prompt"
+    });
+
+    expect(result).toBeTruthy();
+    expect(result.orgPrompt).toBe("Org architecture prompt");
+  });
+
+  test("create_role inherits orgPrompt from creator role when omitted", async () => {
+    const parentRole = await runtime.org.createRole({
+      name: "parent-role",
+      rolePrompt: "Parent role prompt",
+      orgPrompt: "Parent org prompt"
+    });
+
+    const parentAgent = await runtime.spawnAgent({
+      roleId: parentRole.id,
+      parentAgentId: "root"
+    });
+
+    const ctx = runtime._buildAgentContext(parentAgent);
+    const childRole = await runtime._toolExecutor.executeToolCall(ctx, "create_role", {
+      name: "child-role",
+      rolePrompt: "Child role prompt"
+    });
+
+    expect(childRole).toBeTruthy();
+    expect(childRole.orgPrompt).toBe("Parent org prompt");
+
+    const childAgent = await runtime.spawnAgent({
+      roleId: childRole.id,
+      parentAgentId: parentAgent.id
+    });
+    const childCtx = runtime._buildAgentContext(childAgent);
+    const childSystemPrompt = runtime._buildSystemPromptForAgent(childCtx);
+    expect(childSystemPrompt).toContain("【组织架构】");
+    expect(childSystemPrompt).toContain("Parent org prompt");
   });
 
   test("executeToolCall executes spawn_agent_with_task", async () => {
