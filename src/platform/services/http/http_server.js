@@ -728,6 +728,8 @@ export class HTTPServer {
         this._handleSubmit(req, res);
       } else if (method === "POST" && pathname === "/api/send") {
         this._handleSend(req, res);
+      } else if (method === "POST" && pathname === "/api/root/new-session") {
+        this._handleRootNewSession(req, res);
       } else if (method === "POST" && pathname === "/api/upload") {
         // 文件上传: POST /api/upload
         this._handleUpload(req, res).catch(err => {
@@ -1128,6 +1130,44 @@ export class HTTPServer {
         taskId: result.taskId,
         to: result.to
       });
+    });
+  }
+
+  _handleRootNewSession(req, res) {
+    this._readJsonBody(req, async (err) => {
+      if (err) {
+        this._sendJson(res, 400, { error: "invalid_json", message: err.message });
+        return;
+      }
+
+      const runtime = this._runtime;
+      if (!runtime || !runtime._conversationManager) {
+        this._sendJson(res, 500, { error: "runtime_not_initialized" });
+        return;
+      }
+
+      const agentId = "root";
+
+      try {
+        runtime._conversationManager.clearTokenUsage?.(agentId);
+        runtime._conversationManager.deleteConversation?.(agentId);
+        await runtime._conversationManager.deletePersistedConversation?.(agentId);
+
+        const timestamp = new Date().toISOString();
+        await this._storeMessage({
+          id: randomUUID(),
+          from: agentId,
+          to: agentId,
+          taskId: null,
+          payload: { text: "--- 新会话 ---" },
+          createdAt: timestamp
+        });
+
+        this._sendJson(res, 200, { ok: true });
+      } catch (e) {
+        void this.log.error("root 新会话失败", { error: e?.message ?? String(e), stack: e?.stack });
+        this._sendJson(res, 500, { error: "internal_error", message: e?.message ?? String(e) });
+      }
     });
   }
 

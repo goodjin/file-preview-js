@@ -206,6 +206,10 @@ const API = {
     });
   },
 
+  async startRootNewSession() {
+    return this.post('/root/new-session', {});
+  },
+
   /**
    * 设置智能体自定义名称
    * @param {string} agentId - 智能体 ID

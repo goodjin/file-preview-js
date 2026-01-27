@@ -27,6 +27,7 @@ const ChatPanel = {
   headerTitle: null,
   headerRole: null,
   headerStatus: null,
+  rootNewSessionBtn: null,
   messageList: null,
   chatInput: null,
   sendBtn: null,
@@ -43,6 +44,7 @@ const ChatPanel = {
     this.headerTitle = document.querySelector('.chat-title .agent-name');
     this.headerRole = document.querySelector('.chat-title .agent-role');
     this.headerStatus = document.querySelector('.chat-status');
+    this.rootNewSessionBtn = document.getElementById('root-new-session-btn');
     this.messageList = document.getElementById('message-list');
     this.chatInput = document.getElementById('chat-input');
     this.sendBtn = document.getElementById('send-btn');
@@ -57,6 +59,26 @@ const ChatPanel = {
     // 绑定发送按钮事件
     if (this.sendBtn) {
       this.sendBtn.addEventListener('click', () => this.sendMessage());
+    }
+
+    if (this.rootNewSessionBtn) {
+      this.rootNewSessionBtn.addEventListener('click', async () => {
+        if (this.currentAgentId !== 'root') {
+          return;
+        }
+        this.rootNewSessionBtn.disabled = true;
+        try {
+          await API.startRootNewSession();
+          Toast.success('已开始新会话（root）');
+          if (window.App && typeof window.App.loadMessages === 'function') {
+            await window.App.loadMessages('root');
+          }
+        } catch (err) {
+          Toast.error(`新会话失败: ${err.message}`);
+        } finally {
+          this.rootNewSessionBtn.disabled = false;
+        }
+      });
     }
 
     // 绑定输入框回车事件
@@ -702,6 +724,11 @@ const ChatPanel = {
     
     // 更新或创建详情按钮
     this.updateDetailButton();
+
+    if (this.rootNewSessionBtn) {
+      this.rootNewSessionBtn.style.display = this.currentAgentId === 'root' ? 'inline-block' : 'none';
+      this.rootNewSessionBtn.disabled = this.currentAgentId !== 'root';
+    }
     
     this.updateInputPlaceholder();
   },
