@@ -82,6 +82,21 @@ export function createWllamaEngine(): WllamaEngine {
       throw new Error('模型未加载');
     }
     const inst = getOrCreate();
+    if (!params.stream) {
+      const fullText = await inst.createChatCompletion(messages, {
+        useCache: true,
+        abortSignal,
+        nPredict: params.nPredict,
+        sampling: {
+          temp: params.temp,
+          top_k: params.topK,
+          top_p: params.topP,
+        },
+      });
+      if (typeof fullText === 'string') onTextDelta(fullText);
+      return;
+    }
+
     const decoder = typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8') : null;
     await inst.createChatCompletion(messages, {
       useCache: true,

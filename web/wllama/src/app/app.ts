@@ -22,6 +22,13 @@ export function createApp(doc: Document): void {
 
   setState(state);
 
+  dom.btnToggleStream.addEventListener('click', () => {
+    const pressed = dom.btnToggleStream.getAttribute('aria-pressed') === 'true';
+    const next = !pressed;
+    dom.btnToggleStream.setAttribute('aria-pressed', next ? 'true' : 'false');
+    dom.btnToggleStream.textContent = next ? '开' : '关';
+  });
+
   dom.btnLoadFromUrl.addEventListener('click', async () => {
     if (state.status.kind === 'loadingModel' || state.status.kind === 'generating') return;
     const loadParams = readModelLoadParams(dom);
@@ -98,7 +105,8 @@ export function createApp(doc: Document): void {
     generationSeq += 1;
     const mySeq = generationSeq;
     const sendStartMs = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
-    let statusText = `处理提示词...（nPredict=${genParams.nPredict}）`;
+    const streamText = genParams.stream ? '流式' : '非流式';
+    let statusText = `处理提示词...（${streamText}，nPredict=${genParams.nPredict}）`;
     let firstDeltaMs: number | null = null;
 
     let finished = false;
@@ -126,9 +134,13 @@ export function createApp(doc: Document): void {
         if (firstDeltaMs === null) {
           const nowMs = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
           firstDeltaMs = nowMs - sendStartMs;
-          statusText = `生成中...（首 token：${Math.max(0, Math.round(firstDeltaMs))}ms，nPredict=${genParams.nPredict}）`;
+          statusText = `生成中...（首 token：${Math.max(0, Math.round(firstDeltaMs))}ms，${streamText}，nPredict=${genParams.nPredict}）`;
         }
-        assistantText += deltaText;
+        if (genParams.stream) {
+          assistantText += deltaText;
+        } else {
+          assistantText = deltaText;
+        }
         scheduleFlush();
       });
       if (generationSeq === mySeq) {
@@ -166,13 +178,16 @@ function readGenerationParams(dom: {
   temp: HTMLInputElement;
   topK: HTMLInputElement;
   topP: HTMLInputElement;
+  btnToggleStream: HTMLButtonElement;
 }): GenerationParams {
   const nPredict = clampNumber(parseNumberOr(dom.nPredict.value, 1024), 1, 4096);
   if (dom.nPredict.value.trim() !== String(nPredict)) dom.nPredict.value = String(nPredict);
+  const stream = dom.btnToggleStream.getAttribute('aria-pressed') === 'true';
   return {
     nPredict,
     temp: clampNumber(parseNumberOr(dom.temp.value, 0.7), 0, 5),
     topK: clampNumber(parseNumberOr(dom.topK.value, 40), 0, 200),
     topP: clampNumber(parseNumberOr(dom.topP.value, 0.9), 0, 1),
+    stream,
   };
 }

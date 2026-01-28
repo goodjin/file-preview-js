@@ -17,6 +17,7 @@ export type GenerationParams = {
   temp: number;
   topK: number;
   topP: number;
+  stream: boolean;
 };
 
 export type ModelLoadParams = {
