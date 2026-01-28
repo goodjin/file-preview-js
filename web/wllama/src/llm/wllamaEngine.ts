@@ -42,7 +42,7 @@ export function createWllamaEngine(): WllamaEngine {
     const hcRaw = typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 1;
     const hc = Number.isFinite(hcRaw) && hcRaw > 0 ? hcRaw : 1;
     const threads = isIsolated ? Math.max(2, Math.min(8, hc)) : 1;
-    const batchSize = threads > 1 ? 256 : 128;
+    const batchSize = threads > 1 ? 512 : 256;
     return { crossOriginIsolated: isIsolated, hardwareConcurrency: hc, threads, batchSize };
   };
 
@@ -131,11 +131,45 @@ async function verifyGgufUrl(absoluteUrl: string): Promise<void> {
     throw new Error(`模型文件请求失败：HTTP ${res.status}（URL=${absoluteUrl}）${snippet ? `，响应片段：${snippet}` : ''}`);
   }
 
-  const buf = await res.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  const magic = String.fromCharCode(...bytes.slice(0, 4));
+  const bytes = await readAtMostBytes(res, 4);
+  const magic = bytes.length >= 4 ? String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) : '';
   if (magic !== 'GGUF') {
     const ct = res.headers.get('content-type') ?? '';
     throw new Error(`模型文件不是 GGUF（magic=${JSON.stringify(magic)}，content-type=${ct}，URL=${absoluteUrl}）`);
   }
+}
+
+async function readAtMostBytes(res: Response, maxBytes: number): Promise<Uint8Array> {
+  if (maxBytes <= 0) return new Uint8Array();
+  if (!res.body) {
+    const buf = await res.arrayBuffer();
+    return new Uint8Array(buf.slice(0, maxBytes));
+  }
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+    }
+  }
+
+  const out = new Uint8Array(Math.min(total, maxBytes));
+  let offset = 0;
+  for (const c of chunks) {
+    if (offset >= out.length) break;
+    const len = Math.min(c.byteLength, out.length - offset);
+    out.set(c.subarray(0, len), offset);
+    offset += len;
+  }
+  return out;
 }

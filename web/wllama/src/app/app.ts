@@ -1,8 +1,9 @@
-import type { AppState, ChatMessage, GenerationParams, ModelLoadParams } from './state';
+import type { AppState, GenerationParams, ModelLoadParams } from './state';
 import { createInitialState } from './state';
 import { getAppDom, render, setInputValue } from './ui';
 import { clampNumber, parseNumberOr } from '../utils/dom';
 import { createWllamaEngine } from '../llm/wllamaEngine';
+import { planSendMessage } from './messageComposer';
 
 export function createApp(doc: Document): void {
   const dom = getAppDom(doc);
@@ -85,15 +86,19 @@ export function createApp(doc: Document): void {
 
     setInputValue(dom, '');
 
-    const messagesInFlight = appendUserMessage(state.messages, text);
-    const assistantIndex = messagesInFlight.length;
-    messagesInFlight.push({ role: 'assistant', content: '' });
-    setState({ ...state, messages: messagesInFlight, status: { kind: 'generating', text: '生成中...' } });
+    const plan = planSendMessage(state.messages, text);
+    const messagesForModel = plan.messagesForModel;
+    const assistantIndex = plan.assistantIndex;
+    const messagesInFlight = plan.messagesForUi;
+    setState({ ...state, messages: messagesInFlight, status: { kind: 'generating', text: '处理提示词...' } });
 
     const genParams = readGenerationParams(dom);
     generationAbort = new AbortController();
     generationSeq += 1;
     const mySeq = generationSeq;
+    const sendStartMs = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+    let statusText = '处理提示词...';
+    let firstDeltaMs: number | null = null;
 
     let finished = false;
     try {
@@ -103,7 +108,7 @@ export function createApp(doc: Document): void {
       const flush = () => {
         if (generationSeq !== mySeq) return;
         messagesInFlight[assistantIndex] = { role: 'assistant', content: assistantText };
-        setState({ ...state, messages: messagesInFlight, status: { kind: 'generating', text: '生成中...' } });
+        setState({ ...state, messages: messagesInFlight, status: { kind: 'generating', text: statusText } });
       };
 
       const scheduleFlush = () => {
@@ -115,8 +120,13 @@ export function createApp(doc: Document): void {
         });
       };
 
-      await engine.chat(messagesInFlight, genParams, generationAbort.signal, (deltaText) => {
+      await engine.chat(messagesForModel, genParams, generationAbort.signal, (deltaText) => {
         if (generationSeq !== mySeq) return;
+        if (firstDeltaMs === null) {
+          const nowMs = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+          firstDeltaMs = nowMs - sendStartMs;
+          statusText = `生成中...（首 token：${Math.max(0, Math.round(firstDeltaMs))}ms）`;
+        }
         assistantText += deltaText;
         scheduleFlush();
       });
@@ -163,13 +173,4 @@ function readGenerationParams(dom: {
     topK: clampNumber(parseNumberOr(dom.topK.value, 40), 0, 200),
     topP: clampNumber(parseNumberOr(dom.topP.value, 0.9), 0, 1),
   };
-}
-
-function appendUserMessage(existing: ChatMessage[], text: string): ChatMessage[] {
-  const messages = [...existing];
-  if (!messages.some((m) => m.role === 'system')) {
-    messages.unshift({ role: 'system', content: '你是一个有帮助的助手。' });
-  }
-  messages.push({ role: 'user', content: text });
-  return messages;
 }
