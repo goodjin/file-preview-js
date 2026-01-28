@@ -48,6 +48,7 @@
     },
     "ffmpeg": {
       "ffmpegPath": ""
-    }
+    },
+    "ui_page": {}
   }
 }

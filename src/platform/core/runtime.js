@@ -17,6 +17,7 @@ import { ToolGroupManager } from "../extensions/tool_group_manager.js";
 import { ContentAdapter } from "../utils/content/content_adapter.js";
 import { ContentRouter } from "../services/artifact/content_router.js";
 import { OrgTemplateRepository } from "../services/org_templates/org_template_repository.js";
+import { UiCommandBroker } from "../services/ui/ui_command_broker.js";
 
 // 导入子模块
 import { JavaScriptExecutor } from "../runtime/javascript_executor.js";
@@ -422,6 +423,8 @@ export class Runtime {
     this.idleWarningMs = this.config.idleWarningMs ?? this.idleWarningMs;
     this.loggerRoot = new Logger(normalizeLoggingConfig(this.config.logging));
     this.log = this.loggerRoot.forModule("runtime");
+
+    this.uiCommandBroker = new UiCommandBroker({ logger: this.loggerRoot.forModule("ui") });
     
     // 更新 RuntimeState 的 logger
     this._state.log = this.log;

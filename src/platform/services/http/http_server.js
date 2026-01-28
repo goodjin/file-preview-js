@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { createNoopModuleLogger, formatLocalTime } from "../../utils/logger/logger.js";
 import ArtifactIdCodec from "../artifact/artifact_id_codec.js";
+import { UiCommandBroker } from "../ui/ui_command_broker.js";
 
 /**
  * HTTP服务器组件：提供REST API接口与Agent Society交互。
@@ -71,6 +72,8 @@ export class HTTPServer {
     this._recentErrors = []; // 最近的错误事件
     this._recentRetries = []; // 最近的重试事件
     this._maxRecentEvents = 50; // 最多保留的事件数量
+
+    this._uiCommandBroker = new UiCommandBroker({ logger: this.log });
   }
 
   /**
@@ -87,6 +90,9 @@ export class HTTPServer {
    */
   setRuntime(runtime) {
     this._runtime = runtime;
+    if (runtime && runtime.uiCommandBroker) {
+      this._uiCommandBroker = runtime.uiCommandBroker;
+    }
   }
 
   /**
@@ -744,6 +750,10 @@ export class HTTPServer {
       } else if (method === "GET" && pathname === "/api/events") {
         // 获取最近的错误和重试事件
         this._handleGetEvents(req, res);
+      } else if (method === "GET" && pathname === "/api/ui-commands/poll") {
+        await this._handleUiCommandsPoll(req, res, url);
+      } else if (method === "POST" && pathname === "/api/ui-commands/result") {
+        this._handleUiCommandsResult(req, res);
       } else if (method === "GET" && pathname === "/api/roles") {
         this._handleGetRoles(res);
       } else if (method === "GET" && pathname === "/api/org-templates") {
@@ -2762,6 +2772,60 @@ export class HTTPServer {
       void this.log.error("读取工件文件失败", { path: relativePath, error: err.message });
       this._sendJson(res, 500, { error: "read_file_failed", message: err.message });
     }
+  }
+
+  /**
+   * @param {import("node:http").IncomingMessage} req
+   * @param {import("node:http").ServerResponse} res
+   * @param {URL} url
+   */
+  async _handleUiCommandsPoll(req, res, url) {
+    const clientId = url.searchParams.get("clientId") ?? "";
+    const timeoutMs = Number(url.searchParams.get("timeoutMs") ?? "25000");
+
+    if (!clientId) {
+      this._sendJson(res, 400, { error: "missing_client_id" });
+      return;
+    }
+
+    try {
+      const command = await this._uiCommandBroker.waitForNextCommand(clientId, timeoutMs);
+      this._sendJson(res, 200, { ok: true, command: command ?? null });
+    } catch (err) {
+      const message = err?.message ?? String(err);
+      this._sendJson(res, 500, { error: "ui_poll_failed", message });
+    }
+  }
+
+  /**
+   * @param {import("node:http").IncomingMessage} req
+   * @param {import("node:http").ServerResponse} res
+   */
+  _handleUiCommandsResult(req, res) {
+    this._readJsonBody(req, (err, body) => {
+      if (err) {
+        this._sendJson(res, 400, { error: "invalid_json", message: err.message });
+        return;
+      }
+
+      const commandId = body?.commandId;
+      const ok = body?.ok === true;
+      const result = body?.result;
+      const error = body?.error;
+
+      if (!commandId || typeof commandId !== "string") {
+        this._sendJson(res, 400, { error: "missing_command_id" });
+        return;
+      }
+
+      const resolved = this._uiCommandBroker.resolveResult(commandId, { ok, result, error });
+      if (!resolved.ok) {
+        this._sendJson(res, 404, { error: "command_not_pending", commandId });
+        return;
+      }
+
+      this._sendJson(res, 200, { ok: true });
+    });
   }
 
   /**
