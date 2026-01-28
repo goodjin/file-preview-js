@@ -1,4 +1,4 @@
-﻿/**
+/**
  * RuntimeTools 单元测试
  * 
  * 测试 RuntimeTools 类的工具管理功能，包括：
@@ -63,7 +63,16 @@ describe("RuntimeTools", () => {
       
       // 验证只包含 org_management 工具
       const toolNames = toolDefs.map(t => t.function?.name).filter(Boolean);
-      const orgTools = ["find_role_by_name", "create_role", "spawn_agent_with_task", "terminate_agent", "send_message"];
+      const orgTools = [
+        "find_role_by_name",
+        "create_role",
+        "list_org_template_infos",
+        "get_org_template_org",
+        "get_org_structure",
+        "spawn_agent_with_task",
+        "terminate_agent",
+        "send_message"
+      ];
       
       // root 应该只有组织管理工具
       for (const toolName of toolNames) {
@@ -162,10 +171,13 @@ describe("RuntimeTools", () => {
       });
       
       const ctx = runtime._buildAgentContext(agent);
- 
-      
+
+      const result = await tools.executeToolCall(ctx, "get_org_structure", {});
       expect(result).toBeTruthy();
       expect(result.error).toBeUndefined();
+      expect(Array.isArray(result.roles)).toBe(true);
+      expect(result.self).toBeTruthy();
+      expect(result.self.agentId).toBe(agent.id);
     });
 
     test("执行不存在的工具返回错误", async () => {

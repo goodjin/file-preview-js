@@ -63,7 +63,7 @@ export class BrowserManager {
 
   /**
    * 启动新的浏览器实例
-   * @param {{headless?: boolean, executablePath?: string, proxy?: {server?: string, username?: string, password?: string}}} options
+   * @param {{headless?: boolean, autoOpenDevtoolsForTabs?: boolean, executablePath?: string, proxy?: {server?: string, username?: string, password?: string}}} options
    * @returns {Promise<{ok: boolean, browserId: string, createdAt: string}>}
    */
   async launch(options = {}) {
@@ -72,14 +72,16 @@ export class BrowserManager {
     const defaultProxy = this.config.proxy ?? {};
     const {
       headless = defaultHeadless,
+      autoOpenDevtoolsForTabs = false,
       executablePath,
       proxy = defaultProxy
     } = options;
 
+    const effectiveHeadless = autoOpenDevtoolsForTabs ? false : headless;
     const browserId = randomUUID();
     const chromePath = executablePath ?? this._findChromePath();
     
-    this.log.info?.("启动浏览器", { browserId, headless, chromePath, proxy: proxy.server ? { server: proxy.server } : null });
+    this.log.info?.("启动浏览器", { browserId, headless: effectiveHeadless, chromePath, proxy: proxy.server ? { server: proxy.server } : null, autoOpenDevtoolsForTabs });
 
     try {
       // 构建启动参数
@@ -89,6 +91,10 @@ export class BrowserManager {
         // "--disable-dev-shm-usage"
       ];
 
+      if (autoOpenDevtoolsForTabs) {
+        args.push("--auto-open-devtools-for-tabs");
+      }
+
       // 添加代理配置
       if (proxy.server) {
         args.push(`--proxy-server=${proxy.server}`);
@@ -96,7 +102,7 @@ export class BrowserManager {
       }
 
       const launchOptions = {
-        headless: headless ? "new" : false,
+        headless: effectiveHeadless ? "new" : false,
         executablePath: chromePath,
         args
       };

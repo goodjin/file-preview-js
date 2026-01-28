@@ -1,4 +1,4 @@
-﻿# chrome
+# chrome
 
 ## 综述
 该目录包含 6 个文件与 1 个子目录，直接文件类型以 .js、.md 为主，用于承载本层级的实现与配置。
@@ -45,3 +45,18 @@
 - SAVE_RESOURCE_USAGE.md: 详细的使用说明和示例
 - CHANGELOG.md: 变更历史和迁移指南
 - FRONTEND_INTEGRATION.md: 前端集成说明，解释如何在聊天界面显示工件缩略图
+
+### DevTools 调试采集功能
+模块新增了 DevTools 调试采集能力，用于智能体在网页里进行调试与查看日志。
+
+1. **启用调试采集** (chrome_open_devtools)
+   - 为指定标签页启用 Console/页面异常/可选网络失败日志的采集与缓存
+   - 支持设置最大缓存条数（环形缓冲）与启用前清空
+
+2. **获取调试内容** (chrome_get_devtools_content)
+   - 获取已采集的结构化日志条目
+   - 支持按类型过滤与限制返回条数，可选择读取后清空缓存
+
+3. **自动打开 DevTools 窗口（可选）**
+   - `chrome_launch` 新增可选参数 `autoOpenDevtoolsForTabs`
+   - 启用后会在创建/打开标签页时自动弹出 Chrome DevTools（会强制以有界面模式启动以保证参数生效）

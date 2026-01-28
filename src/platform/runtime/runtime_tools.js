@@ -62,6 +62,7 @@ export class RuntimeTools {
     const toolGroupMapping = {
       find_role_by_name: "org_management",
       create_role: "org_management",
+      get_org_structure: "org_management",
       spawn_agent_with_task: "org_management",
       terminate_agent: "org_management",
       send_message: "org_management",
@@ -134,10 +135,12 @@ export class RuntimeTools {
    */
   getToolDefinitionsForAgent(agentId) {
     const runtime = this.runtime;
+    const alwaysAllowedToolNames = new Set(["get_org_structure"]);
     
     // root 岗位硬编码只有 org_management
     if (agentId === "root") {
-      return runtime.toolGroupManager.getToolDefinitions(["org_management"]);
+      const defs = runtime.toolGroupManager.getToolDefinitions(["org_management"]);
+      return this._appendAlwaysAllowedTools(defs, alwaysAllowedToolNames);
     }
     
     // 获取智能体元数据
@@ -157,9 +160,10 @@ export class RuntimeTools {
     // 获取岗位配置的工具组，未配置则使用全部工具组
     const toolGroups = role.toolGroups ?? runtime.toolGroupManager.getAllGroupIds();
     const builtinTools = runtime.toolGroupManager.getToolDefinitions(toolGroups);
-    
+
     // 合并模块提供的工具定义（模块工具暂时对所有非 root 岗位可用）
-    return [...builtinTools, ...runtime.moduleLoader.getToolDefinitions()];
+    const merged = [...builtinTools, ...runtime.moduleLoader.getToolDefinitions()];
+    return this._appendAlwaysAllowedTools(merged, alwaysAllowedToolNames);
   }
 
   /**
@@ -176,6 +180,7 @@ export class RuntimeTools {
    */
   isToolAvailableForAgent(agentId, toolName) {
     const runtime = this.runtime;
+    if (toolName === "get_org_structure") return true;
     
     // 检查是否是模块工具（模块工具对所有非 root 岗位可用）
     if (runtime.moduleLoader.hasToolName(toolName)) {
@@ -204,6 +209,26 @@ export class RuntimeTools {
     // 获取岗位配置的工具组，未配置则使用全部工具组
     const toolGroups = role.toolGroups ?? runtime.toolGroupManager.getAllGroupIds();
     return runtime.toolGroupManager.isToolInGroups(toolName, toolGroups);
+  }
+
+  _appendAlwaysAllowedTools(toolDefs, alwaysAllowedToolNames) {
+    const runtime = this.runtime;
+    const existing = new Set(toolDefs.map((t) => t?.function?.name).filter(Boolean));
+    if (alwaysAllowedToolNames.size === 0) return toolDefs;
+
+    const allDefs = runtime._toolExecutor.getToolDefinitions();
+    const result = [...toolDefs];
+
+    for (const name of alwaysAllowedToolNames) {
+      if (existing.has(name)) continue;
+      const def = allDefs.find((t) => t?.function?.name === name);
+      if (def) {
+        result.push(def);
+        existing.add(name);
+      }
+    }
+
+    return result;
   }
 
   /**

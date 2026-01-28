@@ -95,6 +95,12 @@ export default {
           return await tabManager.closeTab(args.tabId);
         case "chrome_list_tabs":
           return await tabManager.listTabs(args.browserId);
+
+        // DevTools（调试采集）
+        case "chrome_open_devtools":
+          return await tabManager.enableDevtools(args.tabId, args);
+        case "chrome_get_devtools_content":
+          return await tabManager.getDevtoolsContent(args.tabId, args);
         
         // 页面导航
         case "chrome_navigate":

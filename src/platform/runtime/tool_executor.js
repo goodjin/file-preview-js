@@ -124,6 +124,23 @@ export class ToolExecutor {
           }
         }
       },
+      {
+        type: "function",
+        function: {
+          name: "get_org_structure",
+          description: "获取组织结构摘要：有哪些岗位、每个岗位上的智能体ID列表，以及当前智能体所属岗位信息。默认只包含未终止的智能体。",
+          parameters: {
+            type: "object",
+            properties: {
+              includeTerminated: {
+                type: "boolean",
+                description: "是否包含已终止的智能体，默认 false。",
+                default: false
+              }
+            }
+          }
+        }
+      },
 
       // 创建智能体并发送任务
       {
@@ -411,6 +428,8 @@ export class ToolExecutor {
           return await this._executeListOrgTemplateInfos(ctx);
         case "get_org_template_org":
           return await this._executeGetOrgTemplateOrg(ctx, args);
+        case "get_org_structure":
+          return this._executeGetOrgStructure(ctx, args);
         case "spawn_agent_with_task":
           return await this._executeSpawnAgentWithTask(ctx, args);
         case "send_message":
@@ -456,6 +475,62 @@ export class ToolExecutor {
     const result = ctx.tools.findRoleByName(args.name);
     void this.runtime.log?.debug?.("工具调用完成", { toolName: "find_role_by_name", ok: true });
     return result;
+  }
+
+  _executeGetOrgStructure(ctx, args) {
+    const org = ctx.org;
+    const includeTerminated = Boolean(args?.includeTerminated);
+    const persistedRoles = org ? org.listRoles() : [];
+    const persistedAgents = org ? org.listAgents() : [];
+    const agentIdsByRoleId = new Map();
+
+    const pushAgentId = (roleId, agentId) => {
+      if (!roleId || !agentId) return;
+      const list = agentIdsByRoleId.get(roleId);
+      if (list) {
+        list.push(agentId);
+      } else {
+        agentIdsByRoleId.set(roleId, [agentId]);
+      }
+    };
+
+    pushAgentId("root", "root");
+    pushAgentId("user", "user");
+
+    for (const a of persistedAgents) {
+      if (!a || typeof a.id !== "string" || typeof a.roleId !== "string") continue;
+      const status = a.status ?? "active";
+      if (!includeTerminated && status === "terminated") continue;
+      pushAgentId(a.roleId, a.id);
+    }
+
+    const roles = [
+      { id: "root", name: "root", agentIds: agentIdsByRoleId.get("root") ?? [] },
+      { id: "user", name: "user", agentIds: agentIdsByRoleId.get("user") ?? [] },
+      ...persistedRoles.map((r) => ({
+        id: r.id,
+        name: r.name,
+        agentIds: agentIdsByRoleId.get(r.id) ?? []
+      }))
+    ];
+
+    const selfAgentId = ctx.agent?.id ?? null;
+    const self = selfAgentId
+      ? {
+          agentId: selfAgentId,
+          roleId: ctx.agent?.roleId ?? null,
+          roleName: ctx.agent?.roleName ?? null
+        }
+      : null;
+
+    void this.runtime.log?.debug?.("工具调用完成", {
+      toolName: "get_org_structure",
+      ok: true,
+      roleCount: roles.length,
+      selfAgentId
+    });
+
+    return { roles, self };
   }
 
   async _executeCreateRole(ctx, args) {

@@ -24,7 +24,9 @@ export function getToolDefinitions() {
         description: "启动一个新的 Chrome 浏览器实例。这是使用 chrome 工具组的第一步，启动后会返回 browserId 用于后续操作。",
         parameters: {
           type: "object",
-          properties: {}
+          properties: {
+            autoOpenDevtoolsForTabs: { type: "boolean", description: "是否在创建/打开标签页时自动打开 DevTools 窗口（需要有界面模式，启用后会强制以有界面模式启动）", default: false }
+          }
         }
       }
     },
@@ -84,6 +86,51 @@ export function getToolDefinitions() {
             browserId: { type: "string", description: "浏览器实例 ID（由 chrome_launch 返回）" }
           },
           required: ["browserId"]
+        }
+      }
+    },
+
+    // ==================== DevTools（调试采集） ====================
+    {
+      type: "function",
+      function: {
+        name: "chrome_open_devtools",
+        description: "为指定标签页启用开发者工具相关的调试采集能力（Console/页面错误/可选网络失败日志）。用于智能体在网页里调试和查看日志。",
+        parameters: {
+          type: "object",
+          properties: {
+            tabId: { type: "string", description: "标签页 ID（由 chrome_new_tab 返回）" },
+            captureConsole: { type: "boolean", description: "是否采集 console 日志（log/warn/error 等），默认 true", default: true },
+            capturePageError: { type: "boolean", description: "是否采集页面运行时异常（pageerror），默认 true", default: true },
+            captureRequestFailed: { type: "boolean", description: "是否采集网络请求失败（requestfailed），默认 false", default: false },
+            maxEntries: { type: "number", description: "每个标签页最多缓存日志条数（环形缓冲），默认 500", default: 500 },
+            clearExisting: { type: "boolean", description: "启用前是否清空已缓存的日志，默认 false", default: false }
+          },
+          required: ["tabId"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "chrome_get_devtools_content",
+        description: "获取指定标签页已采集的开发者工具内容（结构化日志）。调用之前必须先保证在这个标签页上调用过 chrome_open_devtools 开启了调试采集能力。",
+        parameters: {
+          type: "object",
+          properties: {
+            tabId: { type: "string", description: "标签页 ID（由 chrome_new_tab 返回）" },
+            types: {
+              type: "array",
+              description: "要返回的日志类型数组，默认返回全部",
+              items: {
+                type: "string",
+                enum: ["console", "pageerror", "requestfailed"]
+              }
+            },
+            limit: { type: "number", description: "最多返回条数，默认 200", default: 200 },
+            clearAfterRead: { type: "boolean", description: "读取后是否清空缓存，默认 false", default: false }
+          },
+          required: ["tabId"]
         }
       }
     },

@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
  * @property {import('puppeteer-core').Page} page - Puppeteer Page 对象
  * @property {string} createdAt - 创建时间 ISO 字符串
  * @property {string} status - 状态: 'active' | 'closed'
+ * @property {{enabled: boolean, config: {captureConsole: boolean, capturePageError: boolean, captureRequestFailed: boolean, maxEntries: number}, entries: Array<any>, dropped: number, nextId: number}|null} devtools - DevTools 调试采集状态
  */
 
 export class TabManager {
@@ -23,6 +24,56 @@ export class TabManager {
     this.browserManager = options.browserManager;
     /** @type {Map<string, Tab>} */
     this._tabs = new Map();
+  }
+
+  /**
+   * 将日志文本做裁剪，避免单条日志过大导致工具返回内容膨胀
+   * @param {string} text - 原始文本
+   * @param {number} maxLength - 最大长度
+   * @returns {string}
+   */
+  _truncateText(text, maxLength) {
+    const s = text == null ? "" : String(text);
+    if (s.length <= maxLength) return s;
+    return s.slice(0, maxLength) + "…";
+  }
+
+  /**
+   * 初始化/读取标签页 DevTools 采集状态
+   * @param {Tab} tab
+   * @returns {NonNullable<Tab["devtools"]>}
+   */
+  _ensureDevtoolsState(tab) {
+    if (tab.devtools) return tab.devtools;
+    tab.devtools = {
+      enabled: false,
+      config: {
+        captureConsole: true,
+        capturePageError: true,
+        captureRequestFailed: false,
+        maxEntries: 500
+      },
+      entries: [],
+      dropped: 0,
+      nextId: 1
+    };
+    return tab.devtools;
+  }
+
+  /**
+   * 写入一条 DevTools 日志到 ring buffer
+   * @param {Tab} tab
+   * @param {any} entry
+   * @returns {void}
+   */
+  _appendDevtoolsEntry(tab, entry) {
+    const state = this._ensureDevtoolsState(tab);
+    state.entries.push(entry);
+    const maxEntries = Math.max(1, Math.floor(state.config.maxEntries || 500));
+    while (state.entries.length > maxEntries) {
+      state.entries.shift();
+      state.dropped += 1;
+    }
   }
 
   /**
@@ -60,7 +111,8 @@ export class TabManager {
         browserId,
         page,
         createdAt: new Date().toISOString(),
-        status: "active"
+        status: "active",
+        devtools: null
       };
 
       this._tabs.set(tabId, tab);
@@ -93,6 +145,138 @@ export class TabManager {
       this.log.error?.("标签页创建失败", { tabId, browserId, error: message });
       return { error: "tab_create_failed", browserId, message };
     }
+  }
+
+  /**
+   * 为指定标签页启用开发者工具相关的调试采集能力（Console/页面错误/可选网络失败日志）
+   * @param {string} tabId - 标签页 ID
+   * @param {{captureConsole?: boolean, capturePageError?: boolean, captureRequestFailed?: boolean, maxEntries?: number, clearExisting?: boolean}} options
+   * @returns {Promise<{ok: true, tabId: string, enabled: true, config: any, dropped: number, total: number} | {error: string, tabId: string}>}
+   */
+  async enableDevtools(tabId, options = {}) {
+    const tab = this._tabs.get(tabId);
+    if (!tab || tab.status !== "active") {
+      return { error: "tab_not_found", tabId };
+    }
+
+    const state = this._ensureDevtoolsState(tab);
+    const {
+      captureConsole = state.config.captureConsole,
+      capturePageError = state.config.capturePageError,
+      captureRequestFailed = state.config.captureRequestFailed,
+      maxEntries = state.config.maxEntries,
+      clearExisting = false
+    } = options;
+
+    state.config = {
+      captureConsole: Boolean(captureConsole),
+      capturePageError: Boolean(capturePageError),
+      captureRequestFailed: Boolean(captureRequestFailed),
+      maxEntries: Math.max(1, Math.floor(Number(maxEntries || 500)))
+    };
+
+    if (clearExisting) {
+      state.entries = [];
+      state.dropped = 0;
+      state.nextId = 1;
+    }
+
+    if (!state.enabled) {
+      state.enabled = true;
+      const page = tab.page;
+
+      page.on("console", (msg) => {
+        try {
+          const current = tab.devtools;
+          if (!current?.config?.captureConsole) return;
+          const entry = {
+            id: current.nextId++,
+            ts: new Date().toISOString(),
+            type: "console",
+            level: typeof msg?.type === "function" ? msg.type() : undefined,
+            text: this._truncateText(typeof msg?.text === "function" ? msg.text() : String(msg), 4000),
+            location: typeof msg?.location === "function" ? msg.location() : undefined
+          };
+          this._appendDevtoolsEntry(tab, entry);
+        } catch (err) {
+          this.log?.debug?.("DevTools console 采集失败", { tabId, error: err?.message ?? String(err) });
+        }
+      });
+
+      page.on("pageerror", (err) => {
+        try {
+          const current = tab.devtools;
+          if (!current?.config?.capturePageError) return;
+          const entry = {
+            id: current.nextId++,
+            ts: new Date().toISOString(),
+            type: "pageerror",
+            message: this._truncateText(err?.message ?? String(err), 4000),
+            stack: this._truncateText(err?.stack ?? "", 12000)
+          };
+          this._appendDevtoolsEntry(tab, entry);
+        } catch (e) {
+          this.log?.debug?.("DevTools pageerror 采集失败", { tabId, error: e?.message ?? String(e) });
+        }
+      });
+
+      page.on("requestfailed", (request) => {
+        try {
+          const current = tab.devtools;
+          if (!current?.config?.captureRequestFailed) return;
+          const failure = typeof request?.failure === "function" ? request.failure() : null;
+          const entry = {
+            id: current.nextId++,
+            ts: new Date().toISOString(),
+            type: "requestfailed",
+            url: this._truncateText(typeof request?.url === "function" ? request.url() : "", 4000),
+            method: typeof request?.method === "function" ? request.method() : undefined,
+            resourceType: typeof request?.resourceType === "function" ? request.resourceType() : undefined,
+            errorText: this._truncateText(failure?.errorText ?? "", 4000)
+          };
+          this._appendDevtoolsEntry(tab, entry);
+        } catch (e) {
+          this.log?.debug?.("DevTools requestfailed 采集失败", { tabId, error: e?.message ?? String(e) });
+        }
+      });
+
+      this.log?.info?.("DevTools 调试采集已启用", { tabId });
+    }
+
+    return { ok: true, tabId, enabled: true, config: state.config, dropped: state.dropped, total: state.entries.length };
+  }
+
+  /**
+   * 获取指定标签页已缓存的开发者工具内容（结构化日志）
+   * @param {string} tabId - 标签页 ID
+   * @param {{types?: Array<\"console\"|\"pageerror\"|\"requestfailed\">, limit?: number, clearAfterRead?: boolean}} options
+   * @returns {Promise<{ok: true, tabId: string, entries: Array<any>, dropped: number, total: number} | {error: string, tabId: string}>}
+   */
+  async getDevtoolsContent(tabId, options = {}) {
+    const tab = this._tabs.get(tabId);
+    if (!tab || tab.status !== "active") {
+      return { error: "tab_not_found", tabId };
+    }
+
+    const state = this._ensureDevtoolsState(tab);
+    const { types, limit = 200, clearAfterRead = false } = options;
+    const limitNumber = Math.max(0, Math.floor(Number(limit ?? 200)));
+    const typeSet = Array.isArray(types) && types.length > 0 ? new Set(types) : null;
+
+    const filtered = typeSet
+      ? state.entries.filter((e) => typeSet.has(e?.type))
+      : state.entries.slice();
+    const sliced = limitNumber > 0 ? filtered.slice(Math.max(0, filtered.length - limitNumber)) : [];
+
+    const result = { ok: true, tabId, entries: sliced, dropped: state.dropped, total: state.entries.length };
+
+    if (clearAfterRead) {
+      state.entries = [];
+      state.dropped = 0;
+      state.nextId = 1;
+    }
+
+    return result;
   }
 
   /**
