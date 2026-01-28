@@ -11,6 +11,7 @@ export type AppDom = {
   temp: HTMLInputElement;
   topK: HTMLInputElement;
   topP: HTMLInputElement;
+  systemPrompt: HTMLTextAreaElement;
   btnLoadFromUrl: HTMLButtonElement;
   btnUnload: HTMLButtonElement;
   chatList: HTMLElement;
@@ -30,6 +31,7 @@ export function getAppDom(doc: Document): AppDom {
     temp: mustGetElement(doc, '#temp'),
     topK: mustGetElement(doc, '#topK'),
     topP: mustGetElement(doc, '#topP'),
+    systemPrompt: mustGetElement(doc, '#systemPrompt'),
     btnLoadFromUrl: mustGetElement(doc, '#btnLoadFromUrl'),
     btnUnload: mustGetElement(doc, '#btnUnload'),
     chatList: mustGetElement(doc, '#chatList'),
@@ -55,6 +57,7 @@ export function render(dom: AppDom, state: AppState): void {
   dom.btnUnload.disabled = controlsDisabled || !state.model.loaded;
   dom.btnSend.disabled = controlsDisabled || !state.model.loaded;
   dom.btnStop.disabled = state.status.kind !== 'generating';
+  dom.systemPrompt.disabled = controlsDisabled;
 
   renderMessages(dom.chatList, state.messages);
 }

@@ -6,10 +6,11 @@ export type SendMessagePlan = {
   assistantIndex: number;
 };
 
-export function planSendMessage(existing: ChatMessage[], userText: string): SendMessagePlan {
-  const messages: ChatMessage[] = [...existing];
-  if (!messages.some((m) => m.role === 'system')) {
-    messages.unshift({ role: 'system', content: '你是一个有帮助的助手。' });
+export function planSendMessage(existing: ChatMessage[], userText: string, systemPrompt: string): SendMessagePlan {
+  const systemText = systemPrompt.trim();
+  const messages: ChatMessage[] = existing.filter((m) => m.role !== 'system');
+  if (systemText) {
+    messages.unshift({ role: 'system', content: systemText });
   }
   messages.push({ role: 'user', content: userText });
   const assistantIndex = messages.length;
@@ -19,4 +20,3 @@ export function planSendMessage(existing: ChatMessage[], userText: string): Send
     assistantIndex,
   };
 }
-

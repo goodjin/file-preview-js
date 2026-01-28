@@ -41,7 +41,8 @@ export function createWllamaEngine(): WllamaEngine {
     const isIsolated = globalThis.crossOriginIsolated === true;
     const hcRaw = typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 1;
     const hc = Number.isFinite(hcRaw) && hcRaw > 0 ? hcRaw : 1;
-    const threads = isIsolated ? Math.max(2, Math.min(8, hc)) : 1;
+    const suggested = Math.max(1, Math.floor(hc / 2));
+    const threads = isIsolated ? Math.max(2, Math.min(8, suggested)) : 1;
     const batchSize = threads > 1 ? 512 : 256;
     return { crossOriginIsolated: isIsolated, hardwareConcurrency: hc, threads, batchSize };
   };

@@ -32,11 +32,12 @@ export function createApp(doc: Document): void {
       });
       const runtime = engine.getRuntimeInfo();
       const modeText = runtime.crossOriginIsolated ? '多线程' : '单线程';
+      const warnText = runtime.crossOriginIsolated ? '' : '（提示：缺少 COOP/COEP 响应头会退化为单线程）';
       setState({
         ...state,
         status: {
           kind: 'ready',
-          text: `模型已加载（${modeText}，ctx=${loadParams.nCtx}，threads=${runtime.threads}，batch=${runtime.batchSize}）`,
+          text: `模型已加载（${modeText}${warnText}，ctx=${loadParams.nCtx}，threads=${runtime.threads}，batch=${runtime.batchSize}）`,
         },
         model: { loaded: true },
       });
@@ -86,7 +87,7 @@ export function createApp(doc: Document): void {
 
     setInputValue(dom, '');
 
-    const plan = planSendMessage(state.messages, text);
+    const plan = planSendMessage(state.messages, text, dom.systemPrompt.value);
     const messagesForModel = plan.messagesForModel;
     const assistantIndex = plan.assistantIndex;
     const messagesInFlight = plan.messagesForUi;
