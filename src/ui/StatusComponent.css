@@ -1,0 +1,409 @@
+/**
+ * StatusComponent - 状态组件样式
+ */
+
+/* 状态容器 */
+.status {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.95);
+  z-index: 100;
+  border-radius: 8px;
+}
+
+/* 顶部位置 */
+.status--top {
+  bottom: auto;
+  height: auto;
+  min-height: 200px;
+  border-radius: 8px 8px 0 0;
+}
+
+/* 底部位置 */
+.status--bottom {
+  top: auto;
+  height: auto;
+  min-height: 200px;
+  border-radius: 0 0 8px 8px;
+}
+
+/* 加载状态 */
+.status__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #E5E7EB;
+  border-top-color: #3B82F6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #6B7280;
+  text-align: center;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 错误状态 */
+.status__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #EF4444;
+}
+
+.error-message {
+  font-size: 16px;
+  color: #1F2937;
+  margin-bottom: 24px;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* 成功状态 */
+.status__success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.success-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #10B981;
+  color: #FFFFFF;
+  font-size: 24px;
+  margin-bottom: 16px;
+}
+
+.success-message {
+  font-size: 16px;
+  color: #065F46;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+/* 进度条 */
+.status__progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-top: 1px solid #E5E7EB;
+}
+
+.progress-track {
+  height: 4px;
+  background-color: #E5E7EB;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: #3B82F6;
+  border-radius: 2px;
+  transition: width 0.3s ease-in-out;
+  width: 0%;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.progress-text {
+  flex: 1;
+  margin-right: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-percent {
+  font-weight: 500;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* 按钮样式 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease-in-out;
+  padding: 0 24px;
+  height: 40px;
+  font-size: 14px;
+}
+
+.btn--sm {
+  height: 32px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+
+.btn--primary {
+  background-color: #3B82F6;
+  color: #FFFFFF;
+}
+
+.btn--primary:hover {
+  background-color: #2563EB;
+}
+
+.btn--primary:active {
+  background-color: #1D4ED8;
+}
+
+.btn--secondary {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  color: #1F2937;
+}
+
+.btn--secondary:hover {
+  background-color: #F9FAFB;
+  border-color: #3B82F6;
+}
+
+/* 移动端适配 */
+@media (max-width: 767px) {
+  .status {
+    padding: 20px;
+  }
+  
+  .loading-spinner {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .loading-text {
+    font-size: 13px;
+  }
+  
+  .error-icon {
+    font-size: 40px;
+  }
+  
+  .error-message {
+    font-size: 14px;
+    padding: 0 10px;
+  }
+  
+  .success-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+  
+  .success-message {
+    font-size: 14px;
+    padding: 0 10px;
+  }
+  
+  .status__progress {
+    padding: 12px;
+  }
+  
+  .progress-info {
+    font-size: 11px;
+  }
+}
+
+/* 平板适配 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .status {
+    padding: 32px 24px;
+  }
+}
+
+/* 大屏适配 */
+@media (min-width: 1440px) {
+  .loading-text {
+    font-size: 15px;
+  }
+  
+  .error-message {
+    font-size: 17px;
+  }
+  
+  .success-message {
+    font-size: 17px;
+  }
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.status--top {
+  animation: slideDown 0.3s ease-in-out;
+}
+
+.status--bottom {
+  animation: slideUp 0.3s ease-in-out;
+}
+
+.status:not(.status--top):not(.status--bottom) {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  .status {
+    background-color: #FFFFFF;
+    border: 2px solid #000000;
+  }
+  
+  .loading-spinner {
+    border-color: #000000;
+    border-top-color: #000000;
+  }
+  
+  .error-message {
+    color: #000000;
+  }
+  
+  .success-message {
+    color: #000000;
+  }
+}
+
+/* 暗色模式支持（预留） */
+@media (prefers-color-scheme: dark) {
+  .status {
+    background-color: rgba(31, 41, 55, 0.95);
+  }
+  
+  .loading-text {
+    color: #9CA3AF;
+  }
+  
+  .error-message {
+    color: #F3F4F6;
+  }
+  
+  .success-message {
+    color: #F3F4F6;
+  }
+  
+  .status__progress {
+    background-color: rgba(31, 41, 55, 0.95);
+    border-top-color: #374151;
+  }
+  
+  .progress-track {
+    background-color: #374151;
+  }
+  
+  .progress-info {
+    color: #9CA3AF;
+  }
+}
+
+/* 无障碍支持 */
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner {
+    animation: none;
+  }
+  
+  .progress-fill {
+    transition: none;
+  }
+  
+  .status--top,
+  .status--bottom {
+    animation: none;
+  }
+  
+  .status:not(.status--top):not(.status--bottom) {
+    animation: none;
+  }
+}
+
+/* 打印样式 */
+@media print {
+  .status {
+    display: none !important;
+  }
+}

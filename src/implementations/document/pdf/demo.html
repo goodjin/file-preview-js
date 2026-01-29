@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF预览功能演示</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 
+                   'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .header h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    
+    .header p {
+      color: #666;
+    }
+    
+    .upload-area {
+      background: white;
+      border: 2px dashed #ddd;
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .upload-area:hover {
+      border-color: #007bff;
+      background: #f8f9fa;
+    }
+    
+    .upload-area input {
+      display: none;
+    }
+    
+    .upload-icon {
+      font-size: 48px;
+      color: #007bff;
+      margin-bottom: 10px;
+    }
+    
+    .upload-text {
+      color: #666;
+      font-size: 16px;
+    }
+    
+    .upload-hint {
+      color: #999;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    
+    .progress-container {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    
+    .progress-container.active {
+      display: block;
+    }
+    
+    .progress-bar {
+      height: 6px;
+      background: #e0e0e0;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: #007bff;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    
+    .progress-text {
+      text-align: center;
+      margin-top: 10px;
+      color: #666;
+      font-size: 14px;
+    }
+    
+    .error-container {
+      background: #fee;
+      border: 1px solid #fcc;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    
+    .error-container.active {
+      display: block;
+    }
+    
+    .error-title {
+      color: #c00;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    
+    .error-message {
+      color: #666;
+    }
+    
+    #pdf-container {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      min-height: 600px;
+    }
+    
+    /* PDF预览容器样式 */
+    .pdf-preview-container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .pdf-canvas-wrapper {
+      display: flex;
+      justify-content: center;
+      background: #666;
+      border-radius: 4px;
+      overflow: auto;
+      min-height: 500px;
+      padding: 20px;
+    }
+    
+    .pdf-canvas-wrapper canvas {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      background: white;
+    }
+    
+    .pdf-controls-wrapper {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+    }
+    
+    .pdf-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+    }
+    
+    .pdf-controls-left,
+    .pdf-controls-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .pdf-btn {
+      padding: 6px 14px;
+      border: 1px solid #d0d0d0;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    
+    .pdf-btn:hover:not(:disabled) {
+      background: #f0f0f0;
+      border-color: #c0c0c0;
+    }
+    
+    .pdf-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .page-info {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 14px;
+      color: #333;
+    }
+    
+    .current-page-input {
+      width: 50px;
+      padding: 4px 8px;
+      border: 1px solid #d0d0d0;
+      border-radius: 4px;
+      text-align: center;
+      font-size: 14px;
+    }
+    
+    .current-page-input:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+    
+    .page-separator {
+      color: #999;
+    }
+    
+    .zoom-level {
+      font-size: 14px;
+      color: #333;
+      min-width: 50px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📄 PDF预览功能演示</h1>
+    <p>基于PDF.js的纯前端PDF预览解决方案</p>
+  </div>
+  
+  <div class="upload-area" id="upload-area">
+    <div class="upload-icon">📁</div>
+    <div class="upload-text">点击选择PDF文件或拖拽文件到这里</div>
+    <div class="upload-hint">支持 .pdf 格式，建议文件大小不超过 50MB</div>
+    <input type="file" id="file-input" accept=".pdf,application/pdf">
+  </div>
+  
+  <div class="progress-container" id="progress-container">
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <div class="progress-text" id="progress-text">加载中... 0%</div>
+  </div>
+  
+  <div class="error-container" id="error-container">
+    <div class="error-title">❌ 加载失败</div>
+    <div class="error-message" id="error-message"></div>
+  </div>
+  
+  <div id="pdf-container"></div>
+  
+  <script type="module">
+    import { createPDFPreviewer } from './index.js';
+    
+    let previewer = null;
+    
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+    const progressContainer = document.getElementById('progress-container');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    const errorContainer = document.getElementById('error-container');
+    const errorMessage = document.getElementById('error-message');
+    const pdfContainer = document.getElementById('pdf-container');
+    
+    // 点击上传区域
+    uploadArea.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    // 拖拽文件
+    uploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadArea.style.borderColor = '#007bff';
+      uploadArea.style.background = '#f0f8ff';
+    });
+    
+    uploadArea.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      uploadArea.style.borderColor = '#ddd';
+      uploadArea.style.background = 'white';
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.style.borderColor = '#ddd';
+      uploadArea.style.background = 'white';
+      
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    });
+    
+    // 文件选择
+    fileInput.addEventListener('change', (e) => {
+      const files = e.target.files;
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    });
+    
+    // 处理文件
+    async function handleFile(file) {
+      // 重置状态
+      hideError();
+      showProgress();
+      updateProgress(0);
+      
+      // 清空容器
+      pdfContainer.innerHTML = '';
+      
+      // 销毁旧预览器
+      if (previewer) {
+        previewer.destroy();
+        previewer = null;
+      }
+      
+      // 创建预览器
+      previewer = createPDFPreviewer({
+        container: pdfContainer,
+        fileInfo: {
+          name: file.name,
+          size: file.size
+        },
+        onLoad: () => {
+          hideProgress();
+          console.log('PDF加载完成');
+        },
+        onError: (error) => {
+          hideProgress();
+          showError(error.message);
+        },
+        onProgress: (progress) => {
+          updateProgress(progress);
+        }
+      });
+      
+      // 加载文件
+      try {
+        await previewer.load(file);
+      } catch (error) {
+        console.error('加载失败:', error);
+      }
+    }
+    
+    function showProgress() {
+      progressContainer.classList.add('active');
+    }
+    
+    function hideProgress() {
+      progressContainer.classList.remove('active');
+    }
+    
+    function updateProgress(percent) {
+      progressFill.style.width = percent + '%';
+      progressText.textContent = `加载中... ${percent}%`;
+    }
+    
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorContainer.classList.add('active');
+    }
+    
+    function hideError() {
+      errorContainer.classList.remove('active');
+    }
+  </script>
+</body>
+</html>

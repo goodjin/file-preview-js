@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF预览器与DocumentAdapter集成测试</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 
+                   'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .header h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    
+    .header p {
+      color: #666;
+    }
+    
+    .control-panel {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .control-panel h2 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    
+    .test-controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 500;
+    }
+    
+    .btn-primary {
+      background: #007bff;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #0056b3;
+    }
+    
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+    
+    .btn-secondary:hover {
+      background: #545b62;
+    }
+    
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .upload-area {
+      flex: 1;
+      border: 2px dashed #ddd;
+      border-radius: 6px;
+      padding: 15px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .upload-area:hover {
+      border-color: #007bff;
+      background: #f8f9fa;
+    }
+    
+    .upload-area input {
+      display: none;
+    }
+    
+    .test-console {
+      background: #1e1e1e;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      color: #d4d4d4;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      max-height: 500px;
+      overflow-y: auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .test-console .log-entry {
+      margin-bottom: 5px;
+      padding: 3px 0;
+      border-bottom: 1px solid #333;
+    }
+    
+    .test-console .log-entry:last-child {
+      border-bottom: none;
+    }
+    
+    .test-console .log-time {
+      color: #858585;
+      margin-right: 10px;
+    }
+    
+    .test-console .log-success {
+      color: #4ec9b0;
+    }
+    
+    .test-console .log-error {
+      color: #f48771;
+    }
+    
+    .test-console .log-warning {
+      color: #dcdcaa;
+    }
+    
+    .test-console .log-info {
+      color: #9cdcfe;
+    }
+    
+    .results-panel {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .results-panel h2 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .summary-card {
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 15px;
+      text-align: center;
+    }
+    
+    .summary-card .label {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+    
+    .summary-card .value {
+      color: #333;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    .summary-card.pass .value {
+      color: #28a745;
+    }
+    
+    .summary-card.fail .value {
+      color: #dc3545;
+    }
+    
+    .summary-card.rate .value {
+      color: #007bff;
+    }
+    
+    .test-list {
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    
+    .test-item {
+      padding: 12px 15px;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .test-item:last-child {
+      border-bottom: none;
+    }
+    
+    .test-item.pass {
+      background: #d4edda;
+    }
+    
+    .test-item.fail {
+      background: #f8d7da;
+    }
+    
+    .test-item.skip {
+      background: #fff3cd;
+    }
+    
+    .test-item-name {
+      flex: 1;
+      font-weight: 500;
+    }
+    
+    .test-item-status {
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .test-item.pass .test-item-status {
+      background: #28a745;
+      color: white;
+    }
+    
+    .test-item.fail .test-item-status {
+      background: #dc3545;
+      color: white;
+    }
+    
+    .test-item.skip .test-item-status {
+      background: #ffc107;
+      color: #333;
+    }
+    
+    .test-item-message {
+      color: #666;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: #e0e0e0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 15px;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: #007bff;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🧪 PDF预览器与DocumentAdapter集成测试</h1>
+    <p>验证PDF预览器与DocumentAdapter的集成功能和兼容性</p>
+  </div>
+  
+  <div class="control-panel">
+    <h2>📋 测试控制</h2>
+    <div class="test-controls">
+      <button class="btn btn-primary" id="btn-run-all">▶️ 运行所有测试</button>
+      <button class="btn btn-secondary" id="btn-clear">🗑️ 清空日志</button>
+      <button class="btn btn-secondary" id="btn-export">📊 导出报告</button>
+      
+      <div class="upload-area" id="upload-area">
+        📁 上传真实PDF文件测试
+        <input type="file" id="file-input" accept=".pdf,application/pdf">
+      </div>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+  </div>
+  
+  <div class="test-console" id="test-console">
+    <div class="log-entry">
+      <span class="log-time">[系统]</span>
+      <span class="log-info">测试环境已准备就绪，等待执行测试...</span>
+    </div>
+  </div>
+  
+  <div class="results-panel hidden" id="results-panel">
+    <h2>📊 测试结果</h2>
+    
+    <div class="summary">
+      <div class="summary-card">
+        <div class="label">总测试数</div>
+        <div class="value" id="summary-total">0</div>
+      </div>
+      <div class="summary-card pass">
+        <div class="label">通过</div>
+        <div class="value" id="summary-passed">0</div>
+      </div>
+      <div class="summary-card fail">
+        <div class="label">失败</div>
+        <div class="value" id="summary-failed">0</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">跳过</div>
+        <div class="value" id="summary-skipped">0</div>
+      </div>
+      <div class="summary-card rate">
+        <div class="label">通过率</div>
+        <div class="value" id="summary-rate">0%</div>
+      </div>
+    </div>
+    
+    <h3>详细结果</h3>
+    <div class="test-list" id="test-list"></div>
+  </div>
+  
+  <script type="module">
+    import PDFDocumentAdapterIntegrationTest from './pdf-document-adapter-integration.test.js';
+    
+    // UI元素
+    const btnRunAll = document.getElementById('btn-run-all');
+    const btnClear = document.getElementById('btn-clear');
+    const btnExport = document.getElementById('btn-export');
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+    const testConsole = document.getElementById('test-console');
+    const progressFill = document.getElementById('progress-fill');
+    const resultsPanel = document.getElementById('results-panel');
+    const testList = document.getElementById('test-list');
+    
+    // 测试状态
+    let currentTestSuite = null;
+    let testResults = null;
+    
+    // 日志工具
+    function log(message, type = 'info') {
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      
+      const className = type === 'success' ? 'log-success' :
+                       type === 'error' ? 'log-error' :
+                       type === 'warning' ? 'log-warning' : 'log-info';
+      
+      entry.innerHTML = `
+        <span class="log-time">[${time}]</span>
+        <span class="${className}">${message}</span>
+      `;
+      
+      testConsole.appendChild(entry);
+      testConsole.scrollTop = testConsole.scrollHeight;
+    }
+    
+    // 更新进度
+    function updateProgress(percent) {
+      progressFill.style.width = percent + '%';
+    }
+    
+    // 渲染测试结果
+    function renderResults(testResult) {
+      resultsPanel.classList.remove('hidden');
+      
+      const summary = testResult.getSummary();
+      const results = testResult.getAllResults();
+      
+      document.getElementById('summary-total').textContent = summary.total;
+      document.getElementById('summary-passed').textContent = summary.passed;
+      document.getElementById('summary-failed').textContent = summary.failed;
+      document.getElementById('summary-skipped').textContent = summary.skipped;
+      document.getElementById('summary-rate').textContent = summary.passRate;
+      
+      testList.innerHTML = '';
+      
+      results.forEach((result, index) => {
+        const item = document.createElement('div');
+        item.className = `test-item ${result.status}`;
+        
+        const statusText = result.status === 'pass' ? '✅ 通过' :
+                          result.status === 'fail' ? '❌ 失败' : '⏭️ 跳过';
+        
+        item.innerHTML = `
+          <div class="test-item-name">${result.name}</div>
+          <div class="test-item-status">${statusText}</div>
+          ${result.message ? `<div class="test-item-message">${result.message}</div>` : ''}
+        `;
+        
+        testList.appendChild(item);
+      });
+    }
+    
+    // 拦截console.log
+    const originalConsoleLog = console.log;
+    const originalConsoleError = console.error;
+    
+    console.log = function(...args) {
+      log(args.join(' '), 'info');
+      originalConsoleLog.apply(console, args);
+    };
+    
+    console.error = function(...args) {
+      log(args.join(' '), 'error');
+      originalConsoleError.apply(console, args);
+    };
+    
+    // 运行所有测试
+    async function runAllTests() {
+      btnRunAll.disabled = true;
+      log('开始执行所有测试...', 'info');
+      updateProgress(0);
+      
+      try {
+        currentTestSuite = new PDFDocumentAdapterIntegrationTest();
+        testResults = await currentTestSuite.runAll();
+        
+        log('所有测试执行完成!', 'success');
+        updateProgress(100);
+        
+        // 渲染结果
+        renderResults(testResults);
+        
+        const summary = testResults.getSummary();
+        log(`总计: ${summary.total}, 通过: ${summary.passed}, 失败: ${summary.failed}, 通过率: ${summary.passRate}`, 
+            summary.failed === 0 ? 'success' : 'warning');
+        
+      } catch (error) {
+        log(`测试执行出错: ${error.message}`, 'error');
+        console.error(error);
+      }
+      
+      btnRunAll.disabled = false;
+    }
+    
+    // 清空日志
+    function clearLog() {
+      testConsole.innerHTML = '<div class="log-entry"><span class="log-time">[系统]</span><span class="log-info">日志已清空</span></div>';
+    }
+    
+    // 导出报告
+    function exportReport() {
+      if (!testResults) {
+        log('没有可导出的测试结果', 'warning');
+        return;
+      }
+      
+      const summary = testResults.getSummary();
+      const results = testResults.getAllResults();
+      
+      const report = {
+        timestamp: new Date().toISOString(),
+        summary,
+        results
+      };
+      
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `integration-test-report-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      log('测试报告已导出', 'success');
+    }
+    
+    // 上传并测试真实文件
+    function uploadAndTest() {
+      fileInput.click();
+    }
+    
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      log(`开始测试真实文件: ${file.name} (${(file.size / 1024).toFixed(2)}KB)`, 'info');
+      
+      try {
+        const container = document.createElement('div');
+        container.style.display = 'none';
+        document.body.appendChild(container);
+        
+        const { createPDFPreviewer } = await import('./pdf-document-adapter-integration.test.js');
+        const previewer = createPDFPreviewer({
+          container: container,
+          fileInfo: { name: file.name, size: file.size },
+          onProgress: (progress) => {
+            log(`加载进度: ${progress}%`, 'info');
+          }
+        });
+        
+        const startTime = performance.now();
+        await previewer.load(file);
+        const loadTime = performance.now() - startTime;
+        
+        const totalPages = previewer.getTotalPages();
+        log(`文件加载成功! 总页数: ${totalPages}, 加载时间: ${loadTime.toFixed(2)}ms`, 'success');
+        
+        // 测试翻页
+        if (totalPages > 1) {
+          await previewer.nextPage();
+          log(`翻页测试成功 (第${previewer.getCurrentPage() + 1}页)`, 'success');
+        }
+        
+        // 测试缩放
+        await previewer.zoomIn();
+        log(`缩放测试成功 (缩放: ${previewer.getScale()})`, 'success');
+        
+        previewer.destroy();
+        document.body.removeChild(container);
+        
+        log(`真实文件测试完成!`, 'success');
+        
+      } catch (error) {
+        log(`真实文件测试失败: ${error.message}`, 'error');
+        console.error(error);
+      }
+    });
+    
+    // 事件绑定
+    btnRunAll.addEventListener('click', runAllTests);
+    btnClear.addEventListener('click', clearLog);
+    btnExport.addEventListener('click', exportReport);
+    uploadArea.addEventListener('click', uploadAndTest);
+  </script>
+</body>
+</html>

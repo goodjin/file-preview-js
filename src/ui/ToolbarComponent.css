@@ -1,0 +1,239 @@
+/**
+ * ToolbarComponent - 工具栏组件样式
+ */
+
+/* 工具栏容器 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background-color: #FFFFFF;
+  border-top: 1px solid #E5E7EB;
+  gap: 8px;
+  user-select: none;
+}
+
+/* 顶部工具栏 */
+.toolbar--top {
+  order: 0;
+  border-top: none;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+/* 底部工具栏 */
+.toolbar--bottom {
+  order: 2;
+}
+
+/* 工具栏分组 */
+.toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 分隔线 */
+.toolbar__separator {
+  width: 1px;
+  height: 24px;
+  background-color: #E5E7EB;
+  margin: 0 8px;
+}
+
+/* 按钮样式 */
+.toolbar__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background-color: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  color: #6B7280;
+  font-size: 16px;
+  padding: 0;
+}
+
+.toolbar__button:hover {
+  background-color: #F3F4F6;
+  color: #1F2937;
+}
+
+.toolbar__button:active {
+  background-color: #E5E7EB;
+}
+
+/* 禁用状态 */
+.toolbar__button--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 缩放显示 */
+.toolbar__zoom-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 50px;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 14px;
+  color: #1F2937;
+  font-weight: 500;
+  user-select: none;
+}
+
+/* 页码显示 */
+.toolbar__page-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  height: 36px;
+  font-size: 14px;
+  color: #1F2937;
+  user-select: none;
+}
+
+.toolbar__page-display__current {
+  cursor: pointer;
+  color: #3B82F6;
+  font-weight: 500;
+}
+
+.toolbar__page-display__current:hover {
+  text-decoration: underline;
+}
+
+.toolbar__page-display__total {
+  color: #6B7280;
+}
+
+/* 移动端适配 */
+@media (max-width: 767px) {
+  .toolbar {
+    padding: 8px 12px;
+    gap: 4px;
+  }
+  
+  .toolbar__button {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+  
+  .toolbar__zoom-display {
+    min-width: 45px;
+    height: 40px;
+    font-size: 13px;
+  }
+  
+  .toolbar__page-display {
+    padding: 0 8px;
+    height: 40px;
+    font-size: 13px;
+  }
+}
+
+/* 平板适配 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .toolbar {
+    padding: 10px 20px;
+  }
+}
+
+/* 大屏适配 */
+@media (min-width: 1440px) {
+  .toolbar {
+    padding: 10px 24px;
+  }
+  
+  .toolbar__button {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .toolbar__zoom-display {
+    min-width: 60px;
+    height: 40px;
+    font-size: 15px;
+  }
+  
+  .toolbar__page-display {
+    padding: 0 16px;
+    height: 40px;
+    font-size: 15px;
+  }
+}
+
+/* 动画效果 */
+@keyframes button-press {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.toolbar__button:active {
+  animation: button-press 0.2s ease-in-out;
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  .toolbar {
+    border-color: #000000;
+  }
+  
+  .toolbar__button {
+    border: 1px solid #000000;
+    color: #000000;
+  }
+  
+  .toolbar__button:hover {
+    background-color: #000000;
+    color: #FFFFFF;
+  }
+}
+
+/* 暗色模式支持（预留） */
+@media (prefers-color-scheme: dark) {
+  .toolbar {
+    background-color: #1F2937;
+    border-color: #374151;
+  }
+  
+  .toolbar__button {
+    color: #9CA3AF;
+  }
+  
+  .toolbar__button:hover {
+    background-color: #374151;
+    color: #F3F4F6;
+  }
+  
+  .toolbar__zoom-display,
+  .toolbar__page-display {
+    color: #F3F4F6;
+  }
+  
+  .toolbar__page-display__total {
+    color: #9CA3AF;
+  }
+}
+
+/* 打印样式 */
+@media print {
+  .toolbar {
+    display: none !important;
+  }
+}

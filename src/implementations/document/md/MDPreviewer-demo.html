@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown预览器示例</title>
+  <!-- 引入marked.js -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.min.js"></script>
+  <!-- 引入highlight.js核心库 -->
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js/lib/core.min.js"></script>
+  <!-- 引入highlight.js的语言包 -->
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js/lib/languages/javascript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js/lib/languages/python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js/lib/languages/css.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js/lib/languages/html.min.js"></script>
+  <!-- 引入highlight.js样式 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js/styles/github.min.css">
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f5f5f5;
+    }
+    
+    .demo-header {
+      background: #fff;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    
+    .demo-header h1 {
+      font-size: 24px;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    
+    .demo-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    
+    .demo-controls label {
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .demo-controls input[type="file"] {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .demo-controls button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      background: #007bff;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .demo-controls button:hover {
+      background: #0056b3;
+    }
+    
+    .demo-container {
+      margin: 20px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      height: calc(100vh - 160px);
+      overflow: hidden;
+    }
+    
+    #preview-container {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .md-preview-wrapper h1, .md-preview-wrapper h2, .md-preview-wrapper h3 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      color: #24292e;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    
+    .md-preview-wrapper h1 { font-size: 2em; }
+    .md-preview-wrapper h2 { font-size: 1.5em; }
+    .md-preview-wrapper h3 { font-size: 1.25em; }
+    
+    .md-preview-wrapper p {
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+    
+    .md-preview-wrapper pre {
+      background: #f6f8fa;
+      border-radius: 6px;
+      padding: 16px;
+      overflow: auto;
+      margin: 16px 0;
+    }
+    
+    .md-preview-wrapper code {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 14px;
+      background: #f6f8fa;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    
+    .md-preview-wrapper pre code {
+      background: transparent;
+      padding: 0;
+    }
+    
+    .md-preview-wrapper ul, .md-preview-wrapper ol {
+      margin-left: 2em;
+      margin-bottom: 16px;
+    }
+    
+    .md-preview-wrapper li {
+      margin-bottom: 4px;
+    }
+    
+    .md-preview-wrapper a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    
+    .md-preview-wrapper a:hover {
+      text-decoration: underline;
+    }
+    
+    .md-preview-wrapper blockquote {
+      border-left: 4px solid #dfe2e5;
+      padding-left: 16px;
+      color: #6a737d;
+      margin: 16px 0;
+    }
+    
+    .status-bar {
+      padding: 10px 20px;
+      background: #fff;
+      border-top: 1px solid #eaecef;
+      font-size: 14px;
+      color: #666;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-header">
+    <h1>Markdown预览器示例</h1>
+    <div class="demo-controls">
+      <input type="file" id="file-input" accept=".md,.markdown">
+      <button onclick="loadDemo()">加载示例文档</button>
+      <label>缩放：</label>
+      <input type="range" id="zoom-control" min="50" max="200" value="100" onchange="setZoom(this.value)">
+      <span id="zoom-level">100%</span>
+    </div>
+  </div>
+  
+  <div class="demo-container">
+    <div id="preview-container"></div>
+  </div>
+  
+  <div class="status-bar">
+    <span id="status">就绪</span>
+    <span id="file-info"></span>
+  </div>
+  
+  <script type="module">
+    import { createMDPreviewer } from './index.js';
+    
+    let previewer = null;
+    
+    // 初始化预览器
+    function initPreviewer() {
+      previewer = createMDPreviewer({
+        container: document.getElementById('preview-container'),
+        fileInfo: null,
+        onLoad: () => {
+          updateStatus('加载完成', 'success');
+        },
+        onError: (error) => {
+          updateStatus('加载失败: ' + error.message, 'error');
+        },
+        onProgress: (progress) => {
+          updateStatus(`加载中... ${Math.round(progress)}%`);
+        }
+      });
+    }
+    
+    // 更新状态栏
+    function updateStatus(text, type = 'info') {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = text;
+      statusEl.style.color = type === 'error' ? '#d73a49' : 
+                              type === 'success' ? '#28a745' : '#666';
+    }
+    
+    // 文件选择处理
+    document.getElementById('file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      try {
+        previewer.fileInfo = {
+          name: file.name,
+          size: file.size,
+          type: file.type
+        };
+        
+        updateStatus('加载中...');
+        await previewer.load(file);
+        await previewer.renderPage(0);
+        
+        document.getElementById('file-info').textContent = 
+          `${file.name} (${formatFileSize(file.size)})`;
+      } catch (error) {
+        console.error('加载失败:', error);
+      }
+    });
+    
+    // 格式化文件大小
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+    
+    // 设置缩放
+    window.setZoom = function(value) {
+      const scale = value / 100;
+      if (previewer) {
+        previewer.setScale(scale);
+      }
+      document.getElementById('zoom-level').textContent = value + '%';
+    };
+    
+    // 加载示例文档
+    window.loadDemo = async function() {
+      const demoMarkdown = `# Markdown 预览器示例
+
+这是一个 **Markdown 预览器** 的演示文档，展示了支持的各项功能。
+
+## 1. 基本文本样式
+
+你可以使用 **粗体**、*斜体*、***粗斜体*** 等样式。
+
+## 2. 列表
+
+### 无序列表
+- 第一项
+- 第二项
+  - 子项 1
+  - 子项 2
+- 第三项
+
+### 有序列表
+1. 第一步
+2. 第二步
+3. 第三步
+
+## 3. 代码块
+
+### JavaScript 示例
+
+\`\`\`javascript
+function greet(name) {
+  console.log(\`Hello, \${name}!\`);
+  return true;
+}
+
+greet('World');
+\`\`\`
+
+### Python 示例
+
+\`\`\`python
+def greet(name):
+    print(f"Hello, {name}!")
+    return True
+
+greet("World")
+\`\`\`
+
+## 4. 行内代码
+
+这是一段包含 \`行内代码\` 的文本。
+
+## 5. 链接
+
+访问 [GitHub](https://github.com) 了解更多信息。
+
+## 6. 引用
+
+> 这是一段引用文本。
+> 
+> 引用可以包含多行内容。
+
+## 7. 水平线
+
+---
+
+## 8. 表格
+
+| 姓名 | 年龄 | 职业 |
+|------|------|------|
+| 张三 | 25 | 工程师 |
+| 李四 | 30 | 设计师 |
+| 王五 | 28 | 产品经理 |
+
+## 特性说明
+
+- ✅ 支持标准 Markdown 语法
+- ✅ 支持代码高亮
+- ✅ 支持缩放查看
+- ✅ 支持滚动浏览
+- ✅ 纯前端实现
+
+---
+
+**祝您使用愉快！**
+`;
+      
+      try {
+        previewer.fileInfo = {
+          name: 'demo.md',
+          size: demoMarkdown.length,
+          type: 'text/markdown'
+        };
+        
+        updateStatus('加载中...');
+        await previewer.load(demoMarkdown);
+        await previewer.renderPage(0);
+        
+        document.getElementById('file-info').textContent = 
+          'demo.md (示例文档)';
+      } catch (error) {
+        console.error('加载失败:', error);
+        updateStatus('加载失败: ' + error.message, 'error');
+      }
+    };
+    
+    // 初始化
+    initPreviewer();
+  </script>
+</body>
+</html>

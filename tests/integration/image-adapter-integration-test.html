@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ImageAdapter与图片预览器集成测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .test-section h2 {
+            color: #555;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .test-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .test-controls button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .test-controls button:hover {
+            background: #0056b3;
+        }
+
+        .test-controls button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .test-controls input[type="file"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .preview-container {
+            width: 100%;
+            height: 500px;
+            border: 2px dashed #ddd;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #fafafa;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .test-results {
+            margin-top: 15px;
+        }
+
+        .test-result-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .test-result-item.pass {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .test-result-item.fail {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .test-result-item.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .test-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-item .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-item .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .performance-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+        }
+
+        .error-message {
+            color: #dc3545;
+            padding: 10px;
+            background: #f8d7da;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .tab.active {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+            margin-bottom: -2px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ImageAdapter与图片预览器集成测试</h1>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="jpg">JPG测试 (P0)</button>
+            <button class="tab" data-tab="png">PNG测试 (P0)</button>
+            <button class="tab" data-tab="gif">GIF测试 (P0)</button>
+            <button class="tab" data-tab="report">测试报告</button>
+        </div>
+
+        <!-- JPG测试 -->
+        <div id="tab-jpg" class="tab-content active">
+            <div class="test-section">
+                <h2>JPG格式集成测试</h2>
+                <div class="test-controls">
+                    <input type="file" id="jpg-file-input" accept="image/jpeg,image/jpg">
+                    <button onclick="runJpgTest()">运行JPG测试</button>
+                    <button onclick="resetJpgTest()">重置</button>
+                </div>
+                <div class="preview-container" id="jpg-preview"></div>
+                <div class="error-message" id="jpg-error"></div>
+                <div class="test-results" id="jpg-results"></div>
+            </div>
+        </div>
+
+        <!-- PNG测试 -->
+        <div id="tab-png" class="tab-content">
+            <div class="test-section">
+                <h2>PNG格式集成测试</h2>
+                <div class="test-controls">
+                    <input type="file" id="png-file-input" accept="image/png">
+                    <button onclick="runPngTest()">运行PNG测试</button>
+                    <button onclick="resetPngTest()">重置</button>
+                </div>
+                <div class="preview-container" id="png-preview"></div>
+                <div class="error-message" id="png-error"></div>
+                <div class="test-results" id="png-results"></div>
+            </div>
+        </div>
+
+        <!-- GIF测试 -->
+        <div id="tab-gif" class="tab-content">
+            <div class="test-section">
+                <h2>GIF格式集成测试</h2>
+                <div class="test-controls">
+                    <input type="file" id="gif-file-input" accept="image/gif">
+                    <button onclick="runGifTest()">运行GIF测试</button>
+                    <button onclick="resetGifTest()">重置</button>
+                </div>
+                <div class="preview-container" id="gif-preview"></div>
+                <div class="error-message" id="gif-error"></div>
+                <div class="test-results" id="gif-results"></div>
+            </div>
+        </div>
+
+        <!-- 测试报告 -->
+        <div id="tab-report" class="tab-content">
+            <div class="test-section">
+                <h2>集成测试报告</h2>
+                <div class="test-stats" id="test-stats">
+                    <div class="stat-item">
+                        <div class="label">总测试数</div>
+                        <div class="value" id="total-tests">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">通过数</div>
+                        <div class="value" id="passed-tests" style="color: #28a745;">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">失败数</div>
+                        <div class="value" id="failed-tests" style="color: #dc3545;">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="label">通过率</div>
+                        <div class="value" id="pass-rate">0%</div>
+                    </div>
+                </div>
+                <div class="test-results" id="all-results" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 导入测试所需的模块
+        import ImageAdapter from '../../src/adapters/ImageAdapter.js';
+        import ImagePreviewer from '../../src/implementations/image/ImagePreviewer.js';
+
+        // 全局测试状态
+        window.testResults = {
+            jpg: [],
+            png: [],
+            gif: []
+        };
+
+        // 创建测试工具函数
+        const TestUtils = {
+            // 记录测试结果
+            logResult(type, testName, passed, message, duration) {
+                const result = {
+                    testName,
+                    passed,
+                    message,
+                    duration,
+                    timestamp: Date.now()
+                };
+                window.testResults[type].push(result);
+                this.renderResult(type, result);
+                this.updateStats();
+            },
+
+            // 渲染单个测试结果
+            renderResult(type, result) {
+                const container = document.getElementById(`${type}-results`);
+                const item = document.createElement('div');
+                item.className = `test-result-item ${result.passed ? 'pass' : 'fail'}`;
+                item.innerHTML = `
+                    <strong>${result.testName}</strong>: ${result.passed ? '✓ 通过' : '✗ 失败'}
+                    ${result.duration ? `<br><span class="performance-info">耗时: ${result.duration}ms</span>` : ''}
+                    ${result.message ? `<br><span class="performance-info">${result.message}</span>` : ''}
+                `;
+                container.appendChild(item);
+            },
+
+            // 更新统计信息
+            updateStats() {
+                const allResults = [
+                    ...window.testResults.jpg,
+                    ...window.testResults.png,
+                    ...window.testResults.gif
+                ];
+
+                const total = allResults.length;
+                const passed = allResults.filter(r => r.passed).length;
+                const failed = total - passed;
+                const passRate = total > 0 ? ((passed / total) * 100).toFixed(1) : 0;
+
+                document.getElementById('total-tests').textContent = total;
+                document.getElementById('passed-tests').textContent = passed;
+                document.getElementById('failed-tests').textContent = failed;
+                document.getElementById('pass-rate').textContent = passRate + '%';
+            },
+
+            // 显示错误
+            showError(type, message) {
+                const errorEl = document.getElementById(`${type}-error`);
+                errorEl.textContent = message;
+                errorEl.style.display = 'block';
+            },
+
+            // 清除错误
+            clearError(type) {
+                const errorEl = document.getElementById(`${type}-error`);
+                errorEl.style.display = 'none';
+            },
+
+            // 清空测试结果
+            clearResults(type) {
+                window.testResults[type] = [];
+                document.getElementById(`${type}-results`).innerHTML = '';
+                this.updateStats();
+            }
+        };
+
+        // 暴露给全局
+        window.TestUtils = TestUtils;
+        window.ImageAdapter = ImageAdapter;
+        window.ImagePreviewer = ImagePreviewer;
+
+        // 标签页切换
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // 移除所有active类
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                // 添加active类到当前标签
+                tab.classList.add('active');
+                const tabName = tab.dataset.tab;
+                document.getElementById(`tab-${tabName}`).classList.add('active');
+            });
+        });
+    </script>
+
+    <script>
+        // JPG测试
+        async function runJpgTest() {
+            const fileInput = document.getElementById('jpg-file-input');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                window.TestUtils.showError('jpg', '请选择JPG文件');
+                return;
+            }
+
+            window.TestUtils.clearError('jpg');
+            const container = document.getElementById('jpg-preview');
+            container.innerHTML = '<div class="loading">加载中...</div>';
+
+            let testIndex = 0;
+            const totalTests = 6;
+
+            try {
+                // 测试1: ImageAdapter.canHandle
+                const startTime1 = performance.now();
+                const adapter = new window.ImageAdapter();
+                const canHandle = adapter.canHandle('jpg');
+                const duration1 = Math.round(performance.now() - startTime1);
+                window.TestUtils.logResult('jpg', 
+                    `${++testIndex}/${totalTests} ImageAdapter.canHandle(jpg)`, 
+                    canHandle === true, 
+                    `canHandle返回: ${canHandle}`,
+                    duration1
+                );
+
+                // 测试2: ImageAdapter.parse
+                const startTime2 = performance.now();
+                const parsedData = await adapter.parse(file);
+                const duration2 = Math.round(performance.now() - startTime2);
+                window.TestUtils.logResult('jpg', 
+                    `${++testIndex}/${totalTests} ImageAdapter.parse()`, 
+                    parsedData && parsedData.dataUrl && parsedData.naturalWidth > 0,
+                    `解析结果: ${parsedData.width}x${parsedData.height}, 文件大小: ${(parsedData.fileSize/1024).toFixed(2)}KB`,
+                    duration2
+                );
+
+                // 测试3: ImageAdapter.render
+                const startTime3 = performance.now();
+                container.innerHTML = '';
+                const renderResult = adapter.render(parsedData, { zoom: 1.0, rotation: 0 });
+                container.appendChild(renderResult);
+                const duration3 = Math.round(performance.now() - startTime3);
+                window.TestUtils.logResult('jpg', 
+                    `${++testIndex}/${totalTests} ImageAdapter.render()`, 
+                    renderResult instanceof HTMLElement && renderResult.querySelector('img'),
+                    `渲染成功，容器包含图片元素`,
+                    duration3
+                );
+
+                // 测试4: ImagePreviewer集成
+                const startTime4 = performance.now();
+                const previewContainer = document.createElement('div');
+                previewContainer.style.width = '100%';
+                previewContainer.style.height = '100%';
+                container.innerHTML = '';
+                container.appendChild(previewContainer);
+
+                const previewer = new window.ImagePreviewer({ container: previewContainer });
+                await previewer.preview(file);
+                const duration4 = Math.round(performance.now() - startTime4);
+                window.TestUtils.logResult('jpg', 
+                    `${++testIndex}/${totalTests} ImagePreviewer预览`, 
+                    previewer.isLoaded && previewContainer.querySelector('img'),
+                    `预览器加载完成，当前缩放: ${(previewer.getScale() * 100).toFixed(1)}%`,
+                    duration4
+                );
+
+                // 测试5: 缩放功能
+                const startTime5 = performance.now();
+                previewer.scale(1.5);
+                const newScale = previewer.getScale();
+                const duration5 = Math.round(performance.now() - startTime5);
+                window.TestUtils.logResult('jpg', 
+                    `${++testIndex}/${totalTests} 缩放功能`, 
+                    newScale > 1.0,
+                    `缩放后比例: ${(newScale * 100).toFixed(1)}%`,
+                    duration5
+                );
+
+                // 测试6: 旋转功能
+                const startTime6 = performance.now();
+                previewer.rotate(90);
+                const newRotation = previewer.getRotation();
+                const duration6 = Math.round(performance.now() - startTime6);
+                window.TestUtils.logResult('jpg', 
+                    `${++testIndex}/${totalTests} 旋转功能`, 
+                    newRotation === 90,
+                    `旋转角度: ${newRotation}°`,
+                    duration6
+                );
+
+            } catch (error) {
+                window.TestUtils.showError('jpg', `测试失败: ${error.message}`);
+                window.TestUtils.logResult('jpg', 
+                    `${testIndex + 1}/${totalTests} 异常测试`, 
+                    false, 
+                    error.message
+                );
+            }
+        }
+
+        // PNG测试
+        async function runPngTest() {
+            const fileInput = document.getElementById('png-file-input');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                window.TestUtils.showError('png', '请选择PNG文件');
+                return;
+            }
+
+            window.TestUtils.clearError('png');
+            const container = document.getElementById('png-preview');
+            container.innerHTML = '<div class="loading">加载中...</div>';
+
+            let testIndex = 0;
+            const totalTests = 6;
+
+            try {
+                // 测试1: ImageAdapter.canHandle
+                const startTime1 = performance.now();
+                const adapter = new window.ImageAdapter();
+                const canHandle = adapter.canHandle('png');
+                const duration1 = Math.round(performance.now() - startTime1);
+                window.TestUtils.logResult('png', 
+                    `${++testIndex}/${totalTests} ImageAdapter.canHandle(png)`, 
+                    canHandle === true, 
+                    `canHandle返回: ${canHandle}`,
+                    duration1
+                );
+
+                // 测试2: ImageAdapter.parse
+                const startTime2 = performance.now();
+                const parsedData = await adapter.parse(file);
+                const duration2 = Math.round(performance.now() - startTime2);
+                window.TestUtils.logResult('png', 
+                    `${++testIndex}/${totalTests} ImageAdapter.parse()`, 
+                    parsedData && parsedData.dataUrl && parsedData.naturalWidth > 0,
+                    `解析结果: ${parsedData.width}x${parsedData.height}, 文件大小: ${(parsedData.fileSize/1024).toFixed(2)}KB`,
+                    duration2
+                );
+
+                // 测试3: ImageAdapter.render
+                const startTime3 = performance.now();
+                container.innerHTML = '';
+                const renderResult = adapter.render(parsedData, { zoom: 1.0, rotation: 0 });
+                container.appendChild(renderResult);
+                const duration3 = Math.round(performance.now() - startTime3);
+                window.TestUtils.logResult('png', 
+                    `${++testIndex}/${totalTests} ImageAdapter.render()`, 
+                    renderResult instanceof HTMLElement && renderResult.querySelector('img'),
+                    `渲染成功，容器包含图片元素`,
+                    duration3
+                );
+
+                // 测试4: ImagePreviewer集成
+                const startTime4 = performance.now();
+                const previewContainer = document.createElement('div');
+                previewContainer.style.width = '100%';
+                previewContainer.style.height = '100%';
+                container.innerHTML = '';
+                container.appendChild(previewContainer);
+
+                const previewer = new window.ImagePreviewer({ container: previewContainer });
+                await previewer.preview(file);
+                const duration4 = Math.round(performance.now() - startTime4);
+                window.TestUtils.logResult('png', 
+                    `${++testIndex}/${totalTests} ImagePreviewer预览`, 
+                    previewer.isLoaded && previewContainer.querySelector('img'),
+                    `预览器加载完成，当前缩放: ${(previewer.getScale() * 100).toFixed(1)}%`,
+                    duration4
+                );
+
+                // 测试5: 缩放功能
+                const startTime5 = performance.now();
+                previewer.scale(1.5);
+                const newScale = previewer.getScale();
+                const duration5 = Math.round(performance.now() - startTime5);
+                window.TestUtils.logResult('png', 
+                    `${++testIndex}/${totalTests} 缩放功能`, 
+                    newScale > 1.0,
+                    `缩放后比例: ${(newScale * 100).toFixed(1)}%`,
+                    duration5
+                );
+
+                // 测试6: 旋转功能
+                const startTime6 = performance.now();
+                previewer.rotate(90);
+                const newRotation = previewer.getRotation();
+                const duration6 = Math.round(performance.now() - startTime6);
+                window.TestUtils.logResult('png', 
+                    `${++testIndex}/${totalTests} 旋转功能`, 
+                    newRotation === 90,
+                    `旋转角度: ${newRotation}°`,
+                    duration6
+                );
+
+            } catch (error) {
+                window.TestUtils.showError('png', `测试失败: ${error.message}`);
+                window.TestUtils.logResult('png', 
+                    `${testIndex + 1}/${totalTests} 异常测试`, 
+                    false, 
+                    error.message
+                );
+            }
+        }
+
+        // GIF测试
+        async function runGifTest() {
+            const fileInput = document.getElementById('gif-file-input');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                window.TestUtils.showError('gif', '请选择GIF文件');
+                return;
+            }
+
+            window.TestUtils.clearError('gif');
+            const container = document.getElementById('gif-preview');
+            container.innerHTML = '<div class="loading">加载中...</div>';
+
+            let testIndex = 0;
+            const totalTests = 7;
+
+            try {
+                // 测试1: ImageAdapter.canHandle
+                const startTime1 = performance.now();
+                const adapter = new window.ImageAdapter();
+                const canHandle = adapter.canHandle('gif');
+                const duration1 = Math.round(performance.now() - startTime1);
+                window.TestUtils.logResult('gif', 
+                    `${++testIndex}/${totalTests} ImageAdapter.canHandle(gif)`, 
+                    canHandle === true, 
+                    `canHandle返回: ${canHandle}`,
+                    duration1
+                );
+
+                // 测试2: ImageAdapter.parse
+                const startTime2 = performance.now();
+                const parsedData = await adapter.parse(file);
+                const duration2 = Math.round(performance.now() - startTime2);
+                window.TestUtils.logResult('gif', 
+                    `${++testIndex}/${totalTests} ImageAdapter.parse()`, 
+                    parsedData && parsedData.dataUrl && parsedData.naturalWidth > 0,
+                    `解析结果: ${parsedData.width}x${parsedData.height}, 文件大小: ${(parsedData.fileSize/1024).toFixed(2)}KB`,
+                    duration2
+                );
+
+                // 测试3: ImageAdapter.render
+                const startTime3 = performance.now();
+                container.innerHTML = '';
+                const renderResult = adapter.render(parsedData, { zoom: 1.0, rotation: 0 });
+                container.appendChild(renderResult);
+                const duration3 = Math.round(performance.now() - startTime3);
+                window.TestUtils.logResult('gif', 
+                    `${++testIndex}/${totalTests} ImageAdapter.render()`, 
+                    renderResult instanceof HTMLElement && renderResult.querySelector('img'),
+                    `渲染成功，容器包含图片元素`,
+                    duration3
+                );
+
+                // 测试4: ImagePreviewer集成
+                const startTime4 = performance.now();
+                const previewContainer = document.createElement('div');
+                previewContainer.style.width = '100%';
+                previewContainer.style.height = '100%';
+                container.innerHTML = '';
+                container.appendChild(previewContainer);
+
+                const previewer = new window.ImagePreviewer({ container: previewContainer });
+                await previewer.preview(file);
+                const duration4 = Math.round(performance.now() - startTime4);
+                window.TestUtils.logResult('gif', 
+                    `${++testIndex}/${totalTests} ImagePreviewer预览`, 
+                    previewer.isLoaded && previewContainer.querySelector('img'),
+                    `预览器加载完成，当前缩放: ${(previewer.getScale() * 100).toFixed(1)}%`,
+                    duration4
+                );
+
+                // 测试5: 缩放功能
+                const startTime5 = performance.now();
+                previewer.scale(1.5);
+                const newScale = previewer.getScale();
+                const duration5 = Math.round(performance.now() - startTime5);
+                window.TestUtils.logResult('gif', 
+                    `${++testIndex}/${totalTests} 缩放功能`, 
+                    newScale > 1.0,
+                    `缩放后比例: ${(newScale * 100).toFixed(1)}%`,
+                    duration5
+                );
+
+                // 测试6: 旋转功能
+                const startTime6 = performance.now();
+                previewer.rotate(90);
+                const newRotation = previewer.getRotation();
+                const duration6 = Math.round(performance.now() - startTime6);
+                window.TestUtils.logResult('gif', 
+                    `${++testIndex}/${totalTests} 旋转功能`, 
+                    newRotation === 90,
+                    `旋转角度: ${newRotation}°`,
+                    duration6
+                );
+
+                // 测试7: GIF动画控制
+                const startTime7 = performance.now();
+                const isPlayingBefore = previewer.getPlaying();
+                previewer.pause();
+                const isPlayingAfterPause = previewer.getPlaying();
+                previewer.play();
+                const isPlayingAfterPlay = previewer.getPlaying();
+                const duration7 = Math.round(performance.now() - startTime7);
+                window.TestUtils.logResult('gif', 
+                    `${++testIndex}/${totalTests} GIF动画控制`, 
+                    isPlayingBefore === true && isPlayingAfterPause === false && isPlayingAfterPlay === true,
+                    `播放控制功能正常 (初始: ${isPlayingBefore}, 暂停后: ${isPlayingAfterPause}, 播放后: ${isPlayingAfterPlay})`,
+                    duration7
+                );
+
+            } catch (error) {
+                window.TestUtils.showError('gif', `测试失败: ${error.message}`);
+                window.TestUtils.logResult('gif', 
+                    `${testIndex + 1}/${totalTests} 异常测试`, 
+                    false, 
+                    error.message
+                );
+            }
+        }
+
+        // 重置函数
+        function resetJpgTest() {
+            window.TestUtils.clearResults('jpg');
+            window.TestUtils.clearError('jpg');
+            document.getElementById('jpg-preview').innerHTML = '';
+            document.getElementById('jpg-file-input').value = '';
+        }
+
+        function resetPngTest() {
+            window.TestUtils.clearResults('png');
+            window.TestUtils.clearError('png');
+            document.getElementById('png-preview').innerHTML = '';
+            document.getElementById('png-file-input').value = '';
+        }
+
+        function resetGifTest() {
+            window.TestUtils.clearResults('gif');
+            window.TestUtils.clearError('gif');
+            document.getElementById('gif-preview').innerHTML = '';
+            document.getElementById('gif-file-input').value = '';
+        }
+    </script>
+</body>
+</html>

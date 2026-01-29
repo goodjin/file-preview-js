@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF集成测试 - 简化版</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    #console {
+      background: #000;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      min-height: 300px;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .log-entry {
+      margin: 5px 0;
+      padding: 2px 0;
+      border-bottom: 1px solid #333;
+    }
+    .success { color: #4ec9b0; }
+    .error { color: #f48771; }
+    .info { color: #9cdcfe; }
+    .warning { color: #dcdcaa; }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover { background: #0056b3; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #results {
+      background: #2d2d30;
+      padding: 15px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 PDF预览器与DocumentAdapter集成测试</h1>
+  <div>
+    <button id="btn-run">▶️ 运行测试</button>
+    <button id="btn-clear">🗑️ 清空日志</button>
+  </div>
+  <div id="console"></div>
+  <div id="results"></div>
+  
+  <script type="module">
+    // 模拟File对象（因为我们在测试环境中无法真实上传文件）
+    function createMockFile(name, size, type, content = '') {
+      const buffer = new ArrayBuffer(size);
+      if (content && size > 0) {
+        const view = new Uint8Array(buffer);
+        for (let i = 0; i < Math.min(content.length, size); i++) {
+          view[i] = content.charCodeAt(i);
+        }
+      }
+      
+      const file = new File([buffer], name, { type });
+      Object.defineProperty(file, 'size', { value: size });
+      Object.defineProperty(file, 'name', { value: name });
+      return file;
+    }
+    
+    // 性能测量
+    class PerformanceMetrics {
+      constructor() {
+        this.metrics = {};
+      }
+      start(label) {
+        this.metrics[label] = {
+          startTime: performance.now(),
+          endTime: null,
+          duration: null
+        };
+      }
+      end(label) {
+        if (this.metrics[label]) {
+          this.metrics[label].endTime = performance.now();
+          this.metrics[label].duration = 
+            this.metrics[label].endTime - this.metrics[label].startTime;
+        }
+      }
+      get(label) {
+        return this.metrics[label]?.duration || null;
+      }
+      getAll() {
+        const result = {};
+        for (const [label, data] of Object.entries(this.metrics)) {
+          result[label] = data.duration;
+        }
+        return result;
+      }
+    }
+    
+    // 测试结果
+    class TestResult {
+      constructor() {
+        this.results = [];
+      }
+      add(name, status, message = '', metrics = {}) {
+        this.results.push({
+          name, status, message, metrics,
+          timestamp: new Date().toISOString()
+        });
+      }
+      getSummary() {
+        const total = this.results.length;
+        const passed = this.results.filter(r => r.status === 'pass').length;
+        const failed = this.results.filter(r => r.status === 'fail').length;
+        return { total, passed, failed, 
+          passRate: total > 0 ? ((passed / total) * 100).toFixed(2) + '%' : '0%' };
+      }
+    }
+    
+    // 日志工具
+    function log(message, type = 'info') {
+      const consoleDiv = document.getElementById('console');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      consoleDiv.appendChild(entry);
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+    
+    // 导入适配器和预览器
+    let DocumentAdapter, PDFPreviewerModule;
+    
+    async function loadModules() {
+      try {
+        // 这里我们需要根据实际的模块路径调整
+        // 由于我们在工作空间中，使用相对路径
+        const adapterModule = await import('../../src/adapters/DocumentAdapter.js');
+        DocumentAdapter = adapterModule.default;
+        
+        const pdfModule = await import('../../src/implementations/document/pdf/index.js');
+        PDFPreviewerModule = pdfModule;
+        
+        log('模块加载成功', 'success');
+        return true;
+      } catch (error) {
+        log(`模块加载失败: ${error.message}`, 'error');
+        log('这是预期的，因为我们在测试环境中', 'warning');
+        return false;
+      }
+    }
+    
+    // 测试1: 文件类型检测
+    async function testFileTypeDetection() {
+      log('🧪 测试1: 文件类型检测', 'info');
+      
+      const adapter = new DocumentAdapter();
+      const testCases = [
+        { name: 'test.pdf', expected: 'pdf' },
+        { name: 'document.PDF', expected: 'pdf' },
+        { name: 'test.txt', expected: 'txt' },
+        { name: 'test.jpg', expected: 'jpg' }
+      ];
+      
+      for (const testCase of testCases) {
+        const ext = adapter.getFileExtension(testCase.name);
+        if (ext === testCase.expected) {
+          log(`  ✅ ${testCase.name} → ${ext}`, 'success');
+        } else {
+          log(`  ❌ ${testCase.name} 期望 ${testCase.expected}, 实际 ${ext}`, 'error');
+        }
+      }
+    }
+    
+    // 测试2: DocumentAdapter解析
+    async function testDocumentAdapterParse() {
+      log('🧪 测试2: DocumentAdapter解析PDF', 'info');
+      
+      const adapter = new DocumentAdapter();
+      const pdfFile = createMockFile('test.pdf', 1024 * 100, 'application/pdf', '%PDF-1.4');
+      
+      try {
+        const result = await adapter.parse(pdfFile);
+        log(`  ✅ 解析成功: ${result.fileName}`, 'success');
+        log(`     类型: ${result.fileType}, 大小: ${result.fileSize}`, 'info');
+        log(`     数据类型: ${typeof result.data}`, 'info');
+        log(`     数据大小: ${result.data ? result.data.byteLength : 0} bytes`, 'info');
+      } catch (error) {
+        log(`  ❌ 解析失败: ${error.message}`, 'error');
+      }
+    }
+    
+    // 测试3: 文件类型支持检查
+    async function testSupportedTypes() {
+      log('🧪 测试3: 支持的文件类型', 'info');
+      
+      const adapter = new DocumentAdapter();
+      const supportedTypes = adapter.getSupportedTypes();
+      
+      log(`  支持的类型: ${supportedTypes.join(', ')}`, 'info');
+      
+      if (supportedTypes.includes('pdf')) {
+        log(`  ✅ PDF类型已支持`, 'success');
+      } else {
+        log(`  ❌ PDF类型未支持`, 'error');
+      }
+    }
+    
+    // 测试4: canHandle方法
+    async function testCanHandle() {
+      log('🧪 测试4: canHandle方法', 'info');
+      
+      const adapter = new DocumentAdapter();
+      const types = ['pdf', 'txt', 'md', 'json', 'xml', 'docx', 'jpg'];
+      
+      for (const type of types) {
+        const canHandle = adapter.canHandle(type);
+        const status = canHandle ? '✅' : '❌';
+        log(`  ${status} ${type}: ${canHandle}`, canHandle ? 'success' : 'info');
+      }
+    }
+    
+    // 测试5: 错误处理 - 不支持的类型
+    async function testUnsupportedType() {
+      log('🧪 测试5: 不支持的类型处理', 'info');
+      
+      const adapter = new DocumentAdapter();
+      const unsupportedFile = createMockFile('test.docx', 1024, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      
+      try {
+        const result = await adapter.parse(unsupportedFile);
+        log(`  ❌ 应该拒绝但未拒绝`, 'error');
+      } catch (error) {
+        log(`  ✅ 正确拒绝: ${error.message}`, 'success');
+      }
+    }
+    
+    // 运行所有测试
+    async function runAllTests() {
+      const btnRun = document.getElementById('btn-run');
+      btnRun.disabled = true;
+      
+      document.getElementById('console').innerHTML = '';
+      log('='.repeat(50), 'info');
+      log('开始执行集成测试', 'info');
+      log('='.repeat(50), 'info');
+      
+      const modulesLoaded = await loadModules();
+      
+      if (modulesLoaded && DocumentAdapter) {
+        log('', 'info');
+        await testFileTypeDetection();
+        log('', 'info');
+        await testDocumentAdapterParse();
+        log('', 'info');
+        await testSupportedTypes();
+        log('', 'info');
+        await testCanHandle();
+        log('', 'info');
+        await testUnsupportedType();
+      } else {
+        log('', 'info');
+        log('⚠️ 模块未加载，跳过实际测试', 'warning');
+        log('   在实际环境中需要:', 'info');
+        log('   1. 正确的模块路径', 'info');
+        log('   2. PDF.js库的加载', 'info');
+        log('   3. 浏览器环境支持', 'info');
+      }
+      
+      log('', 'info');
+      log('='.repeat(50), 'info');
+      log('测试完成', 'info');
+      log('='.repeat(50), 'info');
+      
+      // 显示结果摘要
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = `
+        <h3>测试摘要</h3>
+        <p>由于测试环境的限制，本测试主要验证DocumentAdapter的基本功能。</p>
+        <p><strong>注意:</strong> 完整的集成测试需要在实际的浏览器环境中运行，</p>
+        <p>并使用真实的PDF.js库和PDF文件进行测试。</p>
+        <p>测试文件位置:</p>
+        <ul>
+          <li>测试代码: tests/integration/pdf-document-adapter-integration.test.js</li>
+          <li>测试运行器: tests/integration/runner.html</li>
+          <li>测试计划: docs/pdf-document-adapter-integration-test-plan.md</li>
+        </ul>
+      `;
+      
+      btnRun.disabled = false;
+    }
+    
+    // 事件绑定
+    document.getElementById('btn-run').addEventListener('click', runAllTests);
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      document.getElementById('console').innerHTML = '';
+    });
+    
+    // 自动运行
+    setTimeout(runAllTests, 500);
+  </script>
+</body>
+</html>

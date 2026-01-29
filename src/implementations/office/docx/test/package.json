@@ -1,0 +1,25 @@
+{
+  "name": "docx-preview-test",
+  "version": "1.0.0",
+  "description": "docx子模块单元测试",
+  "scripts": {
+    "test": "node run-tests.js",
+    "test:coverage": "node run-tests.js --coverage",
+    "test:watch": "node run-tests.js --watch",
+    "test:verbose": "node run-tests.js --verbose",
+    "test:parser": "node run-tests.js DocxParser.test.js",
+    "test:renderer": "node run-tests.js DocxRenderer.test.js",
+    "test:index": "node run-tests.js index.test.js"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@babel/preset-env": "^7.20.0",
+    "@jest/globals": "^29.5.0",
+    "babel-jest": "^29.5.0",
+    "jest": "^29.5.0",
+    "jest-environment-jsdom": "^29.5.0"
+  },
+  "jest": {
+    "preset": "./jest.config.js"
+  }
+}
