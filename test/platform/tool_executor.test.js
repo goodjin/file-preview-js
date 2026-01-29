@@ -78,6 +78,31 @@ describe("ToolExecutor", () => {
     expect(toolNames).toContain("terminate_agent");
   });
 
+  test("getToolDefinitions includes localllm_chat tool", () => {
+    const tools = runtime._toolExecutor.getToolDefinitions();
+    const toolNames = tools.map(t => t.function.name);
+    expect(toolNames).toContain("localllm_chat");
+  });
+
+  test("executeToolCall localllm_chat returns not_ready when disabled", async () => {
+    const old = process.env.AGENT_SOCIETY_WLLAMA_HEADLESS;
+    process.env.AGENT_SOCIETY_WLLAMA_HEADLESS = "0";
+    try {
+      const ctx = runtime._buildAgentContext(runtime._agents.get("root"));
+      const result = await runtime._toolExecutor.executeToolCall(ctx, "localllm_chat", {
+        messages: [{ role: "user", content: "hi" }]
+      });
+      expect(result).toBeTruthy();
+      expect(result.error).toBe("localllm_not_ready");
+    } finally {
+      if (old === undefined) {
+        delete process.env.AGENT_SOCIETY_WLLAMA_HEADLESS;
+      } else {
+        process.env.AGENT_SOCIETY_WLLAMA_HEADLESS = old;
+      }
+    }
+  });
+
   test("executeToolCall executes find_role_by_name", async () => {
     // 创建岗位
     await runtime.org.createRole({ name: "test-role", rolePrompt: "Test prompt" });

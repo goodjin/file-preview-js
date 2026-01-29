@@ -155,8 +155,10 @@ describe("RuntimeTools", () => {
       expect(typeof description).toBe("string");
       expect(description.length).toBeGreaterThan(0);
       expect(description).toContain("工具组");
+      expect(description).toContain("localllm");
     });
   });
+
 
   describe("工具执行", () => {
     test("执行工具调用", async () => {

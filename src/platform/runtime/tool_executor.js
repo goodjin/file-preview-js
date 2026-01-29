@@ -36,6 +36,7 @@
 
 import { validateTaskBrief } from "../utils/message/task_brief.js";
 import { validateMessageFormat } from "../utils/message/message_validator.js";
+import { chat as localllmChat, launchWllamaHeadless } from "../localllm/wllama_headless_launcher.js";
 
 /**
  * 工具执行器类
@@ -95,7 +96,7 @@ export class ToolExecutor {
               toolGroups: { 
                 type: "array", 
                 items: { type: "string" },
-                description: "工具组标识符列表，限制该岗位可用的工具函数。不指定则使用全部工具组。"
+                description: runtime._generateToolGroupsDescription?.() ?? "工具组标识符列表，限制该岗位可用的工具函数。不指定则使用全部工具组。"
               }
             },
             required: ["name", "rolePrompt"]
@@ -336,6 +337,33 @@ export class ToolExecutor {
           }
         }
       },
+      // 本地 LLM 对话
+      {
+        type: "function",
+        function: {
+          name: "localllm_chat",
+          description: "通过本机 wllama headless 页面进行对话，返回生成文本字符串。",
+          parameters: {
+            type: "object",
+            properties: {
+              messages: {
+                type: "array",
+                description: "LLM 聊天消息列表（role/content）。",
+                items: {
+                  type: "object",
+                  properties: {
+                    role: { type: "string", enum: ["system", "user", "assistant"] },
+                    content: { type: "string" }
+                  },
+                  required: ["role", "content"]
+                }
+              },
+              timeoutMs: { type: "number", description: "可选：超时时间（毫秒）。" }
+            },
+            required: ["messages"]
+          }
+        }
+      },
       // 文件操作
       {
         type: "function",
@@ -450,6 +478,8 @@ export class ToolExecutor {
           return this._executeGetContextStatus(ctx, args);
         case "http_request":
           return await this._executeHttpRequest(ctx, args);
+        case "localllm_chat":
+          return await this._executeLocalllmChat(ctx, args);
         case "read_file":
           return await this._executeReadFile(ctx, args);
         case "write_file":
@@ -1063,6 +1093,38 @@ export class ToolExecutor {
       latencyMs: response.latencyMs,
       requestId: requestLog.requestId
     };
+  }
+
+  async _executeLocalllmChat(ctx, args) {
+    const runtime = this.runtime;
+    const messages = args?.messages;
+    const timeoutMs = args?.timeoutMs;
+
+    if (!Array.isArray(messages)) {
+      return { error: "missing_messages", message: "必须提供 messages 数组" };
+    }
+
+    try {
+      const startResult = await launchWllamaHeadless({
+        port: runtime.config?.httpPort ?? 3000,
+        headless: true,
+        logger: runtime.loggerRoot?.forModule?.("localllm") ?? null
+      });
+
+      if (!startResult?.ok) {
+        return { error: "localllm_not_ready", message: startResult?.error ?? "wllama headless 启动失败" };
+      }
+
+      if (startResult?.skipped) {
+        return { error: "localllm_not_ready", message: "wllama headless 启动被禁用" };
+      }
+
+      const text = await localllmChat(messages, { timeoutMs });
+      return String(text ?? "");
+    } catch (err) {
+      const message = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
+      return { error: "localllm_chat_failed", message };
+    }
   }
 
   async _executeReadFile(ctx, args) {
