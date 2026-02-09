@@ -1,54 +1,69 @@
-# Dependencies
+# Node modules
 node_modules/
-bower_components/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Build output
 dist/
 build/
 out/
+*.log
 
-# Test coverage
-coverage/
-.nyc_output/
-
-# IDE
-.idea/
+# IDE and Editors
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
 .DS_Store
+Thumbs.db
 
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Environment variables
-.env
-.env.local
-.env.*.local
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
 
 # Temporary files
 *.tmp
 *.temp
 .cache/
 
-# OS
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Package manager lock files (根据项目需要保留或移除)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Generated files
+*.generated.*
+*.min.js
+*.min.css
+
+# OS files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
+desktop.ini
+
+# Build artifacts
+*.tgz
+*.tar.gz
+
+# Documentation build
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
+# Testing
+test-results/
+playwright-report/
+playwright/.cache/
 
 # Misc
 *.pid
 *.seed
 *.pid.lock
-.vscode/settings.json

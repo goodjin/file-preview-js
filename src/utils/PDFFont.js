@@ -1,0 +1,423 @@
+/**
+ * PDF字体编码转换工具类
+ * 支持标准14种字体和WinAnsiEncoding
+ */
+
+/**
+ * WinAnsiEncoding编码表
+ * 字符编码 -> Unicode码点
+ */
+const WinAnsiEncoding = [
+  0x0000, // 0x00
+  0x0001, // 0x01
+  0x0002, // 0x02
+  0x0003, // 0x03
+  0x0004, // 0x04
+  0x0005, // 0x05
+  0x0006, // 0x06
+  0x0007, // 0x07
+  0x0008, // 0x08
+  0x0009, // 0x09
+  0x000A, // 0x0A
+  0x000B, // 0x0B
+  0x000C, // 0x0C
+  0x000D, // 0x0D
+  0x000E, // 0x0E
+  0x000F, // 0x0F
+  0x0010, // 0x10
+  0x0011, // 0x11
+  0x0012, // 0x12
+  0x0013, // 0x13
+  0x0014, // 0x14
+  0x0015, // 0x15
+  0x0016, // 0x16
+  0x0017, // 0x17
+  0x0018, // 0x18
+  0x0019, // 0x19
+  0x001A, // 0x1A
+  0x001B, // 0x1B
+  0x001C, // 0x1C
+  0x001D, // 0x1D
+  0x001E, // 0x1E
+  0x001F, // 0x1F
+  0x0020, // 0x20 (space)
+  0x0021, // 0x21 (!)
+  0x0022, // 0x22 (")
+  0x0023, // 0x23 (#)
+  0x0024, // 0x24 ($)
+  0x0025, // 0x25 (%)
+  0x0026, // 0x26 (&)
+  0x0027, // 0x27 (')
+  0x0028, // 0x28 (()
+  0x0029, // 0x29 ())
+  0x002A, // 0x2A (*)
+  0x002B, // 0x2B (+)
+  0x002C, // 0x2C (,)
+  0x002D, // 0x2D (-)
+  0x002E, // 0x2E (.)
+  0x002F, // 0x2F (/)
+  0x0030, // 0x30 (0)
+  0x0031, // 0x31 (1)
+  0x0032, // 0x32 (2)
+  0x0033, // 0x33 (3)
+  0x0034, // 0x34 (4)
+  0x0035, // 0x35 (5)
+  0x0036, // 0x36 (6)
+  0x0037, // 0x37 (7)
+  0x0038, // 0x38 (8)
+  0x0039, // 0x39 (9)
+  0x003A, // 0x3A (:)
+  0x003B, // 0x3B (;)
+  0x003C, // 0x3C (<)
+  0x003D, // 0x3D (=)
+  0x003E, // 0x3E (>)
+  0x003F, // 0x3F (?)
+  0x0040, // 0x40 (@)
+  0x0041, // 0x41 (A)
+  0x0042, // 0x42 (B)
+  0x0043, // 0x43 (C)
+  0x0044, // 0x44 (D)
+  0x0045, // 0x45 (E)
+  0x0046, // 0x46 (F)
+  0x0047, // 0x47 (G)
+  0x0048, // 0x48 (H)
+  0x0049, // 0x49 (I)
+  0x004A, // 0x4A (J)
+  0x004B, // 0x4B (K)
+  0x004C, // 0x4C (L)
+  0x004D, // 0x4D (M)
+  0x004E, // 0x4E (N)
+  0x004F, // 0x4F (O)
+  0x0050, // 0x50 (P)
+  0x0051, // 0x51 (Q)
+  0x0052, // 0x52 (R)
+  0x0053, // 0x53 (S)
+  0x0054, // 0x54 (T)
+  0x0055, // 0x55 (U)
+  0x0056, // 0x56 (V)
+  0x0057, // 0x57 (W)
+  0x0058, // 0x58 (X)
+  0x0059, // 0x59 (Y)
+  0x005A, // 0x5A (Z)
+  0x005B, // 0x5B ([)
+  0x005C, // 0x5C (\)
+  0x005D, // 0x5D (])
+  0x005E, // 0x5E (^)
+  0x005F, // 0x5F (_)
+  0x0060, // 0x60 (`)
+  0x0061, // 0x61 (a)
+  0x0062, // 0x62 (b)
+  0x0063, // 0x63 (c)
+  0x0064, // 0x64 (d)
+  0x0065, // 0x65 (e)
+  0x0066, // 0x66 (f)
+  0x0067, // 0x67 (g)
+  0x0068, // 0x68 (h)
+  0x0069, // 0x69 (i)
+  0x006A, // 0x6A (j)
+  0x006B, // 0x6B (k)
+  0x006C, // 0x6C (l)
+  0x006D, // 0x6D (m)
+  0x006E, // 0x6E (n)
+  0x006F, // 0x6F (o)
+  0x0070, // 0x70 (p)
+  0x0071, // 0x71 (q)
+  0x0072, // 0x72 (r)
+  0x0073, // 0x73 (s)
+  0x0074, // 0x74 (t)
+  0x0075, // 0x75 (u)
+  0x0076, // 0x76 (v)
+  0x0077, // 0x77 (w)
+  0x0078, // 0x78 (x)
+  0x0079, // 0x79 (y)
+  0x007A, // 0x7A (z)
+  0x007B, // 0x7B ({)
+  0x007C, // 0x7C (|)
+  0x007D, // 0x7D (})
+  0x007E, // 0x7E (~)
+  0x007F, // 0x7F
+  0x20AC, // 0x80 (Euro)
+  0x0081, // 0x81
+  0x201A, // 0x82 (‚)
+  0x0192, // 0x83 (ƒ)
+  0x201E, // 0x84 („)
+  0x2026, // 0x85 (…)
+  0x2020, // 0x86 (†)
+  0x2021, // 0x87 (‡)
+  0x02C6, // 0x88 (ˆ)
+  0x2030, // 0x89 (‰)
+  0x0160, // 0x8A (Š)
+  0x2039, // 0x8B (‹)
+  0x0152, // 0x8C (Œ)
+  0x008D, // 0x8D
+  0x017D, // 0x8E (Ž)
+  0x008F, // 0x8F
+  0x0090, // 0x90
+  0x2018, // 0x91 (')
+  0x2019, // 0x92 (')
+  0x201C, // 0x93 (")
+  0x201D, // 0x94 (")
+  0x2022, // 0x95 (•)
+  0x2013, // 0x96 (–)
+  0x2014, // 0x97 (—)
+  0x02DC, // 0x98 (˜)
+  0x2122, // 0x99 (™)
+  0x0161, // 0x9A (š)
+  0x203A, // 0x9B (›)
+  0x0153, // 0x9C (œ)
+  0x009D, // 0x9D
+  0x017E, // 0x9E (ž)
+  0x0178, // 0x9F (Ÿ)
+  0x00A0, // 0xA0 (NBSP)
+  0x00A1, // 0xA1 (¡)
+  0x00A2, // 0xA2 (¢)
+  0x00A3, // 0xA3 (£)
+  0x00A4, // 0xA4 (¤)
+  0x00A5, // 0xA5 (¥)
+  0x00A6, // 0xA6 (¦)
+  0x00A7, // 0xA7 (§)
+  0x00A8, // 0xA8 (¨)
+  0x00A9, // 0xA9 (©)
+  0x00AA, // 0xAA (ª)
+  0x00AB, // 0xAB («)
+  0x00AC, // 0xAC (¬)
+  0x00AD, // 0xAD (­)
+  0x00AE, // 0xAE (®)
+  0x00AF, // 0xAF (¯)
+  0x00B0, // 0xB0 (°)
+  0x00B1, // 0xB1 (±)
+  0x00B2, // 0xB2 (²)
+  0x00B3, // 0xB3 (³)
+  0x00B4, // 0xB4 (´)
+  0x00B5, // 0xB5 (µ)
+  0x00B6, // 0xB6 (¶)
+  0x00B7, // 0xB7 (·)
+  0x00B8, // 0xB8 (¸)
+  0x00B9, // 0xB9 (¹)
+  0x00BA, // 0xBA (º)
+  0x00BB, // 0xBB (»)
+  0x00BC, // 0xBC (¼)
+  0x00BD, // 0xBD (½)
+  0x00BE, // 0xBE (¾)
+  0x00BF, // 0xBF (¿)
+  0x00C0, // 0xC0 (À)
+  0x00C1, // 0xC1 (Á)
+  0x00C2, // 0xC2 (Â)
+  0x00C3, // 0xC3 (Ã)
+  0x00C4, // 0xC4 (Ä)
+  0x00C5, // 0xC5 (Å)
+  0x00C6, // 0xC6 (Æ)
+  0x00C7, // 0xC7 (Ç)
+  0x00C8, // 0xC8 (È)
+  0x00C9, // 0xC9 (É)
+  0x00CA, // 0xCA (Ê)
+  0x00CB, // 0xCB (Ë)
+  0x00CC, // 0xCC (Ì)
+  0x00CD, // 0xCD (Í)
+  0x00CE, // 0xCE (Î)
+  0x00CF, // 0xCF (Ï)
+  0x00D0, // 0xD0 (Ð)
+  0x00D1, // 0xD1 (Ñ)
+  0x00D2, // 0xD2 (Ò)
+  0x00D3, // 0xD3 (Ó)
+  0x00D4, // 0xD4 (Ô)
+  0x00D5, // 0xD5 (Õ)
+  0x00D6, // 0xD6 (Ö)
+  0x00D7, // 0xD7 (×)
+  0x00D8, // 0xD8 (Ø)
+  0x00D9, // 0xD9 (Ù)
+  0x00DA, // 0xDA (Ú)
+  0x00DB, // 0xDB (Û)
+  0x00DC, // 0xDC (Ü)
+  0x00DD, // 0xDD (Ý)
+  0x00DE, // 0xDE (Þ)
+  0x00DF, // 0xDF (ß)
+  0x00E0, // 0xE0 (à)
+  0x00E1, // 0xE1 (á)
+  0x00E2, // 0xE2 (â)
+  0x00E3, // 0xE3 (ã)
+  0x00E4, // 0xE4 (ä)
+  0x00E5, // 0xE5 (å)
+  0x00E6, // 0xE6 (æ)
+  0x00E7, // 0xE7 (ç)
+  0x00E8, // 0xE8 (è)
+  0x00E9, // 0xE9 (é)
+  0x00EA, // 0xEA (ê)
+  0x00EB, // 0xEB (ë)
+  0x00EC, // 0xEC (ì)
+  0x00ED, // 0xED (í)
+  0x00EE, // 0xEE (î)
+  0x00EF, // 0xEF (ï)
+  0x00F0, // 0xF0 (ð)
+  0x00F1, // 0xF1 (ñ)
+  0x00F2, // 0xF2 (ò)
+  0x00F3, // 0xF3 (ó)
+  0x00F4, // 0xF4 (ô)
+  0x00F5, // 0xF5 (õ)
+  0x00F6, // 0xF6 (ö)
+  0x00F7, // 0xF7 (÷)
+  0x00F8, // 0xF8 (ø)
+  0x00F9, // 0xF9 (ù)
+  0x00FA, // 0xFA (ú)
+  0x00FB, // 0xFB (û)
+  0x00FC, // 0xFC (ü)
+  0x00FD, // 0xFD (ý)
+  0x00FE, // 0xFE (þ)
+  0x00FF  // 0xFF (ÿ)
+];
+
+/**
+ * PDF标准14种字体定义
+ */
+export const StandardFonts = {
+  'Times-Roman': { serif: true, monospace: false, bold: false, italic: false },
+  'Times-Italic': { serif: true, monospace: false, bold: false, italic: true },
+  'Times-Bold': { serif: true, monospace: false, bold: true, italic: false },
+  'Times-BoldItalic': { serif: true, monospace: false, bold: true, italic: true },
+  'Helvetica': { serif: false, monospace: false, bold: false, italic: false },
+  'Helvetica-Oblique': { serif: false, monospace: false, bold: false, italic: true },
+  'Helvetica-Bold': { serif: false, monospace: false, bold: true, italic: false },
+  'Helvetica-BoldOblique': { serif: false, monospace: false, bold: true, italic: true },
+  'Courier': { serif: false, monospace: true, bold: false, italic: false },
+  'Courier-Oblique': { serif: false, monospace: true, bold: false, italic: true },
+  'Courier-Bold': { serif: false, monospace: true, bold: true, italic: false },
+  'Courier-BoldOblique': { serif: false, monospace: true, bold: true, italic: true },
+  'Symbol': { serif: false, monospace: false, bold: false, italic: false, symbolic: true },
+  'ZapfDingbats': { serif: false, monospace: false, bold: false, italic: false, symbolic: true }
+};
+
+/**
+ * PDF字体工具类
+ */
+export class PDFFont {
+  /**
+   * 将WinAnsi编码转换为Unicode字符串
+   * @param {Array<number>} codes - WinAnsi编码数组
+   * @returns {string} Unicode字符串
+   */
+  static winAnsiToUnicode(codes) {
+    const chars = [];
+    for (const code of codes) {
+      if (code < WinAnsiEncoding.length) {
+        const unicode = WinAnsiEncoding[code];
+        if (unicode > 0) {
+          chars.push(String.fromCharCode(unicode));
+        }
+      }
+    }
+    return chars.join('');
+  }
+
+  /**
+   * 将字节转换为WinAnsi编码的字符串
+   * @param {Uint8Array} bytes - 字节数组
+   * @returns {string} Unicode字符串
+   */
+  static bytesToWinAnsiString(bytes) {
+    const codes = Array.from(bytes);
+    return this.winAnsiToUnicode(codes);
+  }
+
+  /**
+   * 检查是否为标准字体
+   * @param {string} fontName - 字体名称
+   * @returns {boolean} 是否为标准字体
+   */
+  static isStandardFont(fontName) {
+    return StandardFonts.hasOwnProperty(fontName);
+  }
+
+  /**
+   * 获取标准字体信息
+   * @param {string} fontName - 字体名称
+   * @returns {Object|null} 字体信息
+   */
+  static getStandardFontInfo(fontName) {
+    return StandardFonts[fontName] || null;
+  }
+
+  /**
+   * 解析字体字典
+   * @param {Object} fontDict - 字体字典
+   * @returns {Object} 字体对象
+   */
+  static parseFont(fontDict) {
+    const font = {
+      name: null,
+      type: null,
+      subtype: null,
+      encoding: 'WinAnsiEncoding',
+      baseFont: null
+    };
+
+    // 解析字体类型
+    if (fontDict.Type && fontDict.Type.value) {
+      font.type = fontDict.Type.value;
+    }
+
+    // 解析字体子类型
+    if (fontDict.Subtype && fontDict.Subtype.value) {
+      font.subtype = fontDict.Subtype.value;
+    }
+
+    // 解析BaseFont
+    if (fontDict.BaseFont && fontDict.BaseFont.value) {
+      font.baseFont = fontDict.BaseFont.value;
+      font.name = font.baseFont;
+    }
+
+    // 解析编码
+    if (fontDict.Encoding) {
+      if (typeof fontDict.Encoding === 'string') {
+        font.encoding = fontDict.Encoding;
+      } else if (fontDict.Encoding.value) {
+        font.encoding = fontDict.Encoding.value;
+      }
+    }
+
+    // 判断是否为标准字体
+    font.isStandard = this.isStandardFont(font.name);
+    font.info = font.isStandard ? this.getStandardFontInfo(font.name) : null;
+
+    return font;
+  }
+
+  /**
+   * 解码文本内容
+   * @param {string} text - 文本内容
+   * @param {Object} font - 字体对象
+   * @returns {string} 解码后的文本
+   */
+  static decodeText(text, font) {
+    // 简化处理：直接返回文本
+    // 实际实现需要根据字体编码进行转换
+    return text;
+  }
+
+  /**
+   * 解析CID字体（简化处理）
+   * @param {Object} fontDict - 字体字典
+   * @returns {Object} CID字体对象
+   */
+  static parseCIDFont(fontDict) {
+    return {
+      name: fontDict.BaseFont?.value || 'Unknown',
+      type: 'CIDFont',
+      systemInfo: null,
+      cmap: null
+    };
+  }
+
+  /**
+   * 解析TrueType字体（简化处理）
+   * @param {Object} fontDict - 字体字典
+   * @returns {Object} TrueType字体对象
+   */
+  static parseTrueTypeFont(fontDict) {
+    return {
+      name: fontDict.BaseFont?.value || 'Unknown',
+      type: 'TrueType',
+      encoding: fontDict.Encoding?.value || 'WinAnsiEncoding'
+    };
+  }
+}
