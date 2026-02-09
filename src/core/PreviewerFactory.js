@@ -1,132 +1,121 @@
 /**
- * PreviewerFactory - 预览器工厂
- * 负责根据文件类型创建对应的预览器实例
+ * 预览器工厂
+ * 根据文件类型创建对应的预览器实例
+ * 
+ * @description 使用工厂模式创建预览器实例
+ * @module PreviewerFactory
+ * @version 1.0.0
  */
 
-class PreviewerError extends Error {
-  constructor(code, message, details) {
-    super(message);
-    this.code = code;
-    this.details = details;
-    this.name = 'PreviewerError';
-  }
-}
+import { FileTypeDetector } from './FileTypeDetector.js';
 
-class PreviewerFactory {
-  constructor() {
-    this._previewers = new Map(); // fileType -> previewerClass
-    this._instances = new WeakMap(); // 预览器实例跟踪
-  }
+/**
+ * 预览器注册表
+ * @type {Map<string, Class>}
+ */
+const previewerRegistry = new Map();
 
-  /**
-   * 注册预览器类型
-   * @param {string} fileType - 文件类型（如 'xlsx', 'pdf'）
-   * @param {class} previewerClass - 预览器类
-   */
-  register(fileType, previewerClass) {
-    if (!fileType || typeof fileType !== 'string') {
-      throw new PreviewerError('INVALID_TYPE', 'File type must be a non-empty string');
-    }
-    if (typeof previewerClass !== 'function' || !previewerClass.prototype) {
-      throw new PreviewerError('INVALID_CLASS', 'PreviewerClass must be a constructor function');
-    }
-    
-    this._previewers.set(fileType.toLowerCase(), previewerClass);
-  }
-
-  /**
-   * 注销预览器类型
-   * @param {string} fileType - 文件类型
-   * @returns {boolean} 是否成功注销
-   */
-  unregister(fileType) {
-    return this._previewers.delete(fileType.toLowerCase());
-  }
-
+/**
+ * 预览器工厂类
+ * @class PreviewerFactory
+ */
+export class PreviewerFactory {
   /**
    * 创建预览器实例
-   * @param {string} fileType - 文件类型
    * @param {File} file - 文件对象
-   * @param {HTMLElement} container - 容器元素
-   * @returns {object} 预览器实例
+   * @param {Object} options - 预览选项
+   * @param {EventBus} options.eventBus - 事件总线实例
+   * @param {StateManager} options.stateManager - 状态管理器实例
+   * @param {HTMLElement} options.container - 容器元素
+   * @returns {Object} 预览器实例
+   * @throws {Error} 当文件类型不支持时抛出异常
    */
-  create(fileType, file, container) {
-    const normalizedType = fileType.toLowerCase();
-    const PreviewerClass = this._previewers.get(normalizedType);
-
-    if (!PreviewerClass) {
-      const supported = Array.from(this._previewers.keys());
-      throw new PreviewerError(
-        'UNSUPPORTED_FILE_TYPE',
-        `Unsupported file type: ${fileType}`,
-        { supportedTypes: supported }
-      );
+  static create(file, options = {}) {
+    // 检测文件类型
+    const fileType = FileTypeDetector.detect(file);
+    
+    // 检查是否支持该文件类型
+    if (!FileTypeDetector.isSupported(fileType)) {
+      throw new Error(`Unsupported file type: ${fileType}`);
     }
-
-    try {
-      const instance = new PreviewerClass(file, container);
-      this._instances.set(instance, {
-        type: normalizedType,
-        createdAt: Date.now()
-      });
-      return instance;
-    } catch (error) {
-      throw new PreviewerError(
-        'CREATE_FAILED',
-        `Failed to create previewer for ${fileType}`,
-        { originalError: error.message }
-      );
-    }
+    
+    // 获取预览器类
+    const PreviewerClass = this.getPreviewerClass(fileType);
+    
+    // 创建预览器实例
+    const previewer = new PreviewerClass(options);
+    
+    return previewer;
   }
 
   /**
-   * 销毁预览器实例
-   * @param {object} previewer - 预览器实例
-   */
-  destroy(previewer) {
-    if (!previewer) {
-      return;
-    }
-
-    try {
-      // 调用预览器的destroy方法（如果存在）
-      if (typeof previewer.destroy === 'function') {
-        previewer.destroy();
-      }
-      
-      // 移除跟踪
-      this._instances.delete(previewer);
-    } catch (error) {
-      console.error('Error destroying previewer:', error);
-    }
-  }
-
-  /**
-   * 获取支持的文件类型列表
-   * @returns {Array<string>} 文件类型数组
-   */
-  getSupportedTypes() {
-    return Array.from(this._previewers.keys());
-  }
-
-  /**
-   * 检查文件类型是否支持
+   * 根据文件类型获取预览器类
    * @param {string} fileType - 文件类型
-   * @returns {boolean} 是否支持
+   * @returns {Class} 预览器类
+   * @throws {Error} 当未注册预览器时抛出异常
    */
-  isSupported(fileType) {
-    return this._previewers.has(fileType.toLowerCase());
+  static getPreviewerClass(fileType) {
+    const PreviewerClass = previewerRegistry.get(fileType);
+    
+    if (!PreviewerClass) {
+      throw new Error(`No previewer registered for file type: ${fileType}`);
+    }
+    
+    return PreviewerClass;
   }
 
   /**
-   * 清空所有注册的预览器
+   * 注册新的预览器类型
+   * @param {string} fileType - 文件类型
+   * @param {Class} PreviewerClass - 预览器类
    */
-  clear() {
-    this._previewers.clear();
+  static register(fileType, PreviewerClass) {
+    if (!FileTypeDetector.isSupported(fileType)) {
+      throw new Error(`Cannot register previewer for unsupported file type: ${fileType}`);
+    }
+    
+    previewerRegistry.set(fileType, PreviewerClass);
+  }
+
+  /**
+   * 批量注册预览器
+   * @param {Object} previewerMap - 预览器映射对象 { fileType: PreviewerClass }
+   */
+  static registerMultiple(previewerMap) {
+    Object.entries(previewerMap).forEach(([fileType, PreviewerClass]) => {
+      this.register(fileType, PreviewerClass);
+    });
+  }
+
+  /**
+   * 取消注册预览器
+   * @param {string} fileType - 文件类型
+   */
+  static unregister(fileType) {
+    previewerRegistry.delete(fileType);
+  }
+
+  /**
+   * 检查是否已注册预览器
+   * @param {string} fileType - 文件类型
+   * @returns {boolean} 是否已注册
+   */
+  static isRegistered(fileType) {
+    return previewerRegistry.has(fileType);
+  }
+
+  /**
+   * 获取所有已注册的文件类型
+   * @returns {Array<string>} 文件类型列表
+   */
+  static getRegisteredTypes() {
+    return Array.from(previewerRegistry.keys());
+  }
+
+  /**
+   * 清除所有注册的预览器
+   */
+  static clear() {
+    previewerRegistry.clear();
   }
 }
-
-// 导出单例实例
-const factory = new PreviewerFactory();
-export default factory;
-export { PreviewerFactory, PreviewerError };

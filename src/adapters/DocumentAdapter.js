@@ -1,255 +1,370 @@
 /**
- * DocumentAdapter - 文档适配器
+ * 文档适配器
+ * 支持：pdf, ofd, rtf, txt, md, xml, json, epub
  * 
- * 统一文本文档的预览接口，处理文档的通用逻辑
- * 支持格式：pdf, ofd, rtf, txt, md, xml, json, epub
+ * @description 统一文档类文件的预览接口
+ * @module DocumentAdapter
+ * @version 1.0.0
  */
 
-import BaseAdapter from './BaseAdapter.js';
+import { BaseAdapter } from './BaseAdapter.js';
+import { FileTypeDetector } from '../core/FileTypeDetector.js';
 
-class DocumentAdapter extends BaseAdapter {
-  constructor() {
-    super();
-    this._supportedTypes = new Set([
-      'pdf',
-      'ofd',
-      'rtf',
-      'txt',
-      'md',
-      'xml',
-      'json',
-      'epub'
-    ]);
-  }
+/**
+ * 文档适配器类
+ * @class DocumentAdapter
+ * @extends BaseAdapter
+ */
+export class DocumentAdapter extends BaseAdapter {
+  /**
+   * 支持的文件类型列表
+   * @type {Array<string>}
+   */
+  static supportedTypes = [
+    'pdf', 'ofd', 'rtf',
+    'txt', 'md', 'xml', 'json',
+    'epub'
+  ];
 
   /**
-   * 判断是否能处理该文件类型
+   * 检查是否支持该文件类型
    * @param {string} fileType - 文件类型
    * @returns {boolean} 是否支持
    */
-  canHandle(fileType) {
-    const type = fileType.toLowerCase();
-    return this._supportedTypes.has(type);
+  static supports(fileType) {
+    return this.supportedTypes.includes(fileType);
   }
 
   /**
-   * 解析文档文件
+   * 加载文件
    * @param {File} file - 文件对象
-   * @returns {Promise<Object>} 解析后的数据
+   * @returns {Promise<Object>} 加载结果
    */
-  async parse(file) {
-    this.validateFile(file);
-
-    const fileType = this.getFileExtension(file.name);
-    
-    if (!this.canHandle(fileType)) {
-      throw new Error(`Unsupported file type: ${fileType}`);
-    }
-
-    const result = {
-      fileType,
-      fileName: file.name,
-      fileSize: file.size,
-      lastModified: file.lastModified,
-      content: null,
-      data: null
-    };
-
-    // 根据不同类型进行解析
-    switch (fileType) {
-      case 'txt':
-        result.content = await this._parseTextFile(file);
-        break;
-      case 'md':
-        result.content = await this._parseTextFile(file);
-        break;
-      case 'json':
-        result.content = await this._parseJsonFile(file);
-        break;
-      case 'xml':
-        result.content = await this._parseTextFile(file);
-        break;
-      case 'pdf':
-        result.data = await file.arrayBuffer();
-        break;
-      case 'rtf':
-        result.data = await file.arrayBuffer();
-        break;
-      case 'ofd':
-        result.data = await file.arrayBuffer();
-        break;
-      case 'epub':
-        result.data = await file.arrayBuffer();
-        break;
-      default:
-        throw new Error(`Unknown file type: ${fileType}`);
-    }
-
-    return result;
-  }
-
-  /**
-   * 渲染数据
-   * @param {Object} data - 解析后的数据
-   * @returns {HTMLElement} 渲染结果
-   */
-  render(data) {
-    const container = document.createElement('div');
-    container.className = 'document-preview';
-
-    const { fileType, content } = data;
-
-    // 根据不同类型进行渲染
-    switch (fileType) {
-      case 'txt':
-        container.innerHTML = this._renderText(content);
-        break;
-      case 'md':
-        container.innerHTML = this._renderMarkdown(content);
-        break;
-      case 'json':
-        container.innerHTML = this._renderJson(content);
-        break;
-      case 'xml':
-        container.innerHTML = this._renderXml(content);
-        break;
-      case 'pdf':
-      case 'rtf':
-      case 'ofd':
-      case 'epub':
-        container.innerHTML = this._renderBinary(fileType);
-        break;
-      default:
-        container.textContent = `Unsupported file type: ${fileType}`;
-    }
-
-    return container;
-  }
-
-  /**
-   * 获取支持的文件类型列表
-   * @returns {string[]} 支持的文件类型数组
-   */
-  getSupportedTypes() {
-    return Array.from(this._supportedTypes);
-  }
-
-  /**
-   * 解析文本文件
-   * @private
-   * @param {File} file - 文件对象
-   * @returns {Promise<string>} 文本内容
-   */
-  async _parseTextFile(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = () => reject(new Error('Failed to read text file'));
-      reader.readAsText(file);
-    });
-  }
-
-  /**
-   * 解析JSON文件
-   * @private
-   * @param {File} file - 文件对象
-   * @returns {Promise<Object>} JSON对象
-   */
-  async _parseJsonFile(file) {
-    const text = await this._parseTextFile(file);
+  async load(file) {
     try {
-      return JSON.parse(text);
+      const ext = FileTypeDetector.getExtension(file.name);
+
+      switch (ext) {
+        case 'pdf':
+          return await this.loadPDF(file);
+        case 'txt':
+          return await this.loadText(file);
+        case 'md':
+          return await this.loadMarkdown(file);
+        case 'xml':
+        case 'json':
+          return await this.loadCode(file);
+        case 'ofd':
+          return await this.loadOFD(file);
+        case 'rtf':
+          return await this.loadRTF(file);
+        case 'epub':
+          return await this.loadEpub(file);
+        default:
+          throw new Error(`Unsupported document type: ${ext}`);
+      }
     } catch (error) {
-      throw new Error('Invalid JSON file');
+      this.emitError(error, 'Failed to load document');
+      throw error;
     }
+  }
+
+  /**
+   * 加载PDF文档
+   * @param {File} file - 文件对象
+   * @returns {Promise<Object>} 加载结果
+   */
+  async loadPDF(file) {
+    this.emitProgress(10);
+
+    // TODO: 使用 pdf.js 渲染 PDF
+    // const loadingTask = pdfjsLib.getDocument(file);
+    // const pdf = await loadingTask.promise;
+    // const numPages = pdf.numPages;
+    // return { type: 'pdf', pdf, numPages };
+
+    this.emitProgress(100);
+    
+    // 临时返回
+    return {
+      type: 'pdf',
+      numPages: 5,
+      pages: ['Page 1', 'Page 2', 'Page 3', 'Page 4', 'Page 5']
+    };
+  }
+
+  /**
+   * 加载纯文本文件
+   * @param {File} file - 文件对象
+   * @returns {Promise<Object>} 加载结果
+   */
+  async loadText(file) {
+    this.emitProgress(50);
+    
+    const text = await file.text();
+    
+    this.emitProgress(100);
+    
+    return {
+      type: 'text',
+      text
+    };
+  }
+
+  /**
+   * 加载Markdown文件
+   * @param {File} file - 文件对象
+   * @returns {Promise<Object>} 加载结果
+   */
+  async loadMarkdown(file) {
+    this.emitProgress(50);
+    
+    const markdown = await file.text();
+    
+    this.emitProgress(100);
+    
+    return {
+      type: 'markdown',
+      markdown
+    };
+  }
+
+  /**
+   * 加载代码文件
+   * @param {File} file - 文件对象
+   * @returns {Promise<Object>} 加载结果
+   */
+  async loadCode(file) {
+    this.emitProgress(50);
+    
+    const code = await file.text();
+    const ext = FileTypeDetector.getExtension(file.name);
+    
+    this.emitProgress(100);
+    
+    return {
+      type: 'code',
+      ext,
+      code
+    };
+  }
+
+  /**
+   * 加载OFD文件
+   * @param {File} file - 文件对象
+   * @returns {Promise<Object>} 加载结果
+   */
+  async loadOFD(file) {
+    this.emitProgress(10);
+
+    // TODO: OFD格式的解析需要专门的库
+    
+    this.emitProgress(100);
+    
+    return {
+      type: 'ofd',
+      content: 'OFD document content'
+    };
+  }
+
+  /**
+   * 加载RTF文件
+   * @param {File} file - 文件对象
+   * @returns {Promise<Object>} 加载结果
+   */
+  async loadRTF(file) {
+    this.emitProgress(10);
+
+    // TODO: RTF格式的解析
+    
+    this.emitProgress(100);
+    
+    return {
+      type: 'rtf',
+      content: 'RTF document content'
+    };
+  }
+
+  /**
+   * 加载Epub文件
+   * @param {File} file - 文件对象
+   * @returns {Promise<Object>} 加载结果
+   */
+  async loadEpub(file) {
+    this.emitProgress(10);
+
+    // TODO: 使用 epub.js 解析 EPUB
+    
+    this.emitProgress(100);
+    
+    return {
+      type: 'epub',
+      content: 'EPUB document content'
+    };
+  }
+
+  /**
+   * 渲染预览
+   * @param {HTMLElement} container - 容器元素
+   * @param {Object} data - 加载的数据
+   * @returns {Promise<void>}
+   */
+  async render(container, data) {
+    if (!container) {
+      throw new Error('Container is required');
+    }
+
+    container.innerHTML = '';
+
+    switch (data.type) {
+      case 'pdf':
+        await this.renderPDF(container, data);
+        break;
+      case 'text':
+        await this.renderText(container, data);
+        break;
+      case 'markdown':
+        await this.renderMarkdown(container, data);
+        break;
+      case 'code':
+        await this.renderCode(container, data);
+        break;
+      case 'ofd':
+        await this.renderOFD(container, data);
+        break;
+      case 'rtf':
+        await this.renderRTF(container, data);
+        break;
+      case 'epub':
+        await this.renderEpub(container, data);
+        break;
+      default:
+        throw new Error(`Unknown document type: ${data.type}`);
+    }
+
+    this.emitLoaded();
+  }
+
+  /**
+   * 渲染PDF
+   * @param {HTMLElement} container - 容器元素
+   * @param {Object} data - PDF数据
+   */
+  async renderPDF(container, data) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'document-preview pdf-preview';
+
+    // TODO: 渲染PDF页面
+    for (let i = 0; i < data.numPages; i++) {
+      const page = document.createElement('div');
+      page.className = 'pdf-page';
+      page.textContent = data.pages[i] || `Page ${i + 1}`;
+      wrapper.appendChild(page);
+    }
+
+    container.appendChild(wrapper);
   }
 
   /**
    * 渲染纯文本
-   * @private
-   * @param {string} content - 文本内容
-   * @returns {string} HTML字符串
+   * @param {HTMLElement} container - 容器元素
+   * @param {Object} data - 文本数据
    */
-  _renderText(content) {
-    const escaped = this._escapeHtml(content);
-    return `<pre class="text-content">${escaped}</pre>`;
+  async renderText(container, data) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'document-preview text-preview';
+
+    const pre = document.createElement('pre');
+    pre.className = 'text-content';
+    pre.textContent = data.text;
+    wrapper.appendChild(pre);
+
+    container.appendChild(wrapper);
   }
 
   /**
    * 渲染Markdown
-   * @private
-   * @param {string} content - Markdown内容
-   * @returns {string} HTML字符串
+   * @param {HTMLElement} container - 容器元素
+   * @param {Object} data - Markdown数据
    */
-  _renderMarkdown(content) {
-    // 简化版Markdown渲染，实际项目应使用markdown-it等库
-    let html = content
-      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-      .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-      .replace(/\*(.*)\*/gim, '<em>$1</em>')
-      .replace(/`([^`]+)`/gim, '<code>$1</code>')
-      .replace(/\n/gim, '<br>');
+  async renderMarkdown(container, data) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'document-preview markdown-preview';
+
+    // TODO: 使用 marked 库渲染 Markdown
+    const content = document.createElement('div');
+    content.className = 'markdown-content';
+    content.innerHTML = data.markdown;
+    wrapper.appendChild(content);
+
+    container.appendChild(wrapper);
+  }
+
+  /**
+   * 渲染代码
+   * @param {HTMLElement} container - 容器元素
+   * @param {Object} data - 代码数据
+   */
+  async renderCode(container, data) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'document-preview code-preview';
+
+    const pre = document.createElement('pre');
+    pre.className = `code-content language-${data.ext}`;
     
-    return `<div class="markdown-content">${html}</div>`;
+    const code = document.createElement('code');
+    code.textContent = data.code;
+    pre.appendChild(code);
+    wrapper.appendChild(pre);
+
+    container.appendChild(wrapper);
   }
 
   /**
-   * 渲染JSON
-   * @private
-   * @param {Object} content - JSON对象
-   * @returns {string} HTML字符串
+   * 渲染OFD
+   * @param {HTMLElement} container - 容器元素
+   * @param {Object} data - OFD数据
    */
-  _renderJson(content) {
-    const jsonStr = JSON.stringify(content, null, 2);
-    const escaped = this._escapeHtml(jsonStr);
-    return `<pre class="json-content"><code>${escaped}</code></pre>`;
+  async renderOFD(container, data) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'document-preview ofd-preview';
+
+    const content = document.createElement('div');
+    content.textContent = data.content;
+    wrapper.appendChild(content);
+
+    container.appendChild(wrapper);
   }
 
   /**
-   * 渲染XML
-   * @private
-   * @param {string} content - XML内容
-   * @returns {string} HTML字符串
+   * 渲染RTF
+   * @param {HTMLElement} container - 容器元素
+   * @param {Object} data - RTF数据
    */
-  _renderXml(content) {
-    const escaped = this._escapeHtml(content);
-    return `<pre class="xml-content"><code>${escaped}</code></pre>`;
+  async renderRTF(container, data) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'document-preview rtf-preview';
+
+    const content = document.createElement('div');
+    content.textContent = data.content;
+    wrapper.appendChild(content);
+
+    container.appendChild(wrapper);
   }
 
   /**
-   * 渲染二进制文件
-   * @private
-   * @param {string} fileType - 文件类型
-   * @returns {string} HTML字符串
+   * 渲染Epub
+   * @param {HTMLElement} container - 容器元素
+   * @param {Object} data - Epub数据
    */
-  _renderBinary(fileType) {
-    return `
-      <div class="binary-placeholder">
-        <div class="placeholder-icon">📄</div>
-        <p>${fileType.toUpperCase()} file</p>
-        <p class="placeholder-hint">This file type requires a specialized previewer</p>
-      </div>
-    `;
-  }
+  async renderEpub(container, data) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'document-preview epub-preview';
 
-  /**
-   * 转义HTML特殊字符
-   * @private
-   * @param {string} text - 文本内容
-   * @returns {string} 转义后的文本
-   */
-  _escapeHtml(text) {
-    const map = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#039;'
-    };
-    return text.replace(/[&<>"']/g, (m) => map[m]);
+    const content = document.createElement('div');
+    content.textContent = data.content;
+    wrapper.appendChild(content);
+
+    container.appendChild(wrapper);
   }
 }
-
-export default DocumentAdapter;

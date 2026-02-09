@@ -1,79 +1,100 @@
 /**
- * BaseAdapter - 基础适配器类
+ * 适配器基类
+ * 所有适配器必须继承此类
  * 
- * 定义适配器的通用方法和接口，所有具体适配器都应该继承此类
+ * @description 定义适配器的统一接口
+ * @module BaseAdapter
+ * @version 1.0.0
  */
 
-class BaseAdapter {
-  constructor() {
-    if (new.target === BaseAdapter) {
-      throw new Error('BaseAdapter is abstract and cannot be instantiated directly');
-    }
+/**
+ * 适配器基类
+ * @class BaseAdapter
+ */
+export class BaseAdapter {
+  /**
+   * 创建适配器实例
+   * @param {Object} options - 适配器选项
+   * @param {EventBus} options.eventBus - 事件总线实例
+   * @param {StateManager} options.stateManager - 状态管理器实例
+   */
+  constructor(options = {}) {
+    this.eventBus = options.eventBus;
+    this.stateManager = options.stateManager;
+    this.container = options.container;
   }
 
   /**
-   * 判断是否能处理该文件类型
-   * @abstract
+   * 检查是否支持该文件类型（静态方法）
    * @param {string} fileType - 文件类型
    * @returns {boolean} 是否支持
+   * @throws {Error} 子类必须实现此方法
    */
-  canHandle(fileType) {
-    throw new Error('canHandle method must be implemented by subclass');
+  static supports(fileType) {
+    throw new Error('Method must be implemented by subclass');
   }
 
   /**
-   * 解析文件
-   * @abstract
+   * 加载文件
    * @param {File} file - 文件对象
-   * @returns {Promise<Object>} 解析后的数据
+   * @returns {Promise<Object>} 加载结果
+   * @throws {Error} 子类必须实现此方法
    */
-  async parse(file) {
-    throw new Error('parse method must be implemented by subclass');
+  async load(file) {
+    throw new Error('Method must be implemented by subclass');
   }
 
   /**
-   * 渲染数据
-   * @abstract
-   * @param {Object} data - 解析后的数据
-   * @returns {HTMLElement|string} 渲染结果
+   * 渲染预览
+   * @param {HTMLElement} container - 容器元素
+   * @param {Object} data - 加载的数据
+   * @returns {Promise<void>}
+   * @throws {Error} 子类必须实现此方法
    */
-  render(data) {
-    throw new Error('render method must be implemented by subclass');
+  async render(container, data) {
+    throw new Error('Method must be implemented by subclass');
   }
 
   /**
-   * 获取支持的文件类型列表
-   * @abstract
-   * @returns {string[]} 支持的文件类型数组
+   * 销毁预览器
+   * 清理资源和事件监听
    */
-  getSupportedTypes() {
-    throw new Error('getSupportedTypes method must be implemented by subclass');
-  }
-
-  /**
-   * 验证文件
-   * @param {File} file - 文件对象
-   * @returns {boolean} 文件是否有效
-   */
-  validateFile(file) {
-    if (!file) {
-      throw new Error('File is required');
+  destroy() {
+    // 清理容器
+    if (this.container) {
+      this.container.innerHTML = '';
     }
-    if (!(file instanceof File)) {
-      throw new Error('Invalid file object');
-    }
-    return true;
+
+    // 子类可以覆盖此方法进行额外的清理
   }
 
   /**
-   * 获取文件扩展名
-   * @param {string} fileName - 文件名
-   * @returns {string} 文件扩展名
+   * 触发加载进度事件
+   * @param {number} progress - 进度（0-100）
    */
-  getFileExtension(fileName) {
-    const parts = fileName.split('.');
-    return parts.length > 1 ? parts.pop().toLowerCase() : '';
+  emitProgress(progress) {
+    if (this.eventBus) {
+      this.eventBus.emit('file:load:progress', { progress });
+    }
+  }
+
+  /**
+   * 触发错误事件
+   * @param {Error} error - 错误对象
+   * @param {string} message - 错误消息
+   */
+  emitError(error, message) {
+    if (this.eventBus) {
+      this.eventBus.emit('file:load:error', { error, message });
+    }
+  }
+
+  /**
+   * 触发文件加载完成事件
+   */
+  emitLoaded() {
+    if (this.eventBus) {
+      this.eventBus.emit('file:loaded', {});
+    }
   }
 }
-
-export default BaseAdapter;
